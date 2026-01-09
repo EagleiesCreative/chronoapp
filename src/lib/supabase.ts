@@ -107,24 +107,18 @@ export interface Booth {
 
 // Get booth by PIN code (for tenant login)
 export async function getBoothByCode(code: string): Promise<Booth | null> {
-  console.log('Looking up booth with code:', code);
-
   const { data, error } = await supabase
     .from('booths')
     .select('*')
     .eq('booth_code', code)
     .maybeSingle();
 
-  console.log('Booth lookup result:', { data, error });
-
   if (error) {
-    console.error('Error fetching booth:', error);
     return null;
   }
 
   // Check if booth is active
   if (data && data.status !== 'active') {
-    console.log('Booth found but not active, status:', data.status);
     return null;
   }
 

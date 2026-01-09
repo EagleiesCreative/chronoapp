@@ -4,8 +4,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 
 const BOOTH_COOKIE_NAME = 'chronosnap_booth_session';
+
+// In production, JWT_SECRET must be explicitly set
+const jwtSecretEnv = process.env.JWT_SECRET;
+if (!jwtSecretEnv && process.env.NODE_ENV === 'production') {
+    console.error('[SECURITY WARNING] JWT_SECRET is not set in production! Using insecure default.');
+}
 const JWT_SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'chronosnap-booth-secret-key-change-in-production'
+    jwtSecretEnv || 'chronosnap-booth-secret-key-dev-only'
 );
 const JWT_ISSUER = 'chronosnap';
 const JWT_EXPIRY = '7d'; // 7 days

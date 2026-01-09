@@ -1,8 +1,12 @@
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
-// Admin PIN from environment variable
-const ADMIN_PIN = process.env.ADMIN_PIN || '1234';
+// Admin PIN from environment variable - required in production
+const adminPinEnv = process.env.ADMIN_PIN;
+if (!adminPinEnv && process.env.NODE_ENV === 'production') {
+    console.error('[SECURITY WARNING] ADMIN_PIN is not set in production! Using insecure default.');
+}
+const ADMIN_PIN = adminPinEnv || '1234';
 
 // Session cookie name
 const SESSION_COOKIE = 'chronosnap_admin_session';

@@ -10,18 +10,16 @@ async function requireAnyAuth(request: NextRequest): Promise<NextResponse | null
         // Check admin session first
         const isAdmin = await checkSession();
         if (isAdmin) return null;
-    } catch (e) {
+    } catch {
         // Admin session check failed, continue to booth check
-        console.log('Admin session check error:', e);
     }
 
     try {
         // Check booth JWT
         const booth = await getBoothFromRequest(request);
         if (booth) return null;
-    } catch (e) {
+    } catch {
         // Booth check failed
-        console.log('Booth session check error:', e);
     }
 
     // Neither authenticated

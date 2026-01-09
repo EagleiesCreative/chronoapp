@@ -35,8 +35,6 @@ export async function POST(request: NextRequest) {
 
         const normalizedCode = code.trim();
 
-        console.log('Voucher validation - booth_id:', booth.id, 'code:', normalizedCode);
-
         // Fetch voucher from database (case-insensitive)
         const { data: voucher, error: voucherError } = await supabaseAdmin
             .from('vouchers')
@@ -44,8 +42,6 @@ export async function POST(request: NextRequest) {
             .eq('booth_id', booth.id)
             .ilike('code', normalizedCode)
             .single();
-
-        console.log('Voucher query result:', { voucher, error: voucherError });
 
         if (voucherError || !voucher) {
             return NextResponse.json({
