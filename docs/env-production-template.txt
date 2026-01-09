@@ -1,0 +1,24 @@
+# ===========================================
+# ChronoSnap Production Environment Variables
+# ===========================================
+# Copy this to .env.local on your production server
+# or set these in Vercel Dashboard > Settings > Environment Variables
+
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Xendit Payment Configuration
+XENDIT_SECRET_KEY=xnd_production_your_key
+XENDIT_WEBHOOK_TOKEN=your_webhook_verification_token
+
+# Admin PIN (for admin panel access)
+ADMIN_PIN=your_secure_pin
+
+# JWT Secret for Booth Auth (generate with: openssl rand -base64 32)
+JWT_SECRET=your_jwt_secret_at_least_32_characters
+
+# API URL (only needed for Tauri app pointing to remote API)
+# Leave empty when deploying the API itself
+# NEXT_PUBLIC_API_URL=
