@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+out/
+
+# Local development
+.env*
+!.env.example
+
+# IDE/Editor
+.DS_Store
+*.pem
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Tauri native
+src-tauri/target/
+
+# TypeScript
+*.tsbuildinfo
