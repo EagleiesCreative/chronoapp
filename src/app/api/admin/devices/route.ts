@@ -35,9 +35,18 @@ export async function GET(request: NextRequest) {
             return authError;
         }
 
-        const { searchParams } = new URL(request.url);
-        const organizationId = searchParams.get('organization_id');
-        const statusFilter = searchParams.get('status') || 'all';
+        let organizationId: string | null = null;
+        let statusFilter = 'all';
+
+        try {
+            const { searchParams } = new URL(request.url);
+            organizationId = searchParams.get('organization_id');
+            statusFilter = searchParams.get('status') || 'all';
+        } catch (urlError) {
+            // In Tauri dev mode, request.url might be malformed
+            // Fall back to default values
+            console.warn('Failed to parse URL search params:', urlError);
+        }
 
         // Build query - select all fields to handle potentially missing columns
         let query = supabase

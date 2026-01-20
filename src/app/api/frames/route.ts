@@ -243,9 +243,17 @@ export async function DELETE(request: NextRequest) {
     }
 
     try {
-        const { searchParams } = new URL(request.url);
-        const id = searchParams.get('id');
-        const force = searchParams.get('force') === 'true';
+        let id: string | null = null;
+        let force = false;
+
+        try {
+            const { searchParams } = new URL(request.url);
+            id = searchParams.get('id');
+            force = searchParams.get('force') === 'true';
+        } catch (urlError) {
+            // In Tauri dev mode, request.url might be malformed
+            console.warn('Failed to parse URL search params:', urlError);
+        }
 
         if (!id) {
             return NextResponse.json(

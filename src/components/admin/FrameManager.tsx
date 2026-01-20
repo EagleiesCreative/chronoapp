@@ -25,6 +25,7 @@ import {
 import { toast } from 'sonner';
 import { FrameEditor } from './FrameEditor';
 import { Frame } from '@/lib/supabase';
+import { getApiUrl } from '@/lib/api';
 
 type ViewMode = 'list' | 'edit' | 'create';
 
@@ -45,7 +46,7 @@ export function FrameManager() {
     async function fetchFrames() {
         setIsLoading(true);
         try {
-            const response = await fetch('/api/frames', {
+            const response = await fetch(getApiUrl('/api/frames'), {
                 credentials: 'include',
             });
             const data = await response.json();
@@ -64,7 +65,7 @@ export function FrameManager() {
         const isUpdate = !!frameData.id;
         const method = isUpdate ? 'PUT' : 'POST';
 
-        const response = await fetch('/api/frames', {
+        const response = await fetch(getApiUrl('/api/frames'), {
             method,
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -97,8 +98,8 @@ export function FrameManager() {
         setIsDeleting(true);
         try {
             const url = forceDelete
-                ? `/api/frames?id=${frameToDelete.id}&force=true`
-                : `/api/frames?id=${frameToDelete.id}`;
+                ? getApiUrl(`/api/frames?id=${frameToDelete.id}&force=true`)
+                : getApiUrl(`/api/frames?id=${frameToDelete.id}`);
 
             const response = await fetch(url, {
                 method: 'DELETE',
@@ -129,7 +130,7 @@ export function FrameManager() {
 
     async function toggleFrameActive(frame: Frame) {
         try {
-            const response = await fetch('/api/frames', {
+            const response = await fetch(getApiUrl('/api/frames'), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

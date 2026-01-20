@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { useTenantStore } from '@/store/tenant-store';
 import { toast } from 'sonner';
+import { getApiUrl } from '@/lib/api';
 
 const PRESET_COLORS = [
     '#ffffff', // White
@@ -53,7 +54,7 @@ export function BackgroundSettings() {
             formData.append('file', file);
             formData.append('folder', 'backgrounds');
 
-            const response = await fetch('/api/upload', {
+            const response = await fetch(getApiUrl('/api/upload'), {
                 method: 'POST',
                 body: formData,
             });
@@ -85,7 +86,7 @@ export function BackgroundSettings() {
 
         setIsSaving(true);
         try {
-            const response = await fetch('/api/booth/settings', {
+            const response = await fetch(getApiUrl('/api/booth/settings'), {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

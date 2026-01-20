@@ -7,6 +7,7 @@ import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { generateCompressedGif } from '@/lib/video-generator';
+import { getApiUrl } from '@/lib/api';
 
 export function ReviewScreen() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -175,7 +176,7 @@ export function ReviewScreen() {
             formData.append('file', blob, 'final.jpg');
             formData.append('folder', `sessions/${session?.id || 'temp'}`);
 
-            const uploadResponse = await fetch('/api/upload', {
+            const uploadResponse = await fetch(getApiUrl('/api/upload'), {
                 method: 'POST',
                 body: formData,
             });
@@ -200,7 +201,7 @@ export function ReviewScreen() {
                             photoFormData.append('file', photoBlob, `photo_${i + 1}.jpg`);
                             photoFormData.append('folder', `sessions/${session.id}`);
 
-                            const photoUploadResponse = await fetch('/api/upload', {
+                            const photoUploadResponse = await fetch(getApiUrl('/api/upload'), {
                                 method: 'POST',
                                 body: photoFormData,
                             });
@@ -228,7 +229,7 @@ export function ReviewScreen() {
                             gifFormData.append('file', gifResult.blob, 'stopmotion.gif');
                             gifFormData.append('folder', `sessions/${session.id}`);
 
-                            const gifUploadResponse = await fetch('/api/upload', {
+                            const gifUploadResponse = await fetch(getApiUrl('/api/upload'), {
                                 method: 'POST',
                                 body: gifFormData,
                             });
@@ -247,7 +248,7 @@ export function ReviewScreen() {
 
                 // Update session with final image URL, individual photos, video, and mark as completed
                 setUploadStatus('Finishing up...');
-                await fetch('/api/session/complete', {
+                await fetch(getApiUrl('/api/session/complete'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

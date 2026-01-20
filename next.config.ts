@@ -1,10 +1,12 @@
 import type { NextConfig } from "next";
 
+const isTauriBuild = process.env.BUILD_TARGET === 'tauri';
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
 
   // Enable static export for Tauri
-  output: process.env.BUILD_TARGET === 'tauri' ? 'export' : undefined,
+  output: isTauriBuild ? 'export' : undefined,
 
   // Image optimization settings
   images: {
@@ -18,9 +20,19 @@ const nextConfig: NextConfig = {
   },
 
   // Disable server-side features when building for Tauri
-  ...(process.env.BUILD_TARGET === 'tauri' && {
+  ...(isTauriBuild && {
     distDir: 'out',
+    // Skip type checking for faster builds (already done in dev)
+    typescript: {
+      ignoreBuildErrors: false,
+    },
+    eslint: {
+      ignoreDuringBuilds: true,
+    },
   }),
+
+  // Note: API routes are automatically excluded via tauri:build script
+  // since they are not supported in static export mode
 };
 
 export default nextConfig;

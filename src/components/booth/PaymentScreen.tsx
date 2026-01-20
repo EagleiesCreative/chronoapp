@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { formatIDR } from '@/lib/xendit';
+import { getApiUrl } from '@/lib/api';
 
 export function PaymentScreen() {
     const {
@@ -43,7 +44,7 @@ export function PaymentScreen() {
             setIsLoading(true);
 
             try {
-                const response = await fetch('/api/payment/create', {
+                const response = await fetch(getApiUrl('/api/payment/create'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
@@ -99,7 +100,7 @@ export function PaymentScreen() {
 
         const pollInterval = setInterval(async () => {
             try {
-                const response = await fetch(`/api/payment/status?sessionId=${session.id}`);
+                const response = await fetch(getApiUrl(`/api/payment/status?sessionId=${session.id}`));
                 const data = await response.json();
 
                 if (data.success) {
@@ -160,7 +161,7 @@ export function PaymentScreen() {
         if (!session?.id) return;
 
         try {
-            const response = await fetch('/api/payment/simulate', {
+            const response = await fetch(getApiUrl('/api/payment/simulate'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sessionId: session.id }),

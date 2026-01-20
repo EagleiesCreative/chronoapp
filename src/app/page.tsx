@@ -14,6 +14,7 @@ import { formatIDR } from '@/lib/xendit';
 import { Booth } from '@/lib/supabase';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { toast } from 'sonner';
+import { getApiUrl } from '@/lib/api';
 
 export default function HomePage() {
   const { showAdminPanel, setShowAdminPanel } = useAdminStore();
@@ -34,12 +35,12 @@ export default function HomePage() {
   useEffect(() => {
     async function checkSession() {
       try {
-        const response = await fetch('/api/auth/booth-login');
+        const response = await fetch(getApiUrl('/api/auth/booth-login'));
         const data = await response.json();
 
         if (data.authenticated && data.booth) {
           // Fetch full booth info with price
-          const boothResponse = await fetch(`/api/booth/${data.booth.id}`);
+          const boothResponse = await fetch(getApiUrl(`/api/booth/${data.booth.id}`));
           if (boothResponse.ok) {
             const boothData = await boothResponse.json();
             setBooth(boothData.booth);
@@ -103,7 +104,7 @@ export default function HomePage() {
 
     setIsVerifyingPin(true);
     try {
-      const response = await fetch('/api/admin', {
+      const response = await fetch(getApiUrl('/api/admin'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin }),
@@ -136,7 +137,7 @@ export default function HomePage() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/booth-login', { method: 'DELETE' });
+      await fetch(getApiUrl('/api/auth/booth-login'), { method: 'DELETE' });
       setBooth(null);
       setShowAdminPanel(false);
       setAdminPinVerified(false);

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Booth } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api';
 
 interface TenantLoginScreenProps {
     onLogin: (booth: Booth) => void;
@@ -34,11 +35,18 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
         setError(null);
 
         try {
-            const response = await fetch('/api/auth/booth-login', {
+            const response = await apiFetch('/api/auth/booth-login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: formattedCode }),
             });
+
+            // Check if response is actually JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                console.error('Invalid API response - received HTML instead of JSON:', await response.text());
+                throw new Error('Invalid server response. Please check API configuration.');
+            }
 
             const data = await response.json();
 

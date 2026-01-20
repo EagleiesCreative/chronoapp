@@ -20,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FrameManager, CameraSelector, PrinterSelector } from '@/components/admin';
 import { toast } from 'sonner';
+import { getApiUrl } from '@/lib/api';
 
 type AuthState = 'loading' | 'unauthenticated' | 'authenticated';
 
@@ -36,7 +37,7 @@ export default function AdminPage() {
 
     async function checkAuth() {
         try {
-            const response = await fetch('/api/admin');
+            const response = await fetch(getApiUrl('/api/admin'));
             const data = await response.json();
             setAuthState(data.authenticated ? 'authenticated' : 'unauthenticated');
         } catch {
@@ -53,7 +54,7 @@ export default function AdminPage() {
 
         setIsLoggingIn(true);
         try {
-            const response = await fetch('/api/admin', {
+            const response = await fetch(getApiUrl('/api/admin'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pin }),
@@ -77,7 +78,7 @@ export default function AdminPage() {
 
     async function handleLogout() {
         try {
-            await fetch('/api/admin', { method: 'DELETE' });
+            await fetch(getApiUrl('/api/admin'), { method: 'DELETE' });
             setAuthState('unauthenticated');
             toast.success('Logged out');
         } catch {

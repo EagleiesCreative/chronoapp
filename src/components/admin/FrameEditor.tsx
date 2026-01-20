@@ -19,6 +19,7 @@ import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { Frame, PhotoSlot, CANVAS_SIZES, DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from '@/lib/supabase';
 import { formatIDR } from '@/lib/xendit';
+import { getApiUrl } from '@/lib/api';
 
 interface FrameEditorProps {
     frame?: Frame;
@@ -62,7 +63,7 @@ export function FrameEditor({ frame, onSave, onCancel }: FrameEditorProps) {
             formData.append('file', file);
             formData.append('folder', 'frames');
 
-            const response = await fetch('/api/upload', { method: 'POST', body: formData });
+            const response = await fetch(getApiUrl('/api/upload'), { method: 'POST', body: formData });
             const data = await response.json();
 
             if (data.success) {

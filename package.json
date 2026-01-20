@@ -9,7 +9,9 @@
     "lint": "eslint",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:prebuild": "mv src/app/api src/app/_api_backup 2>/dev/null || true && mv src/app/share src/app/_share_backup 2>/dev/null || true",
+    "tauri:postbuild": "mv src/app/_api_backup src/app/api 2>/dev/null || true && mv src/app/_share_backup src/app/share 2>/dev/null || true",
+    "tauri:build": "npm run tauri:prebuild && tauri build; npm run tauri:postbuild"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",

@@ -40,15 +40,14 @@ export async function POST(request: NextRequest) {
         const payment = await updatePaymentStatus(id, paymentStatus);
 
         if (payment && paymentStatus === 'paid') {
-            // Get session ID from external_id (format: chrono_{sessionId}_{timestamp})
-            const sessionId = external_id.split('_')[1];
+            // Get session ID from external_id (format: chrono_{boothId}_{sessionId}_{timestamp})
+            const parts = external_id.split('_');
+            const sessionId = parts[2]; // Index 2 is session_id
 
             if (sessionId) {
                 await updateSession(sessionId, { status: 'paid' });
             }
         }
-
-        console.log(`Webhook received: Invoice ${id} status updated to ${paymentStatus}`);
 
         return NextResponse.json({ success: true });
     } catch (error) {

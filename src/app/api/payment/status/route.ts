@@ -4,8 +4,15 @@ import { getPaymentBySessionId, updatePaymentStatus, updateSession } from '@/lib
 
 export async function GET(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url);
-        const sessionId = searchParams.get('sessionId');
+        let sessionId: string | null = null;
+
+        try {
+            const { searchParams } = new URL(request.url);
+            sessionId = searchParams.get('sessionId');
+        } catch (urlError) {
+            // In Tauri dev mode, request.url might be malformed
+            console.warn('Failed to parse URL search params:', urlError);
+        }
 
         if (!sessionId) {
             return NextResponse.json(
