@@ -14,7 +14,7 @@ import { formatIDR } from '@/lib/xendit';
 import { Booth } from '@/lib/supabase';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { toast } from 'sonner';
-import { getApiUrl } from '@/lib/api';
+import { getApiUrl, apiJson } from '@/lib/api';
 
 export default function HomePage() {
   const { showAdminPanel, setShowAdminPanel } = useAdminStore();
@@ -35,14 +35,12 @@ export default function HomePage() {
   useEffect(() => {
     async function checkSession() {
       try {
-        const response = await fetch(getApiUrl('/api/auth/booth-login'));
-        const data = await response.json();
+        const data = await apiJson<any>('/api/auth/booth-login');
 
         if (data.authenticated && data.booth) {
           // Fetch full booth info with price
-          const boothResponse = await fetch(getApiUrl(`/api/booth/${data.booth.id}`));
-          if (boothResponse.ok) {
-            const boothData = await boothResponse.json();
+          const boothData = await apiJson<any>(`/api/booth/${data.booth.id}`);
+          if (boothData.booth) {
             setBooth(boothData.booth);
             // Also save to tenant store for FrameSelector/PaymentScreen
             setTenantBooth(boothData.booth);

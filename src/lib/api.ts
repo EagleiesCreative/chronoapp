@@ -57,5 +57,14 @@ export async function apiJson<T>(
     options: RequestInit = {}
 ): Promise<T> {
     const response = await apiFetch(path, options);
-    return response.json();
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch (error) {
+        console.error('[API] JSON Parse Error:', error);
+        console.error('[API] URL:', response.url);
+        console.error('[API] Status:', response.status);
+        console.error('[API] Response Text:', text);
+        throw error;
+    }
 }

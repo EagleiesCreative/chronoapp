@@ -37,18 +37,20 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
         try {
             const response = await apiFetch('/api/auth/booth-login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: formattedCode }),
             });
 
-            // Check if response is actually JSON
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                console.error('Invalid API response - received HTML instead of JSON:', await response.text());
-                throw new Error('Invalid server response. Please check API configuration.');
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error('[API] JSON Parse Error:', e);
+                console.error('[API] URL:', response.url);
+                console.error('[API] Status:', response.status);
+                console.error('[API] Response Text:', text);
+                throw new Error('Invalid server response');
             }
-
-            const data = await response.json();
 
             if (response.status === 429) {
                 setError('Too many attempts. Please wait 1 minute.');
