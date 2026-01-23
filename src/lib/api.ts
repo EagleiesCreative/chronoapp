@@ -12,6 +12,16 @@
 
 // Get API base URL - always returns absolute URL
 export function getApiUrl(path: string): string {
+    // In standard browser environment (not Tauri), prefer relative paths
+    // to allow cookies to work correctly across Vercel previews and production
+    // (avoids CORS/Third-party cookie issues)
+    if (typeof window !== 'undefined' && !('__TAURI__' in window)) {
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+        const fullUrl = normalizedPath;
+        // console.log('[API] getApiUrl (Relative):', { fullUrl });
+        return fullUrl;
+    }
+
     // Prefer explicit API URL from environment (required for Tauri builds)
     let baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
