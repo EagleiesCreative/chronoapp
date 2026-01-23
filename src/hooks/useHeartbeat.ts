@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { getApiUrl } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 
 // Send heartbeat every 30 seconds
 const HEARTBEAT_INTERVAL_MS = 30 * 1000;
@@ -37,9 +37,8 @@ export function useHeartbeat({ isAuthenticated, deviceName }: HeartbeatOptions) 
         // Send heartbeat function
         async function sendHeartbeat() {
             try {
-                await fetch(getApiUrl('/api/booth/heartbeat'), {
+                await apiFetch('/api/booth/heartbeat', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ deviceName }),
                 });
             } catch (error) {
