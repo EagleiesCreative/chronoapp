@@ -27,11 +27,20 @@ export function getApiUrl(path: string): string {
 
     // If not set, provide sensible defaults based on runtime context
     if (!baseUrl) {
-        // In a browser (dev server) we can use the current origin
         if (typeof window !== 'undefined') {
-            baseUrl = window.location.origin;
+            // If we are here, we are strictly in a Tauri environment
+            // because standard browser (non-Tauri) was handled above.
+
+            // If we are in Tauri and no API URL is set:
+            // - In development, assume localhost:3000
+            // - In production, assume the main production server
+            if (process.env.NODE_ENV === 'development') {
+                baseUrl = 'http://localhost:3000';
+            } else {
+                baseUrl = 'https://chronosnap.eagleies.com';
+            }
         } else {
-            // In non‑browser environments (e.g., Tauri dev mode) fallback to localhost
+            // In non‑browser environments (e.g., server-side) fallback to localhost
             baseUrl = 'http://localhost:3000';
         }
     }

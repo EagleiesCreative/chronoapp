@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "ChronoSnaps",
+  "productName": "ChronoSnapt",
   "version": "0.1.0",
   "identifier": "com.chronosnap.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ChronoSnap 2",
+        "title": "ChronoSnap",
         "width": 1280,
         "height": 720,
         "resizable": true,
