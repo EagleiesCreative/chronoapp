@@ -8,6 +8,8 @@ export function middleware(request: NextRequest) {
     const allowedOrigins = [
         'http://localhost:3000',
         'https://chronosnap.eagleies.com',
+        'tauri://localhost',
+        'https://tauri.localhost',
     ];
 
     // Allow all Vercel preview deployments
