@@ -55,7 +55,10 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
             } catch (e) {
                 console.error('[API] JSON Parse Error:', e);
                 console.error('[API] Full Response Text:', text);
-                throw new Error('Invalid server response');
+                // Show status and response preview in the UI error
+                const preview = text.length > 100 ? text.substring(0, 100) + '...' : text;
+                setError(`HTTP ${response.status}: ${preview}`);
+                return;
             }
 
             if (response.status === 429) {

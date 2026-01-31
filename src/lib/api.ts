@@ -60,11 +60,16 @@ export async function apiFetch(
 ): Promise<Response> {
     const url = getApiUrl(path);
 
+    // Detect if we're in Tauri
+    const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+
     return fetch(url, {
         ...options,
         credentials: 'include', // Always include cookies for auth
         headers: {
             'Content-Type': 'application/json',
+            // Add Origin header for Tauri to help CORS
+            ...(isTauri && { 'Origin': 'tauri://localhost' }),
             ...options.headers,
         },
     });
