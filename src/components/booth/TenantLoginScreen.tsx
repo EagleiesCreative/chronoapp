@@ -40,15 +40,21 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
                 body: JSON.stringify({ code: formattedCode }),
             });
 
+            // Log full response details for debugging
+            console.log('[API] Response Status:', response.status);
+            console.log('[API] Response OK:', response.ok);
+            console.log('[API] Response URL:', response.url);
+            console.log('[API] Response Headers:', Object.fromEntries(response.headers.entries()));
+
             const text = await response.text();
+            console.log('[API] Response Text (first 500 chars):', text.substring(0, 500));
+
             let data;
             try {
                 data = JSON.parse(text);
             } catch (e) {
                 console.error('[API] JSON Parse Error:', e);
-                console.error('[API] URL:', response.url);
-                console.error('[API] Status:', response.status);
-                console.error('[API] Response Text:', text);
+                console.error('[API] Full Response Text:', text);
                 throw new Error('Invalid server response');
             }
 
