@@ -7,7 +7,7 @@
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "BUILD_TARGET=tauri npm run build"
+    "beforeBuildCommand": "NEXT_PUBLIC_API_URL=https://chronosnap.eagleies.com BUILD_TARGET=tauri npm run build"
   },
   "app": {
     "windows": [
