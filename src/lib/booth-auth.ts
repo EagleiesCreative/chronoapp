@@ -74,8 +74,10 @@ export async function setBoothSession(token: string): Promise<void> {
     const cookieStore = await cookies();
     cookieStore.set(BOOTH_COOKIE_NAME, token, {
         httpOnly: true,
+        // Crucial for Tauri: must be true for SameSite=None
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        // Crucial for Tauri: allows cookie to be sent from safe-origin (local) to API
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: '/',
     });

@@ -67,9 +67,11 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
                     setRemainingAttempts(data.remainingAttempts);
                 }
             }
-        } catch (err) {
-            setError('Connection failed. Please try again.');
-            console.error(err);
+        } catch (err: any) {
+            console.error('[TenantLogin] Error:', err);
+            // Show the actual error message if possible
+            const message = err?.message || 'Connection failed. Check your internet.';
+            setError(`Error: ${message}`);
         } finally {
             setIsLoading(false);
         }
