@@ -22,22 +22,25 @@ export function getApiUrl(path: string): string {
         return fullUrl;
     }
 
-    // Prefer explicit API URL from environment (required for Tauri builds)
+    // For Tauri builds, always use the production API URL
+    // Hardcoded to ensure it's bundled in the static export
+    const PRODUCTION_API_URL = 'https://chronosnap.eagleies.com';
+
+    // Prefer explicit API URL from environment (for flexibility)
     let baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
-    // If not set, provide sensible defaults based on runtime context
+    // If not set, use hardcoded production URL or localhost for dev
     if (!baseUrl) {
         if (typeof window !== 'undefined') {
             // If we are here, we are strictly in a Tauri environment
             // because standard browser (non-Tauri) was handled above.
 
-            // If we are in Tauri and no API URL is set:
-            // - In development, assume localhost:3000
-            // - In production, assume the main production server
-            if (process.env.NODE_ENV === 'development') {
-                baseUrl = 'http://localhost:3000';
+            // Use hardcoded production URL for production builds
+            if (process.env.NODE_ENV === 'production') {
+                baseUrl = PRODUCTION_API_URL;
             } else {
-                baseUrl = 'https://chronosnap.eagleies.com';
+                // Development mode - use localhost
+                baseUrl = 'http://localhost:3000';
             }
         } else {
             // In non‑browser environments (e.g., server-side) fallback to localhost
