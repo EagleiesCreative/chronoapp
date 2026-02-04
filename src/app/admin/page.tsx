@@ -37,7 +37,7 @@ export default function AdminPage() {
 
     async function checkAuth() {
         try {
-            const response = await fetch(getApiUrl('/api/admin'));
+            const response = await fetch(getApiUrl('/api/admin'), { credentials: 'include' });
             const data = await response.json();
             setAuthState(data.authenticated ? 'authenticated' : 'unauthenticated');
         } catch {
@@ -57,6 +57,7 @@ export default function AdminPage() {
             const response = await fetch(getApiUrl('/api/admin'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ pin }),
             });
 
@@ -78,7 +79,7 @@ export default function AdminPage() {
 
     async function handleLogout() {
         try {
-            await fetch(getApiUrl('/api/admin'), { method: 'DELETE' });
+            await fetch(getApiUrl('/api/admin'), { method: 'DELETE', credentials: 'include' });
             setAuthState('unauthenticated');
             toast.success('Logged out');
         } catch {

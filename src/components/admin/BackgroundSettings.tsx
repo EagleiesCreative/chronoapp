@@ -56,6 +56,7 @@ export function BackgroundSettings() {
 
             const response = await fetch(getApiUrl('/api/upload'), {
                 method: 'POST',
+                credentials: 'include',
                 body: formData,
             });
 
@@ -89,6 +90,7 @@ export function BackgroundSettings() {
             const response = await fetch(getApiUrl('/api/booth/settings'), {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({
                     booth_id: booth.id,
                     background_image: backgroundImage || null,

@@ -63,7 +63,7 @@ export function FrameEditor({ frame, onSave, onCancel }: FrameEditorProps) {
             formData.append('file', file);
             formData.append('folder', 'frames');
 
-            const response = await fetch(getApiUrl('/api/upload'), { method: 'POST', body: formData });
+            const response = await fetch(getApiUrl('/api/upload'), { method: 'POST', credentials: 'include', body: formData });
             const data = await response.json();
 
             if (data.success) {

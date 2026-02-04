@@ -105,6 +105,7 @@ export default function HomePage() {
       const response = await fetch(getApiUrl('/api/admin'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ pin }),
       });
 
@@ -135,7 +136,7 @@ export default function HomePage() {
 
   const handleLogout = async () => {
     try {
-      await fetch(getApiUrl('/api/auth/booth-login'), { method: 'DELETE' });
+      await fetch(getApiUrl('/api/auth/booth-login'), { method: 'DELETE', credentials: 'include' });
       setBooth(null);
       setShowAdminPanel(false);
       setAdminPinVerified(false);
