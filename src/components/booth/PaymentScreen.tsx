@@ -100,7 +100,9 @@ export function PaymentScreen() {
 
         const pollInterval = setInterval(async () => {
             try {
-                const response = await fetch(getApiUrl(`/api/payment/status?sessionId=${session.id}`));
+                const response = await fetch(getApiUrl(`/api/payment/status?sessionId=${session.id}`), {
+                    credentials: 'include',
+                });
                 const data = await response.json();
 
                 if (data.success) {
@@ -164,6 +166,7 @@ export function PaymentScreen() {
             const response = await fetch(getApiUrl('/api/payment/simulate'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ sessionId: session.id }),
             });
 

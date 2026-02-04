@@ -178,6 +178,7 @@ export function ReviewScreen() {
 
             const uploadResponse = await fetch(getApiUrl('/api/upload'), {
                 method: 'POST',
+                credentials: 'include',
                 body: formData,
             });
 
@@ -203,6 +204,7 @@ export function ReviewScreen() {
 
                             const photoUploadResponse = await fetch(getApiUrl('/api/upload'), {
                                 method: 'POST',
+                                credentials: 'include',
                                 body: photoFormData,
                             });
 
@@ -231,6 +233,7 @@ export function ReviewScreen() {
 
                             const gifUploadResponse = await fetch(getApiUrl('/api/upload'), {
                                 method: 'POST',
+                                credentials: 'include',
                                 body: gifFormData,
                             });
 
@@ -251,6 +254,7 @@ export function ReviewScreen() {
                 await fetch(getApiUrl('/api/session/complete'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({
                         sessionId: session.id,
                         finalImageUrl: data.url,

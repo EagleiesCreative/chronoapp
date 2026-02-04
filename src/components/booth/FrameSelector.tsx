@@ -20,7 +20,9 @@ export function FrameSelector() {
         async function fetchFrames() {
             setIsLoading(true);
             try {
-                const response = await fetch(getApiUrl('/api/frames'));
+                const response = await fetch(getApiUrl('/api/frames'), {
+                    credentials: 'include',
+                });
                 const data = await response.json();
 
                 if (data.success && data.frames) {
