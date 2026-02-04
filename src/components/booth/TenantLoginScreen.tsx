@@ -68,6 +68,10 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
             }
 
             if (data.success && data.booth) {
+                // Store token for Tauri apps (bypasses cookie restrictions)
+                if (data.token) {
+                    localStorage.setItem('booth_token', data.token);
+                }
                 toast.success(`Welcome to ${data.booth.name}`);
                 onLogin(data.booth);
             } else {

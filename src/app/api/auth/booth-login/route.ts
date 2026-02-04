@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
+            token, // Return token for Tauri apps to store in localStorage
             booth: {
                 id: booth.id,
                 name: booth.name,

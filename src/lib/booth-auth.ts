@@ -104,8 +104,21 @@ export async function clearBoothSession(): Promise<void> {
 
 /**
  * Get booth ID from request (for API routes)
+ * Checks Authorization header first (for Tauri), then falls back to cookie (for web browsers)
  */
 export async function getBoothFromRequest(request: NextRequest): Promise<BoothJWTPayload | null> {
+    // 1. Check Authorization header first (for Tauri apps)
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        try {
+            return await verifyBoothToken(token);
+        } catch {
+            // Invalid token, fall through to cookie check
+        }
+    }
+
+    // 2. Fall back to cookie (for web browsers)
     const token = request.cookies.get(BOOTH_COOKIE_NAME)?.value;
     if (!token) return null;
     return verifyBoothToken(token);

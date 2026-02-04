@@ -88,13 +88,23 @@ export async function apiFetch(
 ): Promise<Response> {
     const url = getApiUrl(path);
 
+    // Get stored token (if any) - for Tauri apps
+    const token = typeof window !== 'undefined' ? localStorage.getItem('booth_token') : null;
+
+    const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+    };
+
+    // Add Authorization header if token exists (bypasses cookie restrictions)
+    if (token) {
+        (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    }
+
     return fetch(url, {
         ...options,
-        credentials: 'include', // Always include cookies for auth
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        },
+        credentials: 'include', // Still include for cookie fallback
+        headers,
     });
 }
 
