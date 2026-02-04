@@ -40,8 +40,13 @@ export async function createSession(): Promise<string> {
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE, token, {
         httpOnly: true,
+        // In production (HTTPS), secure must be true for sameSite: none
+        // In dev (HTTP localhost), browsers allow sameSite: none with secure: false
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        // Use 'none' to allow Tauri cross-origin requests
+        // - Dev: tauri://localhost → http://localhost:3000
+        // - Prod: tauri://localhost → https://chronosnap.eagleies.com
+        sameSite: 'none',
         expires,
         path: '/',
     });
