@@ -74,13 +74,10 @@ export async function setBoothSession(token: string): Promise<void> {
     const cookieStore = await cookies();
     cookieStore.set(BOOTH_COOKIE_NAME, token, {
         httpOnly: true,
-        // In production (HTTPS), secure must be true for sameSite: none
-        // In dev (HTTP localhost), browsers allow sameSite: none with secure: false
         secure: process.env.NODE_ENV === 'production',
-        // Use 'none' to allow Tauri cross-origin requests
-        // - Dev: tauri://localhost → http://localhost:3000
-        // - Prod: tauri://localhost → https://chronosnap.eagleies.com
-        sameSite: 'none',
+        // Production (Tauri -> Cloud): Cross-Origin, requires None
+        // Development (Localhost): Same-Origin, requires Lax
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: '/',
     });

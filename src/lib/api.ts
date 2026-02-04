@@ -53,6 +53,13 @@ export function getApiUrl(path: string): string {
         return `http://localhost:3000${normalizedPath}`;
     }
 
+    // Force localhost in development mode, even for Tauri
+    // This ensures dev app talks to dev server, not production
+    if (process.env.NODE_ENV === 'development') {
+        const devUrl = 'http://localhost:3000';
+        return `${devUrl}${normalizedPath}`;
+    }
+
     // Check if we're in Tauri
     const inTauri = isTauriEnvironment();
     console.log('[API] Environment check:', {

@@ -46,7 +46,8 @@ export function proxy(request: NextRequest) {
 
     // Apply CORS headers if allowed
     if (isAllowed) {
-        // For requests without origin, we can't set CORS headers
+        // For requests without origin (Same-Origin), we don't need to set CORS headers
+        // The browser enables access automatically for same-origin
         if (origin) {
             response.headers.set('Access-Control-Allow-Origin', origin);
             response.headers.set('Access-Control-Allow-Credentials', 'true');
