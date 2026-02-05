@@ -14,7 +14,7 @@ import { formatIDR } from '@/lib/xendit';
 import { Booth } from '@/lib/supabase';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { toast } from 'sonner';
-import { getApiUrl, apiJson } from '@/lib/api';
+import { getApiUrl, apiJson, apiFetch } from '@/lib/api';
 
 export default function HomePage() {
   const { showAdminPanel, setShowAdminPanel } = useAdminStore();
