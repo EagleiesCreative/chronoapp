@@ -382,17 +382,32 @@ export function ShareGallery({
                                     </div>
                                     <div className="text-left">
                                         <p className="text-sm font-medium text-gray-900">Stop-motion GIF</p>
-                                        <p className="text-xs text-gray-500">Video animation</p>
+                                        <p className="text-xs text-gray-500">Animated sequence</p>
                                     </div>
                                 </div>
                                 <Download className="w-4 h-4 text-gray-400 group-hover:text-gray-900 transition-colors" />
                             </button>
                         )}
 
-                        {/* Individual Photos expandable? No, just list them or allow download from view */}
-                        <div className="mt-1">
-                            <p className="text-[10px] text-gray-400 px-1 mb-2">Tip: View individual photos in the gallery and use the download button at the top.</p>
-                        </div>
+                        {/* Individual Photos */}
+                        {individualPhotos.map((photo, index) => (
+                            <button
+                                key={index}
+                                onClick={() => handleDownload(photo)}
+                                className="flex items-center justify-between w-full p-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-white rounded-lg shadow-sm group-hover:shadow transition-all overflow-hidden w-10 h-10 flex items-center justify-center">
+                                        <img src={photo} alt={`Photo ${index + 1}`} className="w-full h-full object-cover rounded-sm" />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="text-sm font-medium text-gray-900">Photo {index + 1}</p>
+                                        <p className="text-xs text-gray-500">Original capture</p>
+                                    </div>
+                                </div>
+                                <Download className="w-4 h-4 text-gray-400 group-hover:text-gray-900 transition-colors" />
+                            </button>
+                        ))}
                     </div>
 
                     <div className="flex items-center justify-center gap-3">

@@ -481,41 +481,66 @@ export function ReviewScreen() {
                     )}
 
                     {/* Download QR / Loading State / Error State */}
-                    <div className="elegant-card p-4 mt-2 min-h-[200px] flex flex-col items-center justify-center">
+                    <div className="elegant-card p-6 mt-2 min-h-[220px] flex flex-col items-center justify-center relative bg-white overflow-hidden">
                         {downloadQR ? (
                             <motion.div
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="text-center"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="text-center w-full"
                             >
-                                <p className="text-[10px] uppercase text-muted-foreground mb-3 font-medium tracking-[0.1em]">
-                                    Scan for softcopy
-                                </p>
-                                <div className="bg-white p-2 rounded-xl elegant-shadow">
-                                    <img src={downloadQR} alt="Download QR" className="w-32 h-32 mx-auto" />
+                                <div className="mb-4">
+                                    <p className="text-[10px] uppercase text-primary font-bold tracking-[0.15em] mb-1">
+                                        Scan for softcopy
+                                    </p>
+                                    <p className="text-[8px] text-muted-foreground font-light">
+                                        Download Strip, Photos, & GIF
+                                    </p>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.08)] inline-block border border-border/50">
+                                    <img
+                                        src={downloadQR}
+                                        alt="Sharing QR Code"
+                                        className="w-32 h-32"
+                                        style={{ imageRendering: 'pixelated' }}
+                                    />
                                 </div>
                             </motion.div>
                         ) : uploadError ? (
-                            <div className="text-center px-4">
-                                <XCircle className="w-8 h-8 mx-auto mb-2 text-destructive/50" strokeWidth={1.5} />
-                                <p className="text-xs text-muted-foreground font-light mb-3">
-                                    Failed to generate QR
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="text-center px-6"
+                            >
+                                <div className="w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <XCircle className="w-6 h-6 text-destructive/60" strokeWidth={1.5} />
+                                </div>
+                                <p className="text-sm font-medium text-foreground mb-1">Upload Issue</p>
+                                <p className="text-[10px] text-muted-foreground font-light mb-4 line-clamp-2">
+                                    {uploadError}
                                 </p>
                                 <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={handleRetryUpload}
-                                    className="rounded-full text-[10px] h-8"
+                                    className="rounded-full h-9 px-6 text-[11px] font-medium"
                                 >
-                                    <RotateCcw className="w-3 h-3 mr-1" />
-                                    Retry
+                                    <RotateCcw className="w-3.5 h-3.5 mr-2" />
+                                    Try Again
                                 </Button>
-                            </div>
+                            </motion.div>
                         ) : (
-                            <div className="text-center py-4">
-                                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-primary/40" strokeWidth={1.5} />
-                                <p className="text-xs text-muted-foreground font-light px-4">
-                                    {isCompositing ? 'Preparing...' : 'Generating QR code...'}
+                            <div className="text-center py-6">
+                                <div className="relative w-12 h-12 mx-auto mb-4">
+                                    <Loader2 className="w-12 h-12 animate-spin text-primary/30" strokeWidth={1} />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="w-1 h-1 bg-primary rounded-full animate-pulse" />
+                                    </div>
+                                </div>
+                                <p className="text-[10px] uppercase text-muted-foreground/60 font-medium tracking-widest mb-1">
+                                    {isCompositing ? 'Preparing' : 'Generating'}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground font-light px-4">
+                                    {uploadStatus || 'Digital copy coming up...'}
                                 </p>
                             </div>
                         )}
