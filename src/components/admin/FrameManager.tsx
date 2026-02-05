@@ -93,11 +93,11 @@ export function FrameManager() {
 
         setIsDeleting(true);
         try {
-            const url = forceDelete
-                ? getApiUrl(`/api/frames?id=${frameToDelete.id}&force=true`)
-                : getApiUrl(`/api/frames?id=${frameToDelete.id}`);
+            const path = forceDelete
+                ? `/api/frames?id=${frameToDelete.id}&force=true`
+                : `/api/frames?id=${frameToDelete.id}`;
 
-            const response = await apiFetch(url, {
+            const response = await apiFetch(path, {
                 method: 'DELETE',
             });
 
