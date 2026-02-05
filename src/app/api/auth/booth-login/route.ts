@@ -5,12 +5,13 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
     signBoothToken,
     setBoothSession,
-    getBoothSession,
     clearBoothSession,
     checkRateLimit,
     resetRateLimit,
     generateDeviceToken,
     parseDeviceName,
+    verifyBoothToken,
+    getBoothFromRequest,
 } from '@/lib/booth-auth';
 
 // Validation schema for login
@@ -131,13 +132,11 @@ export async function POST(request: NextRequest) {
     }
 }
 
-/**
- * GET /api/auth/booth-login
- * Check current booth session and validate device token
- */
-export async function GET() {
+// GET /api/auth/booth-login
+// Check current booth session and validate device token
+export async function GET(request: NextRequest) {
     try {
-        const session = await getBoothSession();
+        const session = await getBoothFromRequest(request);
 
         if (!session) {
             return NextResponse.json({ authenticated: false });
@@ -180,13 +179,11 @@ export async function GET() {
     }
 }
 
-/**
- * DELETE /api/auth/booth-login
- * Logout booth session and clear device token
- */
-export async function DELETE() {
+// DELETE /api/auth/booth-login
+// Logout booth session and clear device token
+export async function DELETE(request: NextRequest) {
     try {
-        const session = await getBoothSession();
+        const session = await getBoothFromRequest(request);
 
         // Clear device token in database if we have a valid session
         if (session) {

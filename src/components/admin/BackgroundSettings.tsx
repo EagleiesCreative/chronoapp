@@ -5,9 +5,11 @@ import { Image, Palette, Upload, X, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label'; // Added Label import
+import { apiFetch } from '@/lib/api'; // Added apiFetch import
 import { useTenantStore } from '@/store/tenant-store';
 import { toast } from 'sonner';
-import { getApiUrl } from '@/lib/api';
+// Removed getApiUrl import as apiFetch handles it
 
 const PRESET_COLORS = [
     '#ffffff', // White
@@ -54,9 +56,8 @@ export function BackgroundSettings() {
             formData.append('file', file);
             formData.append('folder', 'backgrounds');
 
-            const response = await fetch(getApiUrl('/api/upload'), {
+            const response = await apiFetch('/api/upload', {
                 method: 'POST',
-                credentials: 'include',
                 body: formData,
             });
 
@@ -87,8 +88,8 @@ export function BackgroundSettings() {
 
         setIsSaving(true);
         try {
-            const response = await fetch(getApiUrl('/api/booth/settings'), {
-                method: 'PATCH',
+            const response = await apiFetch('/api/booth/settings', { // Changed to apiFetch
+                method: 'PATCH', // Kept original method
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({

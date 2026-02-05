@@ -5,9 +5,10 @@ import { motion } from 'framer-motion';
 import { Printer, Download, RotateCcw, CheckCircle, Loader2, Film } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
+import { apiFetch } from '@/lib/api';
+import { Progress } from '@/components/ui/progress';
 import { useBoothStore } from '@/store/booth-store';
 import { generateCompressedGif } from '@/lib/video-generator';
-import { getApiUrl } from '@/lib/api';
 
 export function ReviewScreen() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -176,15 +177,19 @@ export function ReviewScreen() {
             formData.append('file', blob, 'final.jpg');
             formData.append('folder', `sessions/${session?.id || 'temp'}`);
 
-            const uploadResponse = await fetch(getApiUrl('/api/upload'), {
+            const uploadResponse = await apiFetch('/api/upload', {
                 method: 'POST',
-                credentials: 'include',
                 body: formData,
             });
 
             const data = await uploadResponse.json();
+            let finalUrl: string | null = null;
+            let printUrl: string | null = null;
 
             if (data.success && data.url && session?.id) {
+                finalUrl = data.url;
+                printUrl = data.url; // Assuming print URL is the same as final image URL for now
+
                 // Upload individual photos
                 const photoUrls: string[] = [];
                 const photoDataUrls: string[] = [];
@@ -202,9 +207,8 @@ export function ReviewScreen() {
                             photoFormData.append('file', photoBlob, `photo_${i + 1}.jpg`);
                             photoFormData.append('folder', `sessions/${session.id}`);
 
-                            const photoUploadResponse = await fetch(getApiUrl('/api/upload'), {
+                            const photoUploadResponse = await apiFetch('/api/upload', {
                                 method: 'POST',
-                                credentials: 'include',
                                 body: photoFormData,
                             });
 
@@ -219,7 +223,7 @@ export function ReviewScreen() {
                 }
 
                 // Generate stop-motion GIF
-                let videoUrl: string | null = null;
+                let gifUrl: string | null = null;
                 if (photoDataUrls.length >= 2) {
                     setUploadStatus('Creating stop-motion GIF...');
                     try {
@@ -231,15 +235,14 @@ export function ReviewScreen() {
                             gifFormData.append('file', gifResult.blob, 'stopmotion.gif');
                             gifFormData.append('folder', `sessions/${session.id}`);
 
-                            const gifUploadResponse = await fetch(getApiUrl('/api/upload'), {
+                            const gifUploadResponse = await apiFetch('/api/upload', {
                                 method: 'POST',
-                                credentials: 'include',
                                 body: gifFormData,
                             });
 
                             const gifData = await gifUploadResponse.json();
                             if (gifData.success && gifData.url) {
-                                videoUrl = gifData.url;
+                                gifUrl = gifData.url;
                                 setVideoGenerated(true);
                                 console.log(`GIF uploaded: ${(gifResult.size / 1024).toFixed(1)}KB`);
                             }
@@ -251,19 +254,18 @@ export function ReviewScreen() {
 
                 // Update session with final image URL, individual photos, video, and mark as completed
                 setUploadStatus('Finishing up...');
-                await fetch(getApiUrl('/api/session/complete'), {
+                await apiFetch('/api/session/complete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
                     body: JSON.stringify({
                         sessionId: session.id,
-                        finalImageUrl: data.url,
-                        photosUrls: photoUrls,
-                        videoUrl: videoUrl,
+                        finalImageUrl: finalUrl,
+                        printUrl: printUrl,
+                        photoUrls: photoUrls,
+                        gifUrl: gifUrl,
                     }),
-                });
-
-                // Generate QR for share page
+                }); // Generate QR for share page
                 // Use NEXT_PUBLIC_APP_URL for production, fallback to current origin for dev
                 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
                 const shareUrl = `${baseUrl}/share/${session.id}`;

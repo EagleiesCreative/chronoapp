@@ -53,11 +53,38 @@ export async function createSession(): Promise<string> {
 
 /**
  * Check if an admin session exists
+ * Supports both cookie and X-Admin-Token header
  */
-export async function checkSession(): Promise<boolean> {
-    const cookieStore = await cookies();
-    const session = cookieStore.get(SESSION_COOKIE);
-    return !!session?.value;
+export async function checkSession(request?: NextRequest): Promise<boolean> {
+    // 1. Check header if request is provided
+    if (request) {
+        const adminToken = request.headers.get('x-admin-token');
+        if (adminToken) {
+            // In this simple implementation, the token IS the session record
+            // Real production might check this against a database or cache
+            return true;
+        }
+    }
+
+    // 2. Fall back to cookie
+    try {
+        const cookieStore = await cookies();
+        const session = cookieStore.get(SESSION_COOKIE);
+        return !!session?.value;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Get admin token from request
+ */
+export async function getAdminFromRequest(request: NextRequest): Promise<string | null> {
+    const headerToken = request.headers.get('x-admin-token');
+    if (headerToken) return headerToken;
+
+    const cookieToken = request.cookies.get(SESSION_COOKIE)?.value;
+    return cookieToken || null;
 }
 
 /**

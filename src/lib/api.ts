@@ -88,17 +88,23 @@ export async function apiFetch(
 ): Promise<Response> {
     const url = getApiUrl(path);
 
-    // Get stored token (if any) - for Tauri apps
-    const token = typeof window !== 'undefined' ? localStorage.getItem('booth_token') : null;
+    // Get stored tokens - for Tauri apps
+    const boothToken = typeof window !== 'undefined' ? localStorage.getItem('booth_token') : null;
+    const adminToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
 
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
         ...options.headers,
     };
 
-    // Add Authorization header if token exists (bypasses cookie restrictions)
-    if (token) {
-        (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    // Add Authorization header if booth token exists
+    if (boothToken) {
+        (headers as Record<string, string>)['Authorization'] = `Bearer ${boothToken}`;
+    }
+
+    // Add X-Admin-Token if admin token exists
+    if (adminToken) {
+        (headers as Record<string, string>)['X-Admin-Token'] = adminToken;
     }
 
     return fetch(url, {

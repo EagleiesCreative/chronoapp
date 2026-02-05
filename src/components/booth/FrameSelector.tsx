@@ -8,7 +8,7 @@ import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { formatIDR } from '@/lib/xendit';
 import { Frame } from '@/lib/supabase';
-import { getApiUrl } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 
 export function FrameSelector() {
     const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, setError } = useBoothStore();
@@ -20,9 +20,7 @@ export function FrameSelector() {
         async function fetchFrames() {
             setIsLoading(true);
             try {
-                const response = await fetch(getApiUrl('/api/frames'), {
-                    credentials: 'include',
-                });
+                const response = await apiFetch('/api/frames');
                 const data = await response.json();
 
                 if (data.success && data.frames) {

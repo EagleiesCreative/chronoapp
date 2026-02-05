@@ -102,16 +102,17 @@ export default function HomePage() {
 
     setIsVerifyingPin(true);
     try {
-      const response = await fetch(getApiUrl('/api/admin'), {
+      const response = await apiFetch('/api/admin', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ pin }),
       });
 
       const data = await response.json();
 
       if (data.success) {
+        if (data.token) {
+          localStorage.setItem('admin_token', data.token);
+        }
         setAdminPinVerified(true);
         setShowPinDialog(false);
         setShowAdminPanel(true);
@@ -129,6 +130,7 @@ export default function HomePage() {
 
   // Lock admin panel (require PIN again)
   const handleLockAdmin = () => {
+    localStorage.removeItem('admin_token');
     setAdminPinVerified(false);
     setShowAdminPanel(false);
     toast.success('Admin panel locked');
@@ -136,7 +138,7 @@ export default function HomePage() {
 
   const handleLogout = async () => {
     try {
-      await fetch(getApiUrl('/api/auth/booth-login'), { method: 'DELETE', credentials: 'include' });
+      await apiFetch('/api/auth/booth-login', { method: 'DELETE' });
       setBooth(null);
       setShowAdminPanel(false);
       setAdminPinVerified(false);

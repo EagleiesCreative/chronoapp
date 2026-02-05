@@ -20,7 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FrameManager, CameraSelector, PrinterSelector } from '@/components/admin';
 import { toast } from 'sonner';
-import { getApiUrl } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 
 type AuthState = 'loading' | 'unauthenticated' | 'authenticated';
 
@@ -37,7 +37,7 @@ export default function AdminPage() {
 
     async function checkAuth() {
         try {
-            const response = await fetch(getApiUrl('/api/admin'), { credentials: 'include' });
+            const response = await apiFetch('/api/admin');
             const data = await response.json();
             setAuthState(data.authenticated ? 'authenticated' : 'unauthenticated');
         } catch {
@@ -54,16 +54,17 @@ export default function AdminPage() {
 
         setIsLoggingIn(true);
         try {
-            const response = await fetch(getApiUrl('/api/admin'), {
+            const response = await apiFetch('/api/admin', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ pin }),
             });
 
             const data = await response.json();
 
             if (data.success) {
+                if (data.token) {
+                    localStorage.setItem('admin_token', data.token);
+                }
                 setAuthState('authenticated');
                 setPin('');
                 toast.success('Welcome to Admin Panel');
@@ -79,7 +80,8 @@ export default function AdminPage() {
 
     async function handleLogout() {
         try {
-            await fetch(getApiUrl('/api/admin'), { method: 'DELETE', credentials: 'include' });
+            await apiFetch('/api/admin', { method: 'DELETE' });
+            localStorage.removeItem('admin_token');
             setAuthState('unauthenticated');
             toast.success('Logged out');
         } catch {

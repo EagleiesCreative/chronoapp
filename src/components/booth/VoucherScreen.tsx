@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { formatIDR } from '@/lib/xendit';
-import { getApiUrl } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 
 export function VoucherScreen() {
     const { setStep, appliedVoucher, setAppliedVoucher } = useBoothStore();
@@ -53,11 +53,12 @@ export function VoucherScreen() {
         setError(null);
 
         try {
-            const response = await fetch(getApiUrl('/api/voucher/validate'), {
+            const response = await apiFetch('/api/voucher/validate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ code: voucherCode }),
+                body: JSON.stringify({
+                    code: voucherCode.trim().toUpperCase(),
+                    boothId: booth?.id,
+                }),
             });
 
             const data = await response.json();

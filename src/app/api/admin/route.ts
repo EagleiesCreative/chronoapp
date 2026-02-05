@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSession, clearSession, checkSession } from '@/lib/admin-auth';
-import { getBoothSession } from '@/lib/booth-auth';
+import { getBoothFromRequest } from '@/lib/booth-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // POST - Login with PIN
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Get current booth session
-        const session = await getBoothSession();
+        const session = await getBoothFromRequest(request);
         if (!session) {
             return NextResponse.json(
                 { error: 'Booth not logged in' },
@@ -47,9 +47,9 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        await createSession();
+        const token = await createSession();
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true, token });
     } catch (error) {
         console.error('Admin login error:', error);
         return NextResponse.json(
@@ -74,9 +74,9 @@ export async function DELETE() {
 }
 
 // GET - Check session status
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const isAuthenticated = await checkSession();
+        const isAuthenticated = await checkSession(request);
         return NextResponse.json({ authenticated: isAuthenticated });
     } catch (error) {
         console.error('Admin session check error:', error);

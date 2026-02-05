@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { formatIDR } from '@/lib/xendit';
-import { getApiUrl } from '@/lib/api';
+import { toast } from 'sonner';
+import { apiFetch } from '@/lib/api';
 
 export function PaymentScreen() {
     const {
@@ -44,10 +45,8 @@ export function PaymentScreen() {
             setIsLoading(true);
 
             try {
-                const response = await fetch(getApiUrl('/api/payment/create'), {
+                const response = await apiFetch('/api/payment/create', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
                     body: JSON.stringify({
                         frameId: selectedFrame.id,
                         voucherCode: appliedVoucher?.code || undefined,
@@ -100,9 +99,7 @@ export function PaymentScreen() {
 
         const pollInterval = setInterval(async () => {
             try {
-                const response = await fetch(getApiUrl(`/api/payment/status?sessionId=${session.id}`), {
-                    credentials: 'include',
-                });
+                const response = await apiFetch(`/api/payment/status?sessionId=${session.id}`);
                 const data = await response.json();
 
                 if (data.success) {
@@ -163,10 +160,8 @@ export function PaymentScreen() {
         if (!session?.id) return;
 
         try {
-            const response = await fetch(getApiUrl('/api/payment/simulate'), {
+            const response = await apiFetch('/api/payment/simulate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ sessionId: session.id }),
             });
 
