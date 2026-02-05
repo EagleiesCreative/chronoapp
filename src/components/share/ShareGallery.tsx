@@ -168,7 +168,7 @@ export function ShareGallery({
             {/* Header */}
             <header className="flex items-center justify-between px-4 py-4 border-b bg-white sticky top-0 z-20">
                 <h1 className="text-lg font-medium text-gray-900 truncate max-w-[60%]">
-                    {eventName} • {photos.length} Item{photos.length !== 1 ? 's' : ''}
+                    {eventName}
                 </h1>
                 <div className="flex items-center gap-2">
                     <button

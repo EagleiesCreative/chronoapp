@@ -101,23 +101,29 @@ export function CaptureScreen() {
         setPhase('countdown');
     };
 
-    const handleContinue = () => {
-        if (lastCapturedPhoto) {
+    const handleContinue = useCallback(() => {
+        if (lastCapturedPhoto && phase === 'preview') {
+            // Store the photo locally and clear the state immediately to prevent re-entry
+            const photoData = lastCapturedPhoto;
+            const photoIndex = currentPhotoIndex;
+
+            setLastCapturedPhoto(null);
+            setPhase('capturing'); // Move out of 'preview' phase to stop the auto-timer
+
             addCapturedPhoto({
-                index: currentPhotoIndex,
-                dataUrl: lastCapturedPhoto,
+                index: photoIndex,
+                dataUrl: photoData,
             });
 
-            if (currentPhotoIndex + 1 >= totalPhotos) {
+            if (photoIndex + 1 >= totalPhotos) {
                 setStep('review');
             } else {
-                setCurrentPhotoIndex(currentPhotoIndex + 1);
-                setLastCapturedPhoto(null);
+                setCurrentPhotoIndex(photoIndex + 1);
                 setCountdown(3);
                 setPhase('countdown');
             }
         }
-    };
+    }, [lastCapturedPhoto, phase, currentPhotoIndex, totalPhotos, addCapturedPhoto, setStep, setCurrentPhotoIndex]);
 
     return (
         <motion.div
