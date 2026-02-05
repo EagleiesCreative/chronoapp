@@ -261,19 +261,25 @@ export function ReviewScreen() {
             }
 
             // Update session with final image URL, individual photos, video, and mark as completed
-            setUploadStatus('Finishing up...');
-            await apiFetch('/api/session/complete', {
+            setUploadStatus(`Saving ${photoUrls.length} photos and ${gifUrl ? '1 gif' : '0 gif'}...`);
+            const completionPayload = {
+                sessionId: session.id,
+                finalImageUrl: finalUrl,
+                photosUrls: photoUrls,
+                videoUrl: gifUrl,
+            };
+
+            const completionResponse = await apiFetch('/api/session/complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({
-                    sessionId: session.id,
-                    finalImageUrl: finalUrl,
-                    printUrl: printUrl,
-                    photoUrls: photoUrls,
-                    gifUrl: gifUrl,
-                }),
+                body: JSON.stringify(completionPayload),
             });
+
+            if (!completionResponse.ok) {
+                const errorData = await completionResponse.json();
+                throw new Error(errorData.error || `Failed to save session data (${completionResponse.status})`);
+            }
 
             // Generate QR for share page
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://chronosnap.eagleies.com';
@@ -481,7 +487,7 @@ export function ReviewScreen() {
                     )}
 
                     {/* Download QR / Loading State / Error State */}
-                    <div className="elegant-card p-6 mt-2 min-h-[220px] flex flex-col items-center justify-center relative bg-white overflow-hidden">
+                    <div className="w-full bg-white border-2 border-primary/30 rounded-2xl p-6 min-h-[220px] flex flex-col items-center justify-center" style={{ minHeight: '220px' }}>
                         {downloadQR ? (
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}

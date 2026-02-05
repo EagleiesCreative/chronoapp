@@ -26,15 +26,17 @@ export async function POST(request: NextRequest) {
         }
 
         const { sessionId, finalImageUrl, photosUrls, videoUrl } = validation.data;
+        const admin = (await import('@/lib/supabase-admin')).supabaseAdmin;
 
         // Update session with final image, video, and mark as completed
-        const updates: Record<string, unknown> = {
+        // Using snake_case for database columns
+        const updates: Record<string, any> = {
             final_image_url: finalImageUrl,
             status: 'completed',
             updated_at: new Date().toISOString(),
         };
 
-        if (photosUrls && photosUrls.length > 0) {
+        if (photosUrls && Array.isArray(photosUrls) && photosUrls.length > 0) {
             updates.photos_urls = photosUrls;
         }
 
@@ -42,7 +44,7 @@ export async function POST(request: NextRequest) {
             updates.video_url = videoUrl;
         }
 
-        const { error } = await supabase
+        const { error } = await admin
             .from('sessions')
             .update(updates)
             .eq('id', sessionId);
