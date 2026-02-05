@@ -6,7 +6,6 @@ import { Printer, Download, RotateCcw, CheckCircle, Loader2, Film } from 'lucide
 import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api';
-import { Progress } from '@/components/ui/progress';
 import { useBoothStore } from '@/store/booth-store';
 import { generateCompressedGif } from '@/lib/video-generator';
 
