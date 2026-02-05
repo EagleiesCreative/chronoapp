@@ -80,6 +80,30 @@ export function getApiUrl(path: string): string {
     return fullUrl;
 }
 
+/**
+ * Get absolute asset URL
+ * Ensures images and other assets load correctly in Tauri
+ */
+export function getAssetUrl(url: string | null | undefined): string {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+        return url;
+    }
+
+    // Relative path - normalize to absolute production URL in Tauri
+    const normalizedPath = url.startsWith('/') ? url : `/${url}`;
+
+    if (process.env.NODE_ENV === 'development') {
+        return `http://localhost:3000${normalizedPath}`;
+    }
+
+    if (isTauriEnvironment()) {
+        return `${PRODUCTION_API_URL}${normalizedPath}`;
+    }
+
+    return normalizedPath;
+}
+
 
 // Convenience function for fetch with credentials
 export async function apiFetch(

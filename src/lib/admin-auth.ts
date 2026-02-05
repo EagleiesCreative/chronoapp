@@ -99,8 +99,8 @@ export async function clearSession(): Promise<void> {
  * Middleware helper to check authentication for API routes
  * Returns null if authenticated, or an error response if not
  */
-export async function requireAuth(): Promise<NextResponse | null> {
-    const isAuthenticated = await checkSession();
+export async function requireAuth(request: NextRequest): Promise<NextResponse | null> {
+    const isAuthenticated = await checkSession(request);
 
     if (!isAuthenticated) {
         return NextResponse.json(
@@ -135,7 +135,7 @@ export async function requireAuthWithApiKey(request: Request): Promise<NextRespo
     }
 
     // Fall back to cookie session
-    const isAuthenticated = await checkSession();
+    const isAuthenticated = await checkSession(request as unknown as NextRequest);
     if (isAuthenticated) {
         return null; // Authenticated via cookie
     }

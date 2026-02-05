@@ -8,7 +8,7 @@ import { z } from 'zod';
 async function requireAnyAuth(request: NextRequest): Promise<NextResponse | null> {
     try {
         // Check admin session first
-        const isAdmin = await checkSession();
+        const isAdmin = await checkSession(request);
         if (isAdmin) return null;
     } catch {
         // Admin session check failed, continue to booth check

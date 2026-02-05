@@ -8,7 +8,7 @@ import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { formatIDR } from '@/lib/xendit';
 import { Frame } from '@/lib/supabase';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getAssetUrl } from '@/lib/api';
 
 export function FrameSelector() {
     const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, setError } = useBoothStore();
@@ -111,7 +111,7 @@ export function FrameSelector() {
                             >
                                 <div className="w-full h-full overflow-hidden elegant-card relative">
                                     <img
-                                        src={selectedFrame.image_url}
+                                        src={getAssetUrl(selectedFrame.image_url)}
                                         alt={selectedFrame.name}
                                         className="w-full h-full object-contain"
                                     />

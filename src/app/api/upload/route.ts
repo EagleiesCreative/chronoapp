@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
         // For admin uploads (frames folder), require authentication
         if (folder === 'frames') {
-            const authError = await requireAuth();
+            const authError = await requireAuth(request);
             if (authError) return authError;
         }
 

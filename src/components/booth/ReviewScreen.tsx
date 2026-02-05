@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { Printer, Download, RotateCcw, CheckCircle, Loader2, Film } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getAssetUrl } from '@/lib/api';
 import { useBoothStore } from '@/store/booth-store';
 import { generateCompressedGif } from '@/lib/video-generator';
 
@@ -142,7 +142,7 @@ export function ReviewScreen() {
                         resolve();
                     };
                     frameImg.onerror = () => resolve();
-                    frameImg.src = selectedFrame.image_url;
+                    frameImg.src = getAssetUrl(selectedFrame.image_url);
                 });
             }
 
