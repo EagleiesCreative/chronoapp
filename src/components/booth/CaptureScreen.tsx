@@ -183,7 +183,6 @@ export function CaptureScreen() {
                                 src={lastCapturedPhoto}
                                 alt="Captured preview"
                                 className="w-full h-full object-cover"
-                                style={{ transform: 'scaleX(-1)' }}
                             />
                         ) : (
                             /* Keep webcam always mounted - only show/hide captured photo */

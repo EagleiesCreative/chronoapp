@@ -442,13 +442,30 @@ export function ReviewScreen() {
                         Download
                     </Button>
 
-                    {/* Download QR */}
-                    {downloadQR && (
-                        <div className="elegant-card p-3 mt-2">
-                            <p className="text-xs text-muted-foreground mb-1 text-center font-light tracking-wide">
-                                Scan to download
-                            </p>
-                            <img src={downloadQR} alt="Download QR" className="w-40 h-40 mx-auto" />
+                    {/* Download QR / Loading State */}
+                    {(isUploading || downloadQR) && (
+                        <div className="elegant-card p-4 mt-2 min-h-[200px] flex flex-col items-center justify-center">
+                            {downloadQR ? (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="text-center"
+                                >
+                                    <p className="text-[10px] uppercase text-muted-foreground mb-3 font-medium tracking-[0.1em]">
+                                        Scan for softcopy
+                                    </p>
+                                    <div className="bg-white p-2 rounded-xl elegant-shadow">
+                                        <img src={downloadQR} alt="Download QR" className="w-32 h-32 mx-auto" />
+                                    </div>
+                                </motion.div>
+                            ) : (
+                                <div className="text-center py-4">
+                                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-primary/40" strokeWidth={1.5} />
+                                    <p className="text-xs text-muted-foreground font-light px-4">
+                                        Generating your QR code...
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
 
