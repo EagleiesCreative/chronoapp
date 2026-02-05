@@ -348,21 +348,69 @@ export function ShareGallery({
 
             {/* Bottom Action Bar */}
             <div className="border-t bg-white p-4 safe-area-bottom">
-                <div className="flex items-center justify-center gap-3 max-w-sm mx-auto">
-                    <button
-                        onClick={handleDownloadAll}
-                        disabled={isDownloading}
-                        className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white py-3.5 px-6 rounded-full font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
-                    >
-                        <Download className="w-5 h-5" />
-                        {isDownloading ? 'Downloading...' : 'Download All'}
-                    </button>
-                    <button
-                        onClick={handleShare}
-                        className="p-3.5 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
-                    >
-                        <Share2 className="w-5 h-5 text-gray-700" />
-                    </button>
+                <div className="max-w-sm mx-auto flex flex-col gap-4">
+                    {/* Explicit Download Options */}
+                    <div className="grid grid-cols-1 gap-2">
+                        <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1 px-1">Download Options</p>
+
+                        {/* Download Photo Strip */}
+                        <button
+                            onClick={() => handleDownload(stripImage)}
+                            className="flex items-center justify-between w-full p-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors group"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white rounded-lg shadow-sm group-hover:shadow transition-all">
+                                    <Image className="w-4 h-4 text-blue-500" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-sm font-medium text-gray-900">Photo Strip</p>
+                                    <p className="text-xs text-gray-500">The complete frame</p>
+                                </div>
+                            </div>
+                            <Download className="w-4 h-4 text-gray-400 group-hover:text-gray-900 transition-colors" />
+                        </button>
+
+                        {/* Download GIF */}
+                        {videoUrl && (
+                            <button
+                                onClick={handleDownloadVideo}
+                                className="flex items-center justify-between w-full p-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-white rounded-lg shadow-sm group-hover:shadow transition-all">
+                                        <Film className="w-4 h-4 text-purple-500" />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="text-sm font-medium text-gray-900">Stop-motion GIF</p>
+                                        <p className="text-xs text-gray-500">Video animation</p>
+                                    </div>
+                                </div>
+                                <Download className="w-4 h-4 text-gray-400 group-hover:text-gray-900 transition-colors" />
+                            </button>
+                        )}
+
+                        {/* Individual Photos expandable? No, just list them or allow download from view */}
+                        <div className="mt-1">
+                            <p className="text-[10px] text-gray-400 px-1 mb-2">Tip: View individual photos in the gallery and use the download button at the top.</p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-3">
+                        <button
+                            onClick={handleDownloadAll}
+                            disabled={isDownloading}
+                            className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white py-3.5 px-6 rounded-full font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+                        >
+                            <Download className="w-5 h-5" />
+                            {isDownloading ? 'Downloading...' : 'Download All'}
+                        </button>
+                        <button
+                            onClick={handleShare}
+                            className="p-3.5 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                        >
+                            <Share2 className="w-5 h-5 text-gray-700" />
+                        </button>
+                    </div>
                 </div>
             </div>
 

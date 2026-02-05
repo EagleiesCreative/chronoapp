@@ -18,6 +18,7 @@ export function ReviewScreen() {
     const [isUploading, setIsUploading] = useState(false);
     const [uploadStatus, setUploadStatus] = useState<string>('');
     const [videoGenerated, setVideoGenerated] = useState(false);
+    const [gifDownloadUrl, setGifDownloadUrl] = useState<string | null>(null);
     const [autoResetCountdown, setAutoResetCountdown] = useState(60); // 1 minute
     const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -250,6 +251,7 @@ export function ReviewScreen() {
                         if (gifData.success && gifData.url) {
                             gifUrl = gifData.url;
                             setVideoGenerated(true);
+                            setGifDownloadUrl(gifData.url); // Use the final URL for download
                             console.log(`GIF uploaded: ${(gifResult.size / 1024).toFixed(1)}KB`);
                         }
                     }
@@ -365,6 +367,16 @@ export function ReviewScreen() {
         link.click();
     };
 
+    const handleDownloadGif = () => {
+        if (!gifDownloadUrl) return;
+        resetCountdown(); // Reset timer on interaction
+
+        const link = document.createElement('a');
+        link.download = `chronosnap_animation_${Date.now()}.gif`;
+        link.href = gifDownloadUrl;
+        link.click();
+    };
+
     const handleNewSession = () => {
         resetSession();
         setStep('idle');
@@ -444,7 +456,6 @@ export function ReviewScreen() {
                         Print Photo
                     </Button>
 
-                    {/* Download button */}
                     <Button
                         variant="outline"
                         size="lg"
@@ -455,6 +466,19 @@ export function ReviewScreen() {
                         <Download className="w-4 h-4 mr-2" strokeWidth={1.5} />
                         Download
                     </Button>
+
+                    {/* Download GIF button */}
+                    {videoGenerated && (
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={handleDownloadGif}
+                            className="px-6 py-5 text-sm font-normal rounded-full border-border touch-target"
+                        >
+                            <Film className="w-4 h-4 mr-2" strokeWidth={1.5} />
+                            Download GIF
+                        </Button>
+                    )}
 
                     {/* Download QR / Loading State / Error State */}
                     <div className="elegant-card p-4 mt-2 min-h-[200px] flex flex-col items-center justify-center">

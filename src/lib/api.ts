@@ -116,8 +116,10 @@ export async function apiFetch(
     const boothToken = typeof window !== 'undefined' ? localStorage.getItem('booth_token') : null;
     const adminToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
 
+    const isFormData = options.body instanceof FormData;
+
     const headers: HeadersInit = {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...options.headers,
     };
 
