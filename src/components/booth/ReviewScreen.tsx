@@ -434,12 +434,12 @@ export function ReviewScreen() {
                     </div>
                 </motion.div>
 
-                {/* Actions panel */}
+                {/* Actions panel - scrollable to ensure QR is visible */}
                 <motion.div
                     initial={{ x: 20, opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
                     transition={{ delay: 0.4 }}
-                    className="flex flex-col gap-4"
+                    className="flex flex-col gap-4 max-h-[calc(100vh-180px)] overflow-y-auto hide-scrollbar pr-2"
                 >
                     {/* Print button */}
                     <Button
