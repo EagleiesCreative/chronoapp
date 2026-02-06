@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Printer, Download, RotateCcw, CheckCircle, Loader2, Film, XCircle } from 'lucide-react';
+import { Printer, RotateCcw, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { apiFetch, getAssetUrl } from '@/lib/api';
@@ -363,25 +363,6 @@ export function ReviewScreen() {
         }
     };
 
-    const handleDownload = () => {
-        if (!compositeImage) return;
-        resetCountdown(); // Reset timer on interaction
-
-        const link = document.createElement('a');
-        link.download = `chronosnap_${Date.now()}.jpg`;
-        link.href = compositeImage;
-        link.click();
-    };
-
-    const handleDownloadGif = () => {
-        if (!gifDownloadUrl) return;
-        resetCountdown(); // Reset timer on interaction
-
-        const link = document.createElement('a');
-        link.download = `chronosnap_animation_${Date.now()}.gif`;
-        link.href = gifDownloadUrl;
-        link.click();
-    };
 
     const handleNewSession = () => {
         resetSession();
@@ -462,29 +443,6 @@ export function ReviewScreen() {
                         Print Photo
                     </Button>
 
-                    <Button
-                        variant="outline"
-                        size="lg"
-                        onClick={handleDownload}
-                        disabled={isCompositing}
-                        className="px-6 py-5 text-sm font-normal rounded-full border-border touch-target"
-                    >
-                        <Download className="w-4 h-4 mr-2" strokeWidth={1.5} />
-                        Download
-                    </Button>
-
-                    {/* Download GIF button */}
-                    {videoGenerated && (
-                        <Button
-                            variant="outline"
-                            size="lg"
-                            onClick={handleDownloadGif}
-                            className="px-6 py-5 text-sm font-normal rounded-full border-border touch-target"
-                        >
-                            <Film className="w-4 h-4 mr-2" strokeWidth={1.5} />
-                            Download GIF
-                        </Button>
-                    )}
 
                     {/* Download QR / Loading State / Error State */}
                     <div className="w-full bg-white border-2 border-primary/30 rounded-2xl p-6 min-h-[220px] flex flex-col items-center justify-center" style={{ minHeight: '220px' }}>

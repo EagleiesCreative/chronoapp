@@ -2,23 +2,14 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Webcam from 'react-webcam';
 import { Camera as CameraIcon, RefreshCw, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBoothStore, useAdminStore } from '@/store/booth-store';
+import { useCamera } from './CameraProvider';
 
 type CapturePhase = 'countdown' | 'capturing' | 'preview';
 
 export function CaptureScreen() {
-    const webcamRef = useRef<Webcam>(null);
-    const [flashActive, setFlashActive] = useState(false);
-    const [cameraError, setCameraError] = useState<string | null>(null);
-    const [cameraReady, setCameraReady] = useState(false);
-    const [phase, setPhase] = useState<CapturePhase>('countdown');
-    const [countdown, setCountdown] = useState(3);
-    const [previewCountdown, setPreviewCountdown] = useState(5);
-    const [lastCapturedPhoto, setLastCapturedPhoto] = useState<string | null>(null);
-
     const {
         selectedFrame,
         currentPhotoIndex,
@@ -29,6 +20,14 @@ export function CaptureScreen() {
     } = useBoothStore();
 
     const { selectedCameraId } = useAdminStore();
+    const { stream, getScreenshot, isCameraReady: cameraReady, cameraError } = useCamera();
+    const videoRef = useRef<HTMLVideoElement>(null);
+
+    const [flashActive, setFlashActive] = useState(false);
+    const [phase, setPhase] = useState<CapturePhase>('countdown');
+    const [countdown, setCountdown] = useState(3);
+    const [previewCountdown, setPreviewCountdown] = useState(5);
+    const [lastCapturedPhoto, setLastCapturedPhoto] = useState<string | null>(null);
 
     const isMediaSupported = typeof navigator !== 'undefined' &&
         navigator.mediaDevices &&
@@ -36,20 +35,12 @@ export function CaptureScreen() {
 
     const totalPhotos = selectedFrame?.photo_slots?.length || 3;
 
-    const handleUserMediaError = useCallback((error: string | DOMException) => {
-        console.error('Camera error:', error);
-        if (typeof error === 'string') {
-            setCameraError(error);
-        } else {
-            setCameraError(`Camera access denied: ${error.message}`);
+    // Link global stream to local video element
+    useEffect(() => {
+        if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
         }
-    }, []);
-
-    const handleUserMedia = useCallback(() => {
-        console.log('Camera ready');
-        setCameraReady(true);
-        setCameraError(null);
-    }, []);
+    }, [stream]);
 
     // Countdown timer
     useEffect(() => {
@@ -76,8 +67,6 @@ export function CaptureScreen() {
     }, [phase, previewCountdown]);
 
     const capturePhoto = useCallback(() => {
-        if (!webcamRef.current) return;
-
         setPhase('capturing');
         setFlashActive(true);
 
@@ -85,15 +74,15 @@ export function CaptureScreen() {
             setFlashActive(false);
         }, 150);
 
-        const imageSrc = webcamRef.current.getScreenshot();
-        console.log('Screenshot captured:', !!imageSrc);
+        const imageSrc = getScreenshot();
+        console.log('Screenshot captured (standby):', !!imageSrc);
 
         if (imageSrc) {
             setLastCapturedPhoto(imageSrc);
             setPhase('preview');
             setPreviewCountdown(5);
         }
-    }, []);
+    }, [getScreenshot]);
 
     const handleRetake = () => {
         setLastCapturedPhoto(null);
@@ -103,7 +92,6 @@ export function CaptureScreen() {
 
     const handleContinue = useCallback(() => {
         if (lastCapturedPhoto && phase === 'preview') {
-            // Store the photo locally and clear the state immediately to prevent re-entry
             const photoData = lastCapturedPhoto;
             const photoIndex = currentPhotoIndex;
 
@@ -191,23 +179,12 @@ export function CaptureScreen() {
                                 className="w-full h-full object-cover"
                             />
                         ) : (
-                            /* Keep webcam always mounted - only show/hide captured photo */
-                            <Webcam
-                                ref={webcamRef}
-                                audio={false}
-                                screenshotFormat="image/jpeg"
-                                screenshotQuality={1}
-                                mirrored={true}
-                                className="w-full h-full object-cover"
-                                videoConstraints={{
-                                    width: 1920,
-                                    height: 1080,
-                                    ...(selectedCameraId
-                                        ? { deviceId: { exact: selectedCameraId } }
-                                        : { facingMode: 'user' }),
-                                }}
-                                onUserMedia={handleUserMedia}
-                                onUserMediaError={handleUserMediaError}
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full h-full object-cover transform scale-x-[-1]"
                             />
                         )}
 
