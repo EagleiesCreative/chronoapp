@@ -21,7 +21,18 @@ export function CaptureScreen() {
 
     const { selectedCameraId } = useAdminStore();
     const { stream, getScreenshot, isCameraReady: cameraReady, cameraError } = useCamera();
+
+    // Use a callback ref to assign stream whenever the video element is mounted/remounted
+    // This fixes the white preview bug: the <video> is conditionally rendered (unmounted
+    // during preview, remounted for next photo), so a plain useEffect on `stream` misses
+    // the remount since `stream` hasn't changed.
     const videoRef = useRef<HTMLVideoElement>(null);
+    const setVideoRef = useCallback((node: HTMLVideoElement | null) => {
+        videoRef.current = node;
+        if (node && stream) {
+            node.srcObject = stream;
+        }
+    }, [stream]);
 
     const [flashActive, setFlashActive] = useState(false);
     const [phase, setPhase] = useState<CapturePhase>('countdown');
@@ -35,14 +46,6 @@ export function CaptureScreen() {
 
     const totalPhotos = selectedFrame?.photo_slots?.length || 3;
 
-    // Link global stream to local video element
-    useEffect(() => {
-        if (videoRef.current && stream) {
-            videoRef.current.srcObject = stream;
-        }
-    }, [stream]);
-
-    // Countdown timer
     useEffect(() => {
         if (!cameraReady || phase !== 'countdown') return;
 
@@ -180,7 +183,7 @@ export function CaptureScreen() {
                             />
                         ) : (
                             <video
-                                ref={videoRef}
+                                ref={setVideoRef}
                                 autoPlay
                                 playsInline
                                 muted

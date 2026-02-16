@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { apiFetch, getAssetUrl } from '@/lib/api';
 import { useBoothStore } from '@/store/booth-store';
 import { generateCompressedGif } from '@/lib/video-generator';
-import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient } from '@/lib/supabase';
+import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient } from '@/lib/upload-client';
 
 export function ReviewScreen() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
