@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { apiFetch, getAssetUrl } from '@/lib/api';
 import { useBoothStore } from '@/store/booth-store';
 import { generateCompressedGif } from '@/lib/video-generator';
+import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient } from '@/lib/supabase';
 
 export function ReviewScreen() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -170,34 +171,25 @@ export function ReviewScreen() {
         setIsUploading(true);
         setUploadError(null);
         try {
-            // Upload composite strip image
-            setUploadStatus('Uploading photo strip...');
-            const response = await fetch(imageDataUrl);
-            const blob = await response.blob();
-
-            const formData = new FormData();
-            formData.append('file', blob, 'final.jpg');
-            formData.append('folder', `sessions/${session?.id || 'temp'}`);
-
-            const uploadResponse = await apiFetch('/api/upload', {
-                method: 'POST',
-                body: formData,
-            });
-
-            const data = await uploadResponse.json();
-
-            if (!data.success) {
-                throw new Error(data.error || 'Failed to upload photo strip');
-            }
-
             if (!session?.id) {
                 throw new Error('No active session found');
             }
 
-            let finalUrl = data.url;
-            let printUrl = data.url;
+            const sessionId = session.id;
 
-            // Upload individual photos
+            // 1. Upload composite strip image (critical - must succeed)
+            setUploadStatus('Uploading photo strip...');
+            const stripResponse = await fetch(imageDataUrl);
+            const stripBlob = await stripResponse.blob();
+
+            let finalUrl: string;
+            try {
+                finalUrl = await uploadFinalImageClient(sessionId, stripBlob);
+            } catch (err) {
+                throw new Error('Failed to upload photo strip: ' + (err instanceof Error ? err.message : 'Unknown error'));
+            }
+
+            // 2. Upload individual photos (non-critical - continue on failure)
             const photoUrls: string[] = [];
             const photoDataUrls: string[] = [];
 
@@ -209,27 +201,15 @@ export function ReviewScreen() {
                     try {
                         const photoResponse = await fetch(photo.dataUrl);
                         const photoBlob = await photoResponse.blob();
-
-                        const photoFormData = new FormData();
-                        photoFormData.append('file', photoBlob, `photo_${i + 1}.jpg`);
-                        photoFormData.append('folder', `sessions/${session.id}`);
-
-                        const photoUploadResponse = await apiFetch('/api/upload', {
-                            method: 'POST',
-                            body: photoFormData,
-                        });
-
-                        const photoData = await photoUploadResponse.json();
-                        if (photoData.success && photoData.url) {
-                            photoUrls.push(photoData.url);
-                        }
+                        const photoUrl = await uploadPhotoClient(sessionId, i, photoBlob);
+                        photoUrls.push(photoUrl);
                     } catch (photoErr) {
                         console.error(`Failed to upload photo ${i + 1}:`, photoErr);
                     }
                 }
             }
 
-            // Generate stop-motion GIF
+            // 3. Generate and upload stop-motion GIF (non-critical)
             let gifUrl: string | null = null;
             if (photoDataUrls.length >= 2) {
                 setUploadStatus('Creating stop-motion GIF...');
@@ -237,33 +217,20 @@ export function ReviewScreen() {
                     const gifResult = await generateCompressedGif(photoDataUrls, 1000);
                     if (gifResult) {
                         setUploadStatus('Uploading GIF...');
-                        // Upload GIF
-                        const gifFormData = new FormData();
-                        gifFormData.append('file', gifResult.blob, 'stopmotion.gif');
-                        gifFormData.append('folder', `sessions/${session.id}`);
-
-                        const gifUploadResponse = await apiFetch('/api/upload', {
-                            method: 'POST',
-                            body: gifFormData,
-                        });
-
-                        const gifData = await gifUploadResponse.json();
-                        if (gifData.success && gifData.url) {
-                            gifUrl = gifData.url;
-                            setVideoGenerated(true);
-                            setGifDownloadUrl(gifData.url); // Use the final URL for download
-                            console.log(`GIF uploaded: ${(gifResult.size / 1024).toFixed(1)}KB`);
-                        }
+                        gifUrl = await uploadGifClient(sessionId, gifResult.blob);
+                        setVideoGenerated(true);
+                        setGifDownloadUrl(gifUrl);
+                        console.log(`GIF uploaded: ${(gifResult.size / 1024).toFixed(1)}KB`);
                     }
                 } catch (gifErr) {
-                    console.error('GIF generation failed:', gifErr);
+                    console.error('GIF generation/upload failed:', gifErr);
                 }
             }
 
-            // Update session with final image URL, individual photos, video, and mark as completed
+            // 4. Update session with results (mark as completed)
             setUploadStatus(`Saving ${photoUrls.length} photos and ${gifUrl ? '1 gif' : '0 gif'}...`);
             const completionPayload = {
-                sessionId: session.id,
+                sessionId,
                 finalImageUrl: finalUrl,
                 photosUrls: photoUrls,
                 videoUrl: gifUrl,
@@ -281,9 +248,9 @@ export function ReviewScreen() {
                 throw new Error(errorData.error || `Failed to save session data (${completionResponse.status})`);
             }
 
-            // Generate QR for share page
+            // 5. Generate QR for share page
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://chronosnap.eagleies.com';
-            const shareUrl = `${baseUrl}/share/${session.id}`;
+            const shareUrl = `${baseUrl}/share/${sessionId}`;
             const qr = await QRCode.toDataURL(shareUrl, {
                 width: 140,
                 margin: 2,

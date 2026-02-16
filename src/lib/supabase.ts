@@ -281,6 +281,74 @@ export function subscribeToPaymentUpdates(
     .subscribe();
 }
 
+// ============================================================
+// Client-side upload functions (use public anon key)
+// These bypass Vercel's 4.5MB serverless function body limit
+// by uploading directly to Supabase Storage from the browser.
+// Requires an INSERT RLS policy on the 'photos' bucket for
+// the 'sessions/' path.
+// ============================================================
+
+async function uploadWithRetry(
+  bucket: string,
+  path: string,
+  blob: Blob,
+  contentType: string,
+  maxRetries: number = 3
+): Promise<string> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const { error } = await supabase.storage
+        .from(bucket)
+        .upload(path, blob, {
+          contentType,
+          upsert: true,
+        });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      return data.publicUrl;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`Upload attempt ${attempt + 1}/${maxRetries} failed:`, lastError.message);
+
+      if (attempt < maxRetries - 1) {
+        // Exponential backoff: 1s, 2s, 4s
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+      }
+    }
+  }
+
+  throw lastError || new Error('Upload failed after retries');
+}
+
+/**
+ * Upload the final composite strip image (client-side, direct to Supabase)
+ */
+export async function uploadFinalImageClient(sessionId: string, blob: Blob): Promise<string> {
+  const fileName = `sessions/${sessionId}/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
+  return uploadWithRetry('photos', fileName, blob, 'image/jpeg');
+}
+
+/**
+ * Upload an individual photo (client-side, direct to Supabase)
+ */
+export async function uploadPhotoClient(sessionId: string, photoIndex: number, blob: Blob): Promise<string> {
+  const fileName = `sessions/${sessionId}/photo_${photoIndex + 1}_${Date.now()}.jpg`;
+  return uploadWithRetry('photos', fileName, blob, 'image/jpeg');
+}
+
+/**
+ * Upload a GIF (client-side, direct to Supabase)
+ */
+export async function uploadGifClient(sessionId: string, blob: Blob): Promise<string> {
+  const fileName = `sessions/${sessionId}/stopmotion_${Date.now()}.gif`;
+  return uploadWithRetry('photos', fileName, blob, 'image/gif');
+}
+
 // Upload photo to storage (using admin client to bypass RLS)
 export async function uploadPhoto(
   sessionId: string,

@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
         // Sanitize filename - only allow alphanumeric, dots, and hyphens
         const originalExt = file.name.split('.').pop()?.toLowerCase() || 'png';
-        const safeExt = ['png', 'jpg', 'jpeg', 'webp'].includes(originalExt) ? originalExt : 'png';
+        const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(originalExt) ? originalExt : 'png';
         const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${safeExt}`;
 
         // Convert File to ArrayBuffer then to Buffer for Supabase
