@@ -21,7 +21,6 @@ const nextConfig: NextConfig = {
 
   // Disable server-side features when building for Tauri
   ...(isTauriBuild && {
-    distDir: 'out',
     // Skip type checking for faster builds (already done in dev)
     typescript: {
       ignoreBuildErrors: false,
