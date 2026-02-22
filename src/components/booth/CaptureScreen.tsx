@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { useBoothStore, useAdminStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { useCamera } from './CameraProvider';
+import { getAssetUrl } from '@/lib/api';
+import { getCachedImageUrl } from '@/lib/frame-cache';
 
 type CapturePhase = 'countdown' | 'capturing' | 'preview';
 
@@ -326,7 +328,7 @@ export function CaptureScreen() {
                                     {/* Frame overlay */}
                                     {selectedFrame && (
                                         <img
-                                            src={selectedFrame.image_url}
+                                            src={getCachedImageUrl(selectedFrame.image_url) || getAssetUrl(selectedFrame.image_url)}
                                             alt="Frame"
                                             className="absolute inset-0 w-full h-full object-contain z-10 pointer-events-none"
                                         />

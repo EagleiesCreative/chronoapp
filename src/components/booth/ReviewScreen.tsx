@@ -13,6 +13,7 @@ import { generateCompressedGif } from '@/lib/video-generator';
 import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient } from '@/lib/upload-client';
 import { saveToLocalDisk } from '@/lib/local-save';
 import { useLocalSaveStore } from '@/store/local-save-store';
+import { getCachedImageUrl } from '@/lib/frame-cache';
 
 export function ReviewScreen() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -154,7 +155,7 @@ export function ReviewScreen() {
                         resolve();
                     };
                     frameImg.onerror = () => resolve();
-                    frameImg.src = getAssetUrl(selectedFrame.image_url);
+                    frameImg.src = getCachedImageUrl(selectedFrame.image_url) || getAssetUrl(selectedFrame.image_url);
                 });
             }
 

@@ -9,6 +9,7 @@ import { useTenantStore } from '@/store/tenant-store';
 import { formatIDR } from '@/lib/xendit';
 import { Frame } from '@/lib/supabase';
 import { apiFetch, getAssetUrl } from '@/lib/api';
+import { getCachedFrames, setCachedFrames, getCachedImageUrl, cacheFrameImages } from '@/lib/frame-cache';
 
 export function FrameSelector() {
     const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, setError, setSession } = useBoothStore();
@@ -19,21 +20,38 @@ export function FrameSelector() {
     useEffect(() => {
         async function fetchFrames() {
             setIsLoading(true);
+
+            // Try cache first
+            const cached = getCachedFrames();
+            if (cached.length > 0) {
+                setFrames(cached);
+                setSelectedFrame(cached[0]);
+                setIsLoading(false); // Don't block UI while refreshing in background
+            }
+
             try {
                 const response = await apiFetch('/api/frames');
                 const data = await response.json();
 
                 if (data.success && data.frames) {
                     const activeFrames = data.frames.filter((f: Frame) => f.is_active);
+
                     setFrames(activeFrames);
 
-                    if (activeFrames.length > 0) {
+                    // Only set selected frame if we didn't have one from cache
+                    if (cached.length === 0 && activeFrames.length > 0) {
                         setSelectedFrame(activeFrames[0]);
                     }
+
+                    // Cache new metadata and queue image caching
+                    setCachedFrames(activeFrames);
+                    cacheFrameImages(activeFrames);
                 }
             } catch (err) {
-                setError('Failed to load frames');
-                console.error(err);
+                if (cached.length === 0) {
+                    setError('Failed to load frames');
+                }
+                console.error('Network fetch failed, using cached frames', err);
             } finally {
                 setIsLoading(false);
             }
@@ -134,7 +152,7 @@ export function FrameSelector() {
                             >
                                 <div className="w-full h-full overflow-hidden elegant-card relative">
                                     <img
-                                        src={getAssetUrl(selectedFrame.image_url)}
+                                        src={getCachedImageUrl(selectedFrame.image_url) || getAssetUrl(selectedFrame.image_url)}
                                         alt={selectedFrame.name}
                                         className="w-full h-full object-contain"
                                     />
