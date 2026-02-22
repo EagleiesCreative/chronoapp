@@ -30,6 +30,7 @@
     "@tauri-apps/cli": "^2.9.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
     "framer-motion": "^12.23.26",
     "gif.js-upgrade": "^0.2.1",
     "jose": "^6.1.3",

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Camera as CameraIcon, RefreshCw, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBoothStore, useAdminStore } from '@/store/booth-store';
+import { useTenantStore } from '@/store/tenant-store';
 import { useCamera } from './CameraProvider';
 
 type CapturePhase = 'countdown' | 'capturing' | 'preview';
@@ -21,6 +22,7 @@ export function CaptureScreen() {
 
     const { selectedCameraId } = useAdminStore();
     const { stream, getScreenshot, isCameraReady: cameraReady, cameraError } = useCamera();
+    const { booth } = useTenantStore();
 
     // Use a callback ref to assign stream whenever the video element is mounted/remounted
     // This fixes the white preview bug: the <video> is conditionally rendered (unmounted
@@ -36,8 +38,8 @@ export function CaptureScreen() {
 
     const [flashActive, setFlashActive] = useState(false);
     const [phase, setPhase] = useState<CapturePhase>('countdown');
-    const [countdown, setCountdown] = useState(3);
-    const [previewCountdown, setPreviewCountdown] = useState(5);
+    const [countdown, setCountdown] = useState(booth?.countdown_seconds ?? 3);
+    const [previewCountdown, setPreviewCountdown] = useState(booth?.preview_seconds ?? 5);
     const [lastCapturedPhoto, setLastCapturedPhoto] = useState<string | null>(null);
 
     const isMediaSupported = typeof navigator !== 'undefined' &&
@@ -83,13 +85,13 @@ export function CaptureScreen() {
         if (imageSrc) {
             setLastCapturedPhoto(imageSrc);
             setPhase('preview');
-            setPreviewCountdown(5);
+            setPreviewCountdown(booth?.preview_seconds ?? 5);
         }
-    }, [getScreenshot]);
+    }, [getScreenshot, booth]);
 
     const handleRetake = () => {
         setLastCapturedPhoto(null);
-        setCountdown(3);
+        setCountdown(booth?.countdown_seconds ?? 3);
         setPhase('countdown');
     };
 
@@ -110,7 +112,7 @@ export function CaptureScreen() {
                 setStep('review');
             } else {
                 setCurrentPhotoIndex(photoIndex + 1);
-                setCountdown(3);
+                setCountdown(booth?.countdown_seconds ?? 3);
                 setPhase('countdown');
             }
         }

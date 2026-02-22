@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { formatIDR } from '@/lib/xendit';
+import { BoothStatusIndicator } from '@/components/booth/BoothStatusIndicator';
+import { SlideshowBackground } from '@/components/booth/SlideshowBackground';
 
 export function IdleScreen() {
     const { setStep, appliedVoucher } = useBoothStore();
@@ -29,9 +31,14 @@ export function IdleScreen() {
             className="min-h-screen flex flex-col items-center justify-center p-8 kiosk relative"
             style={backgroundStyle}
         >
-            {/* Overlay for readability when using background image */}
-            {booth?.background_image && (
-                <div className="absolute inset-0 bg-black/30" />
+            <BoothStatusIndicator />
+
+            {/* Slideshow background */}
+            {booth?.slideshow_enabled && <SlideshowBackground />}
+
+            {/* Overlay for readability when using background image or slideshow */}
+            {(booth?.background_image || booth?.slideshow_enabled) && (
+                <div className="absolute inset-0 bg-black/40" />
             )}
 
             {/* Content wrapper */}

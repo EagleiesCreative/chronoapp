@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import { FloatingSaveBar } from '@/components/ui/floating-save-bar';
 import { apiFetch } from '@/lib/api';
 import { isTauri, pickSaveDirectory, checkDirectoryWritable } from '@/lib/local-save';
@@ -32,6 +33,11 @@ export function BackgroundSettings() {
     const [selectedColor, setSelectedColor] = useState(booth?.background_color || '#ffffff');
     const [backgroundImage, setBackgroundImage] = useState(booth?.background_image || '');
     const [paymentBypass, setPaymentBypass] = useState(booth?.payment_bypass || false);
+    const [countdownSeconds, setCountdownSeconds] = useState(booth?.countdown_seconds ?? 3);
+    const [previewSeconds, setPreviewSeconds] = useState(booth?.preview_seconds ?? 5);
+    const [reviewTimeoutSeconds, setReviewTimeoutSeconds] = useState(booth?.review_timeout_seconds ?? 60);
+    const [printCopies, setPrintCopies] = useState(booth?.print_copies ?? 1);
+    const [slideshowEnabled, setSlideshowEnabled] = useState(booth?.slideshow_enabled ?? false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Local save state (from persisted store)
@@ -116,6 +122,11 @@ export function BackgroundSettings() {
         selectedColor !== (booth?.background_color || '#ffffff') ||
         backgroundImage !== (booth?.background_image || '') ||
         paymentBypass !== (booth?.payment_bypass || false) ||
+        countdownSeconds !== (booth?.countdown_seconds ?? 3) ||
+        previewSeconds !== (booth?.preview_seconds ?? 5) ||
+        reviewTimeoutSeconds !== (booth?.review_timeout_seconds ?? 60) ||
+        printCopies !== (booth?.print_copies ?? 1) ||
+        slideshowEnabled !== (booth?.slideshow_enabled ?? false) ||
         tempLocalSaveEnabled !== localSaveStoreEnabled ||
         tempSavePath !== localSaveStorePath;
 
@@ -123,6 +134,11 @@ export function BackgroundSettings() {
         setSelectedColor(booth?.background_color || '#ffffff');
         setBackgroundImage(booth?.background_image || '');
         setPaymentBypass(booth?.payment_bypass || false);
+        setCountdownSeconds(booth?.countdown_seconds ?? 3);
+        setPreviewSeconds(booth?.preview_seconds ?? 5);
+        setReviewTimeoutSeconds(booth?.review_timeout_seconds ?? 60);
+        setPrintCopies(booth?.print_copies ?? 1);
+        setSlideshowEnabled(booth?.slideshow_enabled ?? false);
         setTempLocalSaveEnabled(localSaveStoreEnabled);
         setTempSavePath(localSaveStorePath);
     };
@@ -144,6 +160,11 @@ export function BackgroundSettings() {
                     background_image: backgroundImage || null,
                     background_color: selectedColor,
                     payment_bypass: paymentBypass,
+                    countdown_seconds: countdownSeconds,
+                    preview_seconds: previewSeconds,
+                    review_timeout_seconds: reviewTimeoutSeconds,
+                    print_copies: printCopies,
+                    slideshow_enabled: slideshowEnabled,
                 }),
             });
 
@@ -159,6 +180,11 @@ export function BackgroundSettings() {
                     background_image: backgroundImage || undefined,
                     background_color: selectedColor,
                     payment_bypass: paymentBypass,
+                    countdown_seconds: countdownSeconds,
+                    preview_seconds: previewSeconds,
+                    review_timeout_seconds: reviewTimeoutSeconds,
+                    print_copies: printCopies,
+                    slideshow_enabled: slideshowEnabled,
                 });
                 toast.success('Background settings saved');
             } else {
@@ -196,6 +222,20 @@ export function BackgroundSettings() {
                         <Switch
                             checked={paymentBypass}
                             onCheckedChange={setPaymentBypass}
+                        />
+                    </div>
+
+                    {/* Idle Screen Slideshow */}
+                    <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-muted/20">
+                        <div className="space-y-0.5">
+                            <Label className="text-base font-semibold">Idle Screen Slideshow</Label>
+                            <p className="text-sm text-muted-foreground mr-8">
+                                Randomly cycle through recently taken photos when the booth is idle.
+                            </p>
+                        </div>
+                        <Switch
+                            checked={slideshowEnabled}
+                            onCheckedChange={setSlideshowEnabled}
                         />
                     </div>
 
@@ -321,6 +361,87 @@ export function BackgroundSettings() {
                                 ChronoSnap
                             </span>
                         </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Photo Experience Settings */}
+            <Card className="glass-card mb-20">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        {/* Use CheckCircle2 as a generic icon, or any available icon */}
+                        Booth Experience
+                    </CardTitle>
+                    <CardDescription>
+                        Configure wait times, auto-continue durations, and print copies
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {/* Capture Countdown */}
+                    <div className="space-y-3">
+                        <div className="flex justify-between">
+                            <Label className="text-sm font-medium">Capture Countdown ({countdownSeconds}s)</Label>
+                            <span className="text-sm text-muted-foreground">Range: 1-10s</span>
+                        </div>
+                        <Slider
+                            min={1}
+                            max={10}
+                            step={1}
+                            value={[countdownSeconds]}
+                            onValueChange={(vals) => setCountdownSeconds(vals[0])}
+                            className="py-2"
+                        />
+                        <p className="text-xs text-muted-foreground">Time before each photo is taken.</p>
+                    </div>
+
+                    {/* Preview Duration */}
+                    <div className="space-y-3">
+                        <div className="flex justify-between">
+                            <Label className="text-sm font-medium">Preview Duration ({previewSeconds}s)</Label>
+                            <span className="text-sm text-muted-foreground">Range: 3-15s</span>
+                        </div>
+                        <Slider
+                            min={3}
+                            max={15}
+                            step={1}
+                            value={[previewSeconds]}
+                            onValueChange={(vals) => setPreviewSeconds(vals[0])}
+                            className="py-2"
+                        />
+                        <p className="text-xs text-muted-foreground">How long to show the photo preview before automatically continuing.</p>
+                    </div>
+
+                    {/* Review Timeout */}
+                    <div className="space-y-3">
+                        <div className="flex justify-between">
+                            <Label className="text-sm font-medium">Review Auto-Reset ({reviewTimeoutSeconds}s)</Label>
+                            <span className="text-sm text-muted-foreground">Range: 15-300s</span>
+                        </div>
+                        <Slider
+                            min={15}
+                            max={300}
+                            step={5}
+                            value={[reviewTimeoutSeconds]}
+                            onValueChange={(vals) => setReviewTimeoutSeconds(vals[0])}
+                            className="py-2"
+                        />
+                        <p className="text-xs text-muted-foreground">Idle time on the final review screen before resetting to the start.</p>
+                    </div>
+                    {/* Print Copies */}
+                    <div className="space-y-3">
+                        <div className="flex justify-between">
+                            <Label className="text-sm font-medium">Default Print Copies ({printCopies})</Label>
+                            <span className="text-sm text-muted-foreground">Range: 1-5</span>
+                        </div>
+                        <Slider
+                            min={1}
+                            max={5}
+                            step={1}
+                            value={[printCopies]}
+                            onValueChange={(vals) => setPrintCopies(vals[0])}
+                            className="py-2"
+                        />
+                        <p className="text-xs text-muted-foreground">How many copies to print automatically when the user clicks Print.</p>
                     </div>
                 </CardContent>
             </Card>

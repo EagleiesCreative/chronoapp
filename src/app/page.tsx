@@ -8,7 +8,7 @@ import { useTenantStore } from '@/store/tenant-store';
 import { Settings, X, Camera, LogOut, Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FrameManager, PrinterSelector, CameraSelector, BackgroundSettings } from '@/components/admin';
+import { FrameManager, PrinterSelector, CameraSelector, BackgroundSettings, PrintHistory } from '@/components/admin';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatIDR } from '@/lib/xendit';
 import { Booth } from '@/lib/supabase';
@@ -306,6 +306,7 @@ export default function HomePage() {
               <BackgroundSettings />
               <CameraSelector />
               <PrinterSelector />
+              <PrintHistory />
             </div>
           </motion.div>
         )}

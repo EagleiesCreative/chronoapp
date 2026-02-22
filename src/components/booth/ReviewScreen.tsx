@@ -7,6 +7,8 @@ import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { apiFetch, getAssetUrl } from '@/lib/api';
 import { useBoothStore } from '@/store/booth-store';
+import { useTenantStore } from '@/store/tenant-store';
+import { usePrintStore } from '@/store/print-store';
 import { generateCompressedGif } from '@/lib/video-generator';
 import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient } from '@/lib/upload-client';
 import { saveToLocalDisk } from '@/lib/local-save';
@@ -22,7 +24,6 @@ export function ReviewScreen() {
     const [uploadStatus, setUploadStatus] = useState<string>('');
     const [videoGenerated, setVideoGenerated] = useState(false);
     const [gifDownloadUrl, setGifDownloadUrl] = useState<string | null>(null);
-    const [autoResetCountdown, setAutoResetCountdown] = useState(60); // 1 minute
     const [uploadError, setUploadError] = useState<string | null>(null);
 
     const {
@@ -33,6 +34,12 @@ export function ReviewScreen() {
         setStep,
         resetSession,
     } = useBoothStore();
+
+    const { addJob } = usePrintStore();
+    const { booth } = useTenantStore();
+    const timeoutSeconds = booth?.review_timeout_seconds ?? 60;
+    const printCopiesCount = booth?.print_copies ?? 1;
+    const [autoResetCountdown, setAutoResetCountdown] = useState(timeoutSeconds);
 
     // Auto-reset timer - countdown every second
     useEffect(() => {
@@ -56,7 +63,7 @@ export function ReviewScreen() {
 
     // Reset countdown on user interaction
     const resetCountdown = () => {
-        setAutoResetCountdown(60);
+        setAutoResetCountdown(timeoutSeconds);
     };
 
 
@@ -324,12 +331,21 @@ export function ReviewScreen() {
             let usedTauri = false;
             try {
                 const { invoke } = await import('@tauri-apps/api/core');
-                await invoke('print_photo', {
-                    imageData: compositeImage,
-                    printerName: null // Use default printer
-                });
+
+                for (let i = 0; i < printCopiesCount; i++) {
+                    await invoke('print_photo', {
+                        imageData: compositeImage,
+                        printerName: null // Use default printer
+                    });
+                }
                 usedTauri = true;
-                console.log('Photo sent to printer via Tauri');
+                console.log(`Printed ${printCopiesCount} copies via Tauri`);
+                addJob({
+                    imageUrl: compositeImage,
+                    copies: printCopiesCount,
+                    status: 'success',
+                    session_id: session?.id
+                });
             } catch (tauriErr) {
                 console.log('Tauri not available, using browser print:', tauriErr);
             }
@@ -338,13 +354,25 @@ export function ReviewScreen() {
             if (!usedTauri) {
                 const printWindow = window.open('', '_blank');
                 if (printWindow) {
+                    const imagesHtml = Array(printCopiesCount).fill(0).map(() =>
+                        `<div class="page-break"><img src="${compositeImage}" /></div>`
+                    ).join('');
+
                     printWindow.document.write(`
             <!DOCTYPE html>
             <html>
               <head>
                 <title>ChronoSnap Print</title>
                 <style>
-                  body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+                  body { margin: 0; background: white; }
+                  .page-break { 
+                      display: flex; 
+                      justify-content: center; 
+                      align-items: center; 
+                      min-height: 100vh;
+                      page-break-after: always;
+                  }
+                  .page-break:last-child { page-break-after: auto; }
                   img { max-width: 100%; height: auto; }
                   @media print {
                     body { margin: 0; }
@@ -353,15 +381,36 @@ export function ReviewScreen() {
                 </style>
               </head>
               <body>
-                <img src="${compositeImage}" onload="window.print(); window.close();" />
+                ${imagesHtml}
+                <script>
+                    window.onload = () => {
+                        setTimeout(() => {
+                            window.print();
+                            window.close();
+                        }, 500);
+                    };
+                </script>
               </body>
             </html>
           `);
                     printWindow.document.close();
+                    addJob({
+                        imageUrl: compositeImage,
+                        copies: printCopiesCount,
+                        status: 'success',
+                        session_id: session?.id
+                    });
                 }
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Print error:', err);
+            addJob({
+                imageUrl: compositeImage,
+                copies: printCopiesCount,
+                status: 'failed',
+                session_id: session?.id,
+                error: err.message || 'Unknown error'
+            });
         } finally {
             setIsPrinting(false);
         }
@@ -444,7 +493,9 @@ export function ReviewScreen() {
                         ) : (
                             <Printer className="w-4 h-4 mr-2" strokeWidth={1.5} />
                         )}
-                        Print Photo
+                        <span className="flex-1 text-left">
+                            Print Photo &nbsp; <span className="opacity-70 text-xs font-normal">({printCopiesCount} {printCopiesCount === 1 ? 'copy' : 'copies'})</span>
+                        </span>
                     </Button>
 
 

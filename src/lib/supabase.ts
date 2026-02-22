@@ -102,6 +102,14 @@ export interface Booth {
   background_image?: string; // URL to background image for idle screen
   background_color?: string; // Hex color for idle screen background
   payment_bypass?: boolean; // Skip payment logic
+
+  // Feature config fields (new)
+  countdown_seconds?: number;
+  preview_seconds?: number;
+  review_timeout_seconds?: number;
+  print_copies?: number;
+  slideshow_enabled?: boolean;
+
   created_at: string;
   updated_at: string;
 }
