@@ -29,3 +29,4 @@ chrono = "0.4"
 nokhwa = { version = "0.10", features = ["input-avfoundation"] }
 base64 = "0.22"
 image = "0.25"
+rfd = "0.15"

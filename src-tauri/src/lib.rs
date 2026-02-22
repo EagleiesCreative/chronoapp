@@ -1,5 +1,6 @@
 mod printer;
 mod camera;
+mod filesystem;
 
 use camera::CameraState;
 
@@ -28,6 +29,9 @@ pub fn run() {
       camera::get_camera_status,
       camera::capture_frame,
       camera::get_preview_frame,
+      filesystem::save_file_to_disk,
+      filesystem::pick_directory,
+      filesystem::check_directory_writable,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

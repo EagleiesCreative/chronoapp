@@ -31,7 +31,7 @@ export async function PATCH(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { booth_id, background_image, background_color } = body;
+        const { booth_id, background_image, background_color, payment_bypass } = body;
 
         // Verify the booth_id matches the authenticated booth
         if (booth_id !== booth.booth_id) {
@@ -48,6 +48,7 @@ export async function PATCH(request: NextRequest) {
             .update({
                 background_image: background_image,
                 background_color: background_color,
+                payment_bypass: payment_bypass,
                 updated_at: new Date().toISOString(),
             })
             .eq('id', booth_id);
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
 
         const { data, error } = await supabase
             .from('booths')
-            .select('background_image, background_color')
+            .select('background_image, background_color, payment_bypass')
             .eq('id', booth.booth_id)
             .single();
 

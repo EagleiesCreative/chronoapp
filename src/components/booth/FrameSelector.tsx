@@ -11,7 +11,7 @@ import { Frame } from '@/lib/supabase';
 import { apiFetch, getAssetUrl } from '@/lib/api';
 
 export function FrameSelector() {
-    const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, setError } = useBoothStore();
+    const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, setError, setSession } = useBoothStore();
     const { booth } = useTenantStore();
     const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -56,8 +56,31 @@ export function FrameSelector() {
         setSelectedFrame(frames[newIndex]);
     };
 
-    const handleConfirm = () => {
-        if (selectedFrame) {
+    const handleConfirm = async () => {
+        if (!selectedFrame) return;
+
+        if (booth?.payment_bypass) {
+            // Bypass payment: create session directly via API
+            setIsLoading(true);
+            try {
+                const response = await apiFetch('/api/payment/create', {
+                    method: 'POST',
+                    body: JSON.stringify({ frameId: selectedFrame.id }),
+                });
+                const data = await response.json();
+                if (data.success) {
+                    setSession({ id: data.sessionId } as any);
+                    setStep('capturing');
+                } else {
+                    setError(data.error || 'Failed to create session');
+                }
+            } catch (err) {
+                setError('Failed to start session');
+                console.error(err);
+            } finally {
+                setIsLoading(false);
+            }
+        } else {
             setStep('payment');
         }
     };
@@ -123,7 +146,7 @@ export function FrameSelector() {
                                         </h3>
                                         <div className="flex items-center gap-3">
                                             <span className="text-lg font-medium text-primary">
-                                                {formatIDR(booth?.price || 0)}
+                                                {booth?.payment_bypass ? '' : formatIDR(booth?.price || 0)}
                                             </span>
                                             <span className="text-sm text-muted-foreground">
                                                 · {selectedFrame.photo_slots?.length || 0} photos

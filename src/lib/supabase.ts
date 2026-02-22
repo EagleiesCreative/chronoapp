@@ -101,6 +101,7 @@ export interface Booth {
   status: 'active' | 'inactive';
   background_image?: string; // URL to background image for idle screen
   background_color?: string; // Hex color for idle screen background
+  payment_bypass?: boolean; // Skip payment logic
   created_at: string;
   updated_at: string;
 }

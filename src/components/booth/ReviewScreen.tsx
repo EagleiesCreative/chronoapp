@@ -9,6 +9,8 @@ import { apiFetch, getAssetUrl } from '@/lib/api';
 import { useBoothStore } from '@/store/booth-store';
 import { generateCompressedGif } from '@/lib/video-generator';
 import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient } from '@/lib/upload-client';
+import { saveToLocalDisk } from '@/lib/local-save';
+import { useLocalSaveStore } from '@/store/local-save-store';
 
 export function ReviewScreen() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -177,6 +179,29 @@ export function ReviewScreen() {
 
             const sessionId = session.id;
 
+            // --- LOCAL SAVE (parallel, non-blocking) ---
+            const { enabled: localSaveEnabled, savePath } = useLocalSaveStore.getState();
+            let localSessionFolder: string | null = null;
+
+            if (localSaveEnabled && savePath) {
+                const now = new Date();
+                localSessionFolder = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
+
+                // Save composite strip locally (fire-and-forget)
+                saveToLocalDisk(savePath, localSessionFolder, 'strip.jpg', imageDataUrl)
+                    .then(p => p && console.log('[LocalSave] Strip saved:', p))
+                    .catch(err => console.error('[LocalSave] Strip save failed:', err));
+
+                // Save individual photos locally (fire-and-forget)
+                capturedPhotos.forEach((photo, i) => {
+                    if (photo.dataUrl && localSessionFolder) {
+                        saveToLocalDisk(savePath, localSessionFolder, `photo_${i + 1}.jpg`, photo.dataUrl)
+                            .catch(err => console.error(`[LocalSave] Photo ${i + 1} failed:`, err));
+                    }
+                });
+            }
+            // --- END LOCAL SAVE ---
+
             // 1. Upload composite strip image (critical - must succeed)
             setUploadStatus('Uploading photo strip...');
             const stripResponse = await fetch(imageDataUrl);
@@ -221,6 +246,18 @@ export function ReviewScreen() {
                         setVideoGenerated(true);
                         setGifDownloadUrl(gifUrl);
                         console.log(`GIF uploaded: ${(gifResult.size / 1024).toFixed(1)}KB`);
+
+                        // Save GIF locally (fire-and-forget)
+                        if (localSaveEnabled && savePath && localSessionFolder) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                const gifDataUrl = reader.result as string;
+                                saveToLocalDisk(savePath, localSessionFolder!, 'stopmotion.gif', gifDataUrl)
+                                    .then(p => p && console.log('[LocalSave] GIF saved:', p))
+                                    .catch(err => console.error('[LocalSave] GIF save failed:', err));
+                            };
+                            reader.readAsDataURL(gifResult.blob);
+                        }
                     }
                 } catch (gifErr) {
                     console.error('GIF generation/upload failed:', gifErr);

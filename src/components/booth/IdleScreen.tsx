@@ -72,31 +72,37 @@ export function IdleScreen() {
                     transition={{ delay: 0.3, duration: 0.5 }}
                     className="text-center mb-8"
                 >
-                    {discountValue > 0 && (
-                        <div className="mb-1">
-                            <span className={`text-lg line-through ${booth?.background_image ? 'text-white/60' : 'text-muted-foreground'}`}>
-                                {formatIDR(originalPrice)}
-                            </span>
-                            <span className="ml-2 text-sm text-green-400 font-medium">
-                                -{formatIDR(discountValue)}
-                            </span>
-                        </div>
-                    )}
-                    <p className={`text-3xl font-semibold ${booth?.background_image ? 'text-white' : 'text-foreground'}`}>
-                        {formatIDR(finalPrice)}
-                    </p>
-                    <p className={`text-sm mt-1 ${booth?.background_image ? 'text-white/60' : 'text-muted-foreground'}`}>per session</p>
+                    {booth?.payment_bypass ? (
+                        null
+                    ) : (
+                        <>
+                            {discountValue > 0 && (
+                                <div className="mb-1">
+                                    <span className={`text-lg line-through ${booth?.background_image ? 'text-white/60' : 'text-muted-foreground'}`}>
+                                        {formatIDR(originalPrice)}
+                                    </span>
+                                    <span className="ml-2 text-sm text-green-400 font-medium">
+                                        -{formatIDR(discountValue)}
+                                    </span>
+                                </div>
+                            )}
+                            <p className={`text-3xl font-semibold ${booth?.background_image ? 'text-white' : 'text-foreground'}`}>
+                                {formatIDR(finalPrice)}
+                            </p>
+                            <p className={`text-sm mt-1 ${booth?.background_image ? 'text-white/60' : 'text-muted-foreground'}`}>per session</p>
 
-                    {/* Applied voucher indicator */}
-                    {appliedVoucher && (
-                        <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm backdrop-blur"
-                        >
-                            <Tag className="w-3.5 h-3.5" />
-                            <span>{appliedVoucher.code}</span>
-                        </motion.div>
+                            {/* Applied voucher indicator */}
+                            {appliedVoucher && (
+                                <motion.div
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm backdrop-blur"
+                                >
+                                    <Tag className="w-3.5 h-3.5" />
+                                    <span>{appliedVoucher.code}</span>
+                                </motion.div>
+                            )}
+                        </>
                     )}
                 </motion.div>
 
@@ -115,15 +121,17 @@ export function IdleScreen() {
                         Start Session
                     </Button>
 
-                    <Button
-                        variant="outline"
-                        size="lg"
-                        onClick={() => setStep('voucher')}
-                        className={`px-8 py-5 text-base font-normal rounded-full touch-target transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] ${booth?.background_image ? 'border-white/50 text-white hover:bg-white/10 backdrop-blur' : ''}`}
-                    >
-                        <Tag className="w-4 h-4 mr-2" />
-                        {appliedVoucher ? 'Change Voucher' : 'Use Voucher'}
-                    </Button>
+                    {!booth?.payment_bypass && (
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={() => setStep('voucher')}
+                            className={`px-8 py-5 text-base font-normal rounded-full touch-target transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] ${booth?.background_image ? 'border-white/50 text-white hover:bg-white/10 backdrop-blur' : ''}`}
+                        >
+                            <Tag className="w-4 h-4 mr-2" />
+                            {appliedVoucher ? 'Change Voucher' : 'Use Voucher'}
+                        </Button>
+                    )}
                 </motion.div>
 
                 {/* Subtle bottom hint */}

@@ -51,6 +51,25 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Bypass payment if enabled
+        if (booth.payment_bypass) {
+            const session = await createSession(frameId, booth.id);
+            return NextResponse.json({
+                success: true,
+                sessionId: session.id,
+                paymentId: null,
+                invoiceId: null,
+                invoiceUrl: null,
+                expiryDate: null,
+                amount: 0,
+                originalAmount: booth.price,
+                discountAmount: booth.price,
+                appliedVoucher: null,
+                isFree: true,
+                isBypassed: true,
+            });
+        }
+
         let amount = booth.price;
         let appliedVoucher = null;
         let discountAmount = 0;
