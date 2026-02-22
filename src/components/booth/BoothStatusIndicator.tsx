@@ -7,7 +7,7 @@ export function BoothStatusIndicator() {
     const { isOnline, cameraStatus } = useBoothHealth();
 
     return (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 bg-black/40 backdrop-blur-md px-3 py-2 rounded-full border border-white/10 shadow-lg transition-all duration-300 opacity-0 hover:opacity-100">
+        <div className="fixed top-4 left-4 z-50 flex items-center gap-3 bg-black/40 backdrop-blur-md px-3 py-2 rounded-full border border-white/10 shadow-lg transition-all duration-300 opacity-0 hover:opacity-100">
             {/* Connection Status */}
             <div
                 className={`p-1.5 rounded-full ${isOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}

@@ -25,6 +25,15 @@ export function CaptureScreen() {
     const { selectedCameraId } = useAdminStore();
     const { stream, getScreenshot, isCameraReady: cameraReady, cameraError } = useCamera();
     const { booth } = useTenantStore();
+    const [cachedOverlayUrl, setCachedOverlayUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (selectedFrame?.image_url) {
+            getCachedImageUrl(selectedFrame.image_url).then(url => {
+                setCachedOverlayUrl(url);
+            });
+        }
+    }, [selectedFrame]);
 
     // Use a callback ref to assign stream whenever the video element is mounted/remounted
     // This fixes the white preview bug: the <video> is conditionally rendered (unmounted
@@ -328,7 +337,7 @@ export function CaptureScreen() {
                                     {/* Frame overlay */}
                                     {selectedFrame && (
                                         <img
-                                            src={getCachedImageUrl(selectedFrame.image_url) || getAssetUrl(selectedFrame.image_url)}
+                                            src={cachedOverlayUrl || getAssetUrl(selectedFrame.image_url)}
                                             alt="Frame"
                                             className="absolute inset-0 w-full h-full object-contain z-10 pointer-events-none"
                                         />

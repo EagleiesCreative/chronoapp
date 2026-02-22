@@ -149,13 +149,14 @@ export function ReviewScreen() {
             if (selectedFrame.image_url) {
                 const frameImg = new Image();
                 frameImg.crossOrigin = 'anonymous';
-                await new Promise<void>((resolve) => {
+                await new Promise<void>(async (resolve) => {
+                    const cachedUrl = await getCachedImageUrl(selectedFrame.image_url);
                     frameImg.onload = () => {
                         ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
                         resolve();
                     };
                     frameImg.onerror = () => resolve();
-                    frameImg.src = getCachedImageUrl(selectedFrame.image_url) || getAssetUrl(selectedFrame.image_url);
+                    frameImg.src = cachedUrl || getAssetUrl(selectedFrame.image_url);
                 });
             }
 

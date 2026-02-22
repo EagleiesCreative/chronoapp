@@ -15,6 +15,26 @@ export function FrameSelector() {
     const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, setError, setSession } = useBoothStore();
     const { booth } = useTenantStore();
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [cachedOverlayUrls, setCachedOverlayUrls] = useState<Record<string, string>>({});
+
+    // Load indexedDB cached images for frames
+    useEffect(() => {
+        async function loadCachedOverlays() {
+            const urls: Record<string, string> = {};
+            for (const frame of frames) {
+                if (frame.image_url) {
+                    const url = await getCachedImageUrl(frame.image_url);
+                    if (url) {
+                        urls[frame.id] = url;
+                    }
+                }
+            }
+            setCachedOverlayUrls(urls);
+        }
+        if (frames.length > 0) {
+            loadCachedOverlays();
+        }
+    }, [frames]);
 
     // Fetch frames on mount
     useEffect(() => {
@@ -152,7 +172,7 @@ export function FrameSelector() {
                             >
                                 <div className="w-full h-full overflow-hidden elegant-card relative">
                                     <img
-                                        src={getCachedImageUrl(selectedFrame.image_url) || getAssetUrl(selectedFrame.image_url)}
+                                        src={cachedOverlayUrls[selectedFrame.id] || getAssetUrl(selectedFrame.image_url)}
                                         alt={selectedFrame.name}
                                         className="w-full h-full object-contain"
                                     />
