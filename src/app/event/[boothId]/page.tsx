@@ -2,6 +2,11 @@ import { Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Metadata } from 'next';
 
+// Required for `output: export` (Tauri build) — this page is web-only
+export function generateStaticParams() {
+    return [];
+}
+
 async function getEventData(boothId: string) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
