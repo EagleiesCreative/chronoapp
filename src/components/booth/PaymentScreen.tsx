@@ -56,7 +56,7 @@ export function PaymentScreen() {
                 const data = await response.json();
 
                 if (data.success) {
-                    setSession({ id: data.sessionId } as any);
+                    setSession({ id: data.sessionId });
 
                     // Handle free session (100% discount)
                     if (data.isFree) {
@@ -67,7 +67,7 @@ export function PaymentScreen() {
                         return;
                     }
 
-                    setPayment({ id: data.paymentId } as any);
+                    setPayment({ id: data.paymentId });
                     setInvoiceUrl(data.invoiceUrl);
 
                     const qrDataUrl = await QRCode.toDataURL(data.invoiceUrl, {

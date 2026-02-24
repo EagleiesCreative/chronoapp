@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Check, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
+import { useSessionProfileStore } from '@/store/session-profile-store';
 import { formatIDR } from '@/lib/xendit';
 import { Frame } from '@/lib/supabase';
 import { apiFetch, getAssetUrl } from '@/lib/api';
@@ -14,6 +15,9 @@ import { getCachedFrames, setCachedFrames, getCachedImageUrl, cacheFrameImages }
 export function FrameSelector() {
     const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, setError, setSession } = useBoothStore();
     const { booth } = useTenantStore();
+    const activeSession = useSessionProfileStore((s) => s.activeSession);
+    const effectivePaymentBypass = activeSession?.payment_bypass ?? booth?.payment_bypass;
+    const effectivePrice = activeSession?.price ?? booth?.price ?? 0;
     const [currentIndex, setCurrentIndex] = useState(0);
     const [cachedOverlayUrls, setCachedOverlayUrls] = useState<Record<string, string>>({});
 
@@ -36,7 +40,7 @@ export function FrameSelector() {
         }
     }, [frames]);
 
-    // Fetch frames on mount
+    // Fetch frames on mount — use booth session frames if available
     useEffect(() => {
         async function fetchFrames() {
             setIsLoading(true);
@@ -50,6 +54,29 @@ export function FrameSelector() {
             }
 
             try {
+                // If active booth session exists, fetch session-specific frames
+                if (activeSession?.id) {
+                    const sessionFramesRes = await apiFetch(`/api/booth-sessions/${activeSession.id}/frames`);
+                    const sessionFramesData = await sessionFramesRes.json();
+
+                    if (sessionFramesData.data && sessionFramesData.data.length > 0) {
+                        const sessionFrames = sessionFramesData.data
+                            .filter((sf: any) => sf.is_active && sf.frames)
+                            .map((sf: any) => sf.frames);
+
+                        if (sessionFrames.length > 0) {
+                            setFrames(sessionFrames);
+                            if (cached.length === 0 || !selectedFrame) {
+                                setSelectedFrame(sessionFrames[0]);
+                            }
+                            setCachedFrames(sessionFrames);
+                            cacheFrameImages(sessionFrames);
+                            return;
+                        }
+                    }
+                }
+
+                // Fallback: fetch all active frames from global API
                 const response = await apiFetch('/api/frames');
                 const data = await response.json();
 
@@ -78,7 +105,7 @@ export function FrameSelector() {
         }
 
         fetchFrames();
-    }, [setFrames, setSelectedFrame, setIsLoading, setError]);
+    }, [setFrames, setSelectedFrame, setIsLoading, setError, activeSession?.id]);
 
     const handlePrevious = () => {
         if (frames.length === 0) return;
@@ -97,7 +124,7 @@ export function FrameSelector() {
     const handleConfirm = async () => {
         if (!selectedFrame) return;
 
-        if (booth?.payment_bypass) {
+        if (effectivePaymentBypass) {
             // Bypass payment: create session directly via API
             setIsLoading(true);
             try {
@@ -107,7 +134,7 @@ export function FrameSelector() {
                 });
                 const data = await response.json();
                 if (data.success) {
-                    setSession({ id: data.sessionId } as any);
+                    setSession({ id: data.sessionId });
                     setStep('capturing');
                 } else {
                     setError(data.error || 'Failed to create session');
@@ -184,7 +211,7 @@ export function FrameSelector() {
                                         </h3>
                                         <div className="flex items-center gap-3">
                                             <span className="text-lg font-medium text-primary">
-                                                {booth?.payment_bypass ? '' : formatIDR(booth?.price || 0)}
+                                                {effectivePaymentBypass ? '' : formatIDR(effectivePrice)}
                                             </span>
                                             <span className="text-sm text-muted-foreground">
                                                 · {selectedFrame.photo_slots?.length || 0} photos

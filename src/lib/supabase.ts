@@ -63,11 +63,51 @@ export interface Session {
   id: string;
   payment_id: string | null;
   frame_id: string;
+  booth_session_id: string | null;
   status: 'pending' | 'paid' | 'capturing' | 'compositing' | 'completed' | 'cancelled';
   photos_urls: string[];
   final_image_url: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface BoothSession {
+  id: string;
+  booth_id: string;
+  name: string;
+  is_active: boolean;
+  price: number;
+  countdown_seconds: number;
+  preview_seconds: number;
+  review_timeout_seconds: number;
+  print_copies: number;
+  default_filter: string;
+  payment_bypass: boolean;
+  event_mode: boolean;
+  event_name: string | null;
+  event_date: string | null;
+  event_hashtag: string | null;
+  event_splash_image: string | null;
+  event_message: string | null;
+  background_image: string | null;
+  background_color: string | null;
+  brand_logo_url: string | null;
+  brand_title: string | null;
+  brand_subtitle: string | null;
+  brand_primary_color: string | null;
+  brand_accent_color: string | null;
+  slideshow_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BoothSessionFrame {
+  id: string;
+  booth_session_id: string;
+  frame_id: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
 }
 
 export interface Payment {
@@ -109,6 +149,21 @@ export interface Booth {
   review_timeout_seconds?: number;
   print_copies?: number;
   slideshow_enabled?: boolean;
+
+  // Custom branding
+  brand_logo_url?: string;
+  brand_title?: string;
+  brand_subtitle?: string;
+  brand_primary_color?: string;
+  brand_accent_color?: string;
+
+  // Event mode
+  event_mode?: boolean;
+  event_name?: string;
+  event_date?: string;
+  event_hashtag?: string;
+  event_splash_image?: string;
+  event_message?: string;
 
   created_at: string;
   updated_at: string;
@@ -169,12 +224,13 @@ export async function getFrameById(id: string): Promise<Frame | null> {
   return data;
 }
 
-export async function createSession(frameId: string, boothId?: string): Promise<Session> {
+export async function createSession(frameId: string, boothId?: string, boothSessionId?: string): Promise<Session> {
   const { data, error } = await supabase
     .from('sessions')
     .insert({
       frame_id: frameId,
       booth_id: boothId || null,
+      booth_session_id: boothSessionId || null,
       status: 'pending',
       photos_urls: [],
     })
@@ -183,6 +239,33 @@ export async function createSession(frameId: string, boothId?: string): Promise<
 
   if (error) throw error;
   return data;
+}
+
+// Get the active booth session for a booth
+export async function getActiveBoothSession(boothId: string): Promise<BoothSession | null> {
+  const { data, error } = await supabase
+    .from('booth_sessions')
+    .select('*')
+    .eq('booth_id', boothId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error) return null;
+  return data;
+}
+
+// Get frames assigned to a booth session
+export async function getBoothSessionFrames(boothSessionId: string): Promise<Frame[]> {
+  const { data, error } = await supabase
+    .from('booth_session_frames')
+    .select('frame_id, is_active, sort_order, frames(*)')
+    .eq('booth_session_id', boothSessionId)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true });
+
+  if (error) return [];
+  // Extract the nested frame objects
+  return (data || []).map((row: any) => row.frames).filter(Boolean);
 }
 
 export async function updateSession(id: string, updates: Partial<Session>): Promise<Session> {

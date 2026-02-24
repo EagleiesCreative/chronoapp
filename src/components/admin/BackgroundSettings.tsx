@@ -13,6 +13,7 @@ import { apiFetch } from '@/lib/api';
 import { isTauri, pickSaveDirectory, checkDirectoryWritable } from '@/lib/local-save';
 import { useTenantStore } from '@/store/tenant-store';
 import { useLocalSaveStore } from '@/store/local-save-store';
+import { useSessionProfileStore } from '@/store/session-profile-store';
 import { toast } from 'sonner';
 
 const PRESET_COLORS = [
@@ -28,16 +29,19 @@ const PRESET_COLORS = [
 
 export function BackgroundSettings() {
     const { booth, setBooth } = useTenantStore();
+    const { activeSession, setActiveSession } = useSessionProfileStore();
     const [isUploading, setIsUploading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [selectedColor, setSelectedColor] = useState(booth?.background_color || '#ffffff');
-    const [backgroundImage, setBackgroundImage] = useState(booth?.background_image || '');
-    const [paymentBypass, setPaymentBypass] = useState(booth?.payment_bypass || false);
-    const [countdownSeconds, setCountdownSeconds] = useState(booth?.countdown_seconds ?? 3);
-    const [previewSeconds, setPreviewSeconds] = useState(booth?.preview_seconds ?? 5);
-    const [reviewTimeoutSeconds, setReviewTimeoutSeconds] = useState(booth?.review_timeout_seconds ?? 60);
-    const [printCopies, setPrintCopies] = useState(booth?.print_copies ?? 1);
-    const [slideshowEnabled, setSlideshowEnabled] = useState(booth?.slideshow_enabled ?? false);
+
+    // Read from active session first, then booth fallback
+    const [selectedColor, setSelectedColor] = useState(activeSession?.background_color || booth?.background_color || '#ffffff');
+    const [backgroundImage, setBackgroundImage] = useState(activeSession?.background_image || booth?.background_image || '');
+    const [paymentBypass, setPaymentBypass] = useState(activeSession?.payment_bypass ?? booth?.payment_bypass ?? false);
+    const [countdownSeconds, setCountdownSeconds] = useState(activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3);
+    const [previewSeconds, setPreviewSeconds] = useState(activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5);
+    const [reviewTimeoutSeconds, setReviewTimeoutSeconds] = useState(activeSession?.review_timeout_seconds ?? booth?.review_timeout_seconds ?? 60);
+    const [printCopies, setPrintCopies] = useState(activeSession?.print_copies ?? booth?.print_copies ?? 1);
+    const [slideshowEnabled, setSlideshowEnabled] = useState(activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Local save state (from persisted store)
@@ -54,6 +58,18 @@ export function BackgroundSettings() {
     useEffect(() => {
         setShowTauri(isTauri());
     }, []);
+
+    // Sync form state when active session changes
+    useEffect(() => {
+        setSelectedColor(activeSession?.background_color || booth?.background_color || '#ffffff');
+        setBackgroundImage(activeSession?.background_image || booth?.background_image || '');
+        setPaymentBypass(activeSession?.payment_bypass ?? booth?.payment_bypass ?? false);
+        setCountdownSeconds(activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3);
+        setPreviewSeconds(activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5);
+        setReviewTimeoutSeconds(activeSession?.review_timeout_seconds ?? booth?.review_timeout_seconds ?? 60);
+        setPrintCopies(activeSession?.print_copies ?? booth?.print_copies ?? 1);
+        setSlideshowEnabled(activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false);
+    }, [activeSession?.id]);
 
     // Validate directory when tempSavePath changes
     useEffect(() => {
@@ -117,30 +133,51 @@ export function BackgroundSettings() {
         setBackgroundImage('');
     };
 
+    // Use the effective source for dirty checking
+    const effectiveBgColor = activeSession?.background_color || booth?.background_color || '#ffffff';
+    const effectiveBgImage = activeSession?.background_image || booth?.background_image || '';
+    const effectivePaymentBypass = activeSession?.payment_bypass ?? booth?.payment_bypass ?? false;
+    const effectiveCountdown = activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3;
+    const effectivePreview = activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5;
+    const effectiveReviewTimeout = activeSession?.review_timeout_seconds ?? booth?.review_timeout_seconds ?? 60;
+    const effectivePrintCopies = activeSession?.print_copies ?? booth?.print_copies ?? 1;
+    const effectiveSlideshow = activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false;
+
     // Derived state for unsaved changes
     const isDirty =
-        selectedColor !== (booth?.background_color || '#ffffff') ||
-        backgroundImage !== (booth?.background_image || '') ||
-        paymentBypass !== (booth?.payment_bypass || false) ||
-        countdownSeconds !== (booth?.countdown_seconds ?? 3) ||
-        previewSeconds !== (booth?.preview_seconds ?? 5) ||
-        reviewTimeoutSeconds !== (booth?.review_timeout_seconds ?? 60) ||
-        printCopies !== (booth?.print_copies ?? 1) ||
-        slideshowEnabled !== (booth?.slideshow_enabled ?? false) ||
+        selectedColor !== effectiveBgColor ||
+        backgroundImage !== effectiveBgImage ||
+        paymentBypass !== effectivePaymentBypass ||
+        countdownSeconds !== effectiveCountdown ||
+        previewSeconds !== effectivePreview ||
+        reviewTimeoutSeconds !== effectiveReviewTimeout ||
+        printCopies !== effectivePrintCopies ||
+        slideshowEnabled !== effectiveSlideshow ||
         tempLocalSaveEnabled !== localSaveStoreEnabled ||
         tempSavePath !== localSaveStorePath;
 
     const handleDiscard = () => {
-        setSelectedColor(booth?.background_color || '#ffffff');
-        setBackgroundImage(booth?.background_image || '');
-        setPaymentBypass(booth?.payment_bypass || false);
-        setCountdownSeconds(booth?.countdown_seconds ?? 3);
-        setPreviewSeconds(booth?.preview_seconds ?? 5);
-        setReviewTimeoutSeconds(booth?.review_timeout_seconds ?? 60);
-        setPrintCopies(booth?.print_copies ?? 1);
-        setSlideshowEnabled(booth?.slideshow_enabled ?? false);
+        setSelectedColor(effectiveBgColor);
+        setBackgroundImage(effectiveBgImage);
+        setPaymentBypass(effectivePaymentBypass);
+        setCountdownSeconds(effectiveCountdown);
+        setPreviewSeconds(effectivePreview);
+        setReviewTimeoutSeconds(effectiveReviewTimeout);
+        setPrintCopies(effectivePrintCopies);
+        setSlideshowEnabled(effectiveSlideshow);
         setTempLocalSaveEnabled(localSaveStoreEnabled);
         setTempSavePath(localSaveStorePath);
+    };
+
+    const settingsPayload = {
+        background_image: backgroundImage || null,
+        background_color: selectedColor,
+        payment_bypass: paymentBypass,
+        countdown_seconds: countdownSeconds,
+        preview_seconds: previewSeconds,
+        review_timeout_seconds: reviewTimeoutSeconds,
+        print_copies: printCopies,
+        slideshow_enabled: slideshowEnabled,
     };
 
     const handleSave = async () => {
@@ -151,20 +188,14 @@ export function BackgroundSettings() {
 
         setIsSaving(true);
         try {
-            const response = await apiFetch('/api/booth/settings', { // Changed to apiFetch
-                method: 'PATCH', // Kept original method
+            // 1. Always save to booth (baseline defaults)
+            const response = await apiFetch('/api/booth/settings', {
+                method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
                     booth_id: booth.id,
-                    background_image: backgroundImage || null,
-                    background_color: selectedColor,
-                    payment_bypass: paymentBypass,
-                    countdown_seconds: countdownSeconds,
-                    preview_seconds: previewSeconds,
-                    review_timeout_seconds: reviewTimeoutSeconds,
-                    print_copies: printCopies,
-                    slideshow_enabled: slideshowEnabled,
+                    ...settingsPayload,
                 }),
             });
 
@@ -174,7 +205,7 @@ export function BackgroundSettings() {
 
             const data = await response.json();
             if (data.success) {
-                // Update local state
+                // Update booth store
                 setBooth({
                     ...booth,
                     background_image: backgroundImage || undefined,
@@ -186,7 +217,25 @@ export function BackgroundSettings() {
                     print_copies: printCopies,
                     slideshow_enabled: slideshowEnabled,
                 });
-                toast.success('Background settings saved');
+
+                // 2. If an active session exists, also save to it
+                if (activeSession?.id) {
+                    try {
+                        const sessionRes = await apiFetch(`/api/booth-sessions/${activeSession.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(settingsPayload),
+                        });
+                        if (sessionRes.ok) {
+                            const sessionResult = await sessionRes.json();
+                            setActiveSession({ ...activeSession, ...sessionResult.data });
+                        }
+                    } catch (e) {
+                        console.error('Failed to sync settings to active session:', e);
+                    }
+                }
+
+                toast.success('Settings saved');
             } else {
                 toast.error(data.error || 'Failed to save settings');
             }

@@ -12,13 +12,14 @@ import {
     Lock,
     LogOut,
     Loader2,
+    FolderOpen,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FrameManager, CameraSelector, PrinterSelector } from '@/components/admin';
+import { FrameManager, CameraSelector, PrinterSelector, SessionManager, SessionSelector } from '@/components/admin';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 
@@ -28,7 +29,7 @@ export default function AdminPage() {
     const [authState, setAuthState] = useState<AuthState>('loading');
     const [pin, setPin] = useState('');
     const [isLoggingIn, setIsLoggingIn] = useState(false);
-    const [activeTab, setActiveTab] = useState('frames');
+    const [activeTab, setActiveTab] = useState('sessions');
 
     // Check session on mount
     useEffect(() => {
@@ -167,6 +168,7 @@ export default function AdminPage() {
                     </div>
 
                     <div className="flex items-center gap-3">
+                        <SessionSelector />
                         <Button variant="outline" asChild>
                             <Link href="/">
                                 <Camera className="w-4 h-4 mr-2" />
@@ -184,6 +186,10 @@ export default function AdminPage() {
             <main className="container mx-auto px-6 py-8">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                     <TabsList className="bg-gray-100">
+                        <TabsTrigger value="sessions" className="gap-2 data-[state=active]:bg-white">
+                            <FolderOpen className="w-4 h-4" />
+                            Sessions
+                        </TabsTrigger>
                         <TabsTrigger value="frames" className="gap-2 data-[state=active]:bg-white">
                             <ImageIcon className="w-4 h-4" />
                             Frames
@@ -201,6 +207,16 @@ export default function AdminPage() {
                             Settings
                         </TabsTrigger>
                     </TabsList>
+
+                    {/* Sessions Tab */}
+                    <TabsContent value="sessions">
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                        >
+                            <SessionManager />
+                        </motion.div>
+                    </TabsContent>
 
                     {/* Frames Tab */}
                     <TabsContent value="frames">

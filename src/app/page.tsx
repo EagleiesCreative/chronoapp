@@ -5,13 +5,14 @@ import { BoothLayout } from '@/components/booth/BoothLayout';
 import { TenantLoginScreen } from '@/components/booth/TenantLoginScreen';
 import { useAdminStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
+import { useSessionProfileStore } from '@/store/session-profile-store';
 import { Settings, X, Camera, LogOut, Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FrameManager, PrinterSelector, CameraSelector, BackgroundSettings, PrintHistory } from '@/components/admin';
+import { FrameManager, PrinterSelector, CameraSelector, BackgroundSettings, PrintHistory, SessionManager, SessionSelector } from '@/components/admin';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatIDR } from '@/lib/xendit';
-import { Booth } from '@/lib/supabase';
+import { Booth, getActiveBoothSession } from '@/lib/supabase';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { toast } from 'sonner';
 import { getApiUrl, apiJson, apiFetch } from '@/lib/api';
@@ -19,6 +20,7 @@ import { getApiUrl, apiJson, apiFetch } from '@/lib/api';
 export default function HomePage() {
   const { showAdminPanel, setShowAdminPanel } = useAdminStore();
   const { setBooth: setTenantBooth } = useTenantStore();
+  const { setActiveSession } = useSessionProfileStore();
   const [booth, setBooth] = useState<Booth | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
@@ -44,6 +46,14 @@ export default function HomePage() {
             setBooth(boothData.booth);
             // Also save to tenant store for FrameSelector/PaymentScreen
             setTenantBooth(boothData.booth);
+
+            // Fetch and store active booth session
+            try {
+              const activeSession = await getActiveBoothSession(boothData.booth.id);
+              setActiveSession(activeSession);
+            } catch (e) {
+              console.error('Failed to fetch active booth session:', e);
+            }
           }
         } else if (data.reason === 'logged_in_elsewhere') {
           // Session was invalidated because booth logged in on another device
@@ -157,9 +167,17 @@ export default function HomePage() {
   }
 
   // Handle login - save to both local state and tenant store
-  const handleLogin = (boothInfo: Booth) => {
+  const handleLogin = async (boothInfo: Booth) => {
     setBooth(boothInfo);
     setTenantBooth(boothInfo);
+
+    // Fetch and store active booth session on login
+    try {
+      const activeSession = await getActiveBoothSession(boothInfo.id);
+      setActiveSession(activeSession);
+    } catch (e) {
+      console.error('Failed to fetch active booth session:', e);
+    }
   };
 
   // Show tenant login if no booth authenticated
@@ -270,7 +288,8 @@ export default function HomePage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <SessionSelector />
                 <Button
                   variant="outline"
                   size="sm"
@@ -302,6 +321,7 @@ export default function HomePage() {
 
             {/* Content */}
             <div className="h-[calc(100vh-4rem)] overflow-y-auto bg-gray-50 p-6 space-y-6">
+              <SessionManager />
               <FrameManager />
               <BackgroundSettings />
               <CameraSelector />

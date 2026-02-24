@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { Frame, Session, Payment } from '@/lib/supabase';
 
+export type SessionInit = Pick<Session, 'id'> & Partial<Omit<Session, 'id'>>;
+export type PaymentInit = Pick<Payment, 'id'> & Partial<Omit<Payment, 'id'>>;
+
 export type BoothStep =
     | 'idle'
     | 'voucher'
@@ -8,6 +11,7 @@ export type BoothStep =
     | 'payment'
     | 'countdown'
     | 'capturing'
+    | 'filter'
     | 'review'
     | 'print'
     | 'complete';
@@ -32,12 +36,12 @@ interface BoothState {
     setSelectedFrame: (frame: Frame | null) => void;
 
     // Current session
-    session: Session | null;
-    setSession: (session: Session | null) => void;
+    session: Session | SessionInit | null;
+    setSession: (session: Session | SessionInit | null) => void;
 
     // Payment information
-    payment: Payment | null;
-    setPayment: (payment: Payment | null) => void;
+    payment: Payment | PaymentInit | null;
+    setPayment: (payment: Payment | PaymentInit | null) => void;
 
     // QR code data for payment
     qrCodeData: string | null;
@@ -58,6 +62,7 @@ interface BoothState {
     // Captured photos
     capturedPhotos: CapturedPhoto[];
     addCapturedPhoto: (photo: CapturedPhoto) => void;
+    replaceCapturedPhoto: (index: number, photo: CapturedPhoto) => void;
     clearCapturedPhotos: () => void;
 
     // Final composited image
@@ -82,6 +87,10 @@ interface BoothState {
         final_price: number;
     } | null;
     setAppliedVoucher: (voucher: BoothState['appliedVoucher']) => void;
+
+    // Selected photo filter
+    selectedFilter: string;
+    setSelectedFilter: (filter: string) => void;
 
     // Reset everything for a new session
     resetSession: () => void;
@@ -119,6 +128,11 @@ export const useBoothStore = create<BoothState>((set) => ({
     addCapturedPhoto: (photo) => set((state) => ({
         capturedPhotos: [...state.capturedPhotos, photo],
     })),
+    replaceCapturedPhoto: (index, photo) => set((state) => {
+        const updated = [...state.capturedPhotos];
+        updated[index] = photo;
+        return { capturedPhotos: updated };
+    }),
     clearCapturedPhotos: () => set({ capturedPhotos: [] }),
 
     finalImage: null,
@@ -132,6 +146,9 @@ export const useBoothStore = create<BoothState>((set) => ({
 
     appliedVoucher: null,
     setAppliedVoucher: (voucher) => set({ appliedVoucher: voucher }),
+
+    selectedFilter: 'none',
+    setSelectedFilter: (filter) => set({ selectedFilter: filter }),
 
     resetSession: () => set({
         step: 'idle',
@@ -147,6 +164,7 @@ export const useBoothStore = create<BoothState>((set) => ({
         isLoading: false,
         error: null,
         appliedVoucher: null,
+        selectedFilter: 'none',
     }),
 }));
 

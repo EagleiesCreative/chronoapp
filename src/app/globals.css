@@ -187,6 +187,16 @@
   min-height: 48px;
 }
 
+.touch-target-lg {
+  min-height: 56px;
+  min-width: 120px;
+}
+
+/* Text shadow for readability on dark/image backgrounds */
+.text-shadow-dark {
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
 /* Smooth scrolling */
 .smooth-scroll {
   scroll-behavior: smooth;

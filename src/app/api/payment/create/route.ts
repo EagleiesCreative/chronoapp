@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createInvoice } from '@/lib/xendit';
 import { supabase } from '@/lib/supabase';
-import { createPayment, createSession, updateSession, getBoothById } from '@/lib/supabase';
+import { createPayment, createSession, updateSession, getBoothById, getActiveBoothSession } from '@/lib/supabase';
 import { getBoothFromRequest } from '@/lib/booth-auth';
 
 // Input validation schema
@@ -51,9 +51,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Fetch active booth session for settings
+        const activeBoothSession = await getActiveBoothSession(booth.id);
+        const effectivePrice = activeBoothSession?.price ?? booth.price;
+        const effectivePaymentBypass = activeBoothSession?.payment_bypass ?? booth.payment_bypass;
+        const boothSessionId = activeBoothSession?.id;
+
         // Bypass payment if enabled
-        if (booth.payment_bypass) {
-            const session = await createSession(frameId, booth.id);
+        if (effectivePaymentBypass) {
+            const session = await createSession(frameId, booth.id, boothSessionId);
             return NextResponse.json({
                 success: true,
                 sessionId: session.id,
@@ -62,15 +68,15 @@ export async function POST(request: NextRequest) {
                 invoiceUrl: null,
                 expiryDate: null,
                 amount: 0,
-                originalAmount: booth.price,
-                discountAmount: booth.price,
+                originalAmount: effectivePrice,
+                discountAmount: effectivePrice,
                 appliedVoucher: null,
                 isFree: true,
                 isBypassed: true,
             });
         }
 
-        let amount = booth.price;
+        let amount = effectivePrice;
         let appliedVoucher = null;
         let discountAmount = 0;
 
@@ -119,7 +125,7 @@ export async function POST(request: NextRequest) {
         // Handle free session (amount = 0)
         if (amount <= 0 && appliedVoucher) {
             // Create session without payment for free vouchers
-            const session = await createSession(frameId, booth.id);
+            const session = await createSession(frameId, booth.id, boothSessionId);
 
             return NextResponse.json({
                 success: true,
@@ -129,7 +135,7 @@ export async function POST(request: NextRequest) {
                 invoiceUrl: null,
                 expiryDate: null,
                 amount: 0,
-                originalAmount: booth.price,
+                originalAmount: effectivePrice,
                 discountAmount: discountAmount,
                 appliedVoucher: appliedVoucher,
                 isFree: true,
@@ -143,8 +149,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create session in database with booth_id
-        const session = await createSession(frameId, booth.id);
+        // Create session in database with booth_id and booth_session_id
+        const session = await createSession(frameId, booth.id, boothSessionId);
 
         // Generate external ID for Xendit (includes booth_id for revenue tracking)
         const externalId = `chrono_${booth.id}_${session.id}_${Date.now()}`;
@@ -177,7 +183,7 @@ export async function POST(request: NextRequest) {
             invoiceUrl: invoice.invoice_url,
             expiryDate: invoice.expiry_date,
             amount: amount,
-            originalAmount: booth.price,
+            originalAmount: effectivePrice,
             discountAmount: discountAmount,
             appliedVoucher: appliedVoucher,
             isFree: false,
