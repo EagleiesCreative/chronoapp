@@ -1,0 +1,120 @@
+name: Build ChronoSnap
+
+on:
+  workflow_dispatch: # Manual trigger from GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Move server-only folders (prebuild)
+        shell: bash
+        run: |
+          mv src/app/api src/app/_api_backup 2>/dev/null || true
+          mv src/app/share src/app/_share_backup 2>/dev/null || true
+          mv src/app/event src/app/_event_backup 2>/dev/null || true
+
+      - name: Build Tauri for Windows
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT_PUBLIC_API_URL: https://chronosnap.eagleies.com
+          BUILD_TARGET: tauri
+
+      - name: Restore server-only folders (postbuild)
+        if: always()
+        shell: bash
+        run: |
+          mv src/app/_api_backup src/app/api 2>/dev/null || true
+          mv src/app/_share_backup src/app/share 2>/dev/null || true
+          mv src/app/_event_backup src/app/event 2>/dev/null || true
+
+      - name: Upload MSI installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronosnap-windows-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+
+      - name: Upload NSIS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronosnap-windows-nsis
+          path: src-tauri/target/release/bundle/nsis/*.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Move server-only folders (prebuild)
+        run: |
+          mv src/app/api src/app/_api_backup 2>/dev/null || true
+          mv src/app/share src/app/_share_backup 2>/dev/null || true
+          mv src/app/event src/app/_event_backup 2>/dev/null || true
+
+      - name: Build Tauri for macOS
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT_PUBLIC_API_URL: https://chronosnap.eagleies.com
+          BUILD_TARGET: tauri
+
+      - name: Restore server-only folders (postbuild)
+        if: always()
+        run: |
+          mv src/app/_api_backup src/app/api 2>/dev/null || true
+          mv src/app/_share_backup src/app/share 2>/dev/null || true
+          mv src/app/_event_backup src/app/event 2>/dev/null || true
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronosnap-macos-dmg
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+
+      - name: Upload App
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronosnap-macos-app
+          path: src-tauri/target/release/bundle/macos/*.app
