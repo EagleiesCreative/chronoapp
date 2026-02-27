@@ -1,9 +1,23 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Lazy-initialize the Supabase client to avoid crashing during
+// Next.js static export build when env vars are not yet available.
+let _supabaseClient: SupabaseClient | null = null;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+function getSupabaseClient(): SupabaseClient {
+  if (!_supabaseClient) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    _supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+  }
+  return _supabaseClient;
+}
+
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    return (getSupabaseClient() as any)[prop];
+  },
+});
 
 // Lazy getter for admin client (server-side only)
 // This avoids importing supabase-admin at the top level which would break client-side code
@@ -14,7 +28,7 @@ function getSupabaseAdmin(): SupabaseClient {
     if (!serviceRoleKey) {
       throw new Error('SUPABASE_SERVICE_ROLE_KEY is not available. This function can only be called server-side.');
     }
-    _supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    _supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,

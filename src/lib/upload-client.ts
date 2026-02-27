@@ -11,13 +11,24 @@
  * ensuring uploads work even without Supabase Storage RLS policies.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Create a client-only Supabase instance
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Lazy-initialize client-only Supabase instance to avoid build-time crashes
+let _supabaseClient: SupabaseClient | null = null;
+function getClient(): SupabaseClient {
+    if (!_supabaseClient) {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+        _supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    }
+    return _supabaseClient;
+}
 
-const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseClient = new Proxy({} as SupabaseClient, {
+    get(_target, prop) {
+        return (getClient() as any)[prop];
+    },
+});
 
 /**
  * Upload directly to Supabase Storage with retry logic.

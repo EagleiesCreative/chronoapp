@@ -42,6 +42,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEXT_PUBLIC_API_URL: https://chronosnap.eagleies.com
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           BUILD_TARGET: tauri
 
       - name: Restore server-only folders (postbuild)
@@ -98,6 +100,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEXT_PUBLIC_API_URL: https://chronosnap.eagleies.com
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           BUILD_TARGET: tauri
 
       - name: Restore server-only folders (postbuild)
