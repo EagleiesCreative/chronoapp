@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Camera as CameraIcon, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBoothStore, useAdminStore } from '@/store/booth-store';
@@ -56,6 +56,7 @@ export function CaptureScreen() {
         handleRetake,
         handleContinue,
         retakePhoto,
+        startCountdown,
     } = useCaptureFlow(getScreenshot, cameraReady);
 
     return (
@@ -125,6 +126,29 @@ export function CaptureScreen() {
                                     className="w-full h-full object-cover transform scale-x-[-1]"
                                 />
                             )}
+
+                            {/* TAP TO START WAIT OVERLAY */}
+                            <AnimatePresence>
+                                {phase === 'waiting' && cameraReady && (
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.3 }}
+                                        onClick={startCountdown}
+                                        className="absolute inset-0 z-40 flex items-center justify-center cursor-pointer bg-black/40 backdrop-blur-sm"
+                                    >
+                                        <div className="text-center">
+                                            <p
+                                                className="text-white text-4xl md:text-5xl lg:text-6xl font-light tracking-widest animate-pulse"
+                                                style={{ textShadow: '0 4px 20px rgba(0,0,0,0.6)' }}
+                                            >
+                                                TAP TO START
+                                            </p>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
 
                             <CaptureOverlay
                                 phase={phase}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Check, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,42 +16,11 @@ export function FilterScreen() {
         selectedFrame,
     } = useBoothStore();
 
-    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
-    const [previewImage, setPreviewImage] = useState<string | null>(null);
-
     // Build a quick composite preview of the first photo
     const firstPhoto = capturedPhotos[0]?.dataUrl;
 
-    // Generate filtered preview whenever filter changes
-    useEffect(() => {
-        if (!firstPhoto) return;
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        const img = new Image();
-        img.onload = () => {
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-
-            const filter = getFilterByName(selectedFilter);
-
-            // Apply CSS filter
-            ctx.filter = filter.cssFilter;
-            ctx.drawImage(img, 0, 0);
-            ctx.filter = 'none';
-
-            // Apply overlay
-            if (filter.overlay) {
-                ctx.fillStyle = filter.overlay.color;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-            }
-
-            setPreviewImage(canvas.toDataURL('image/jpeg', 0.85));
-        };
-        img.src = firstPhoto;
-    }, [firstPhoto, selectedFilter]);
+    // Get the current filter object for CSS-based preview
+    const currentFilter = useMemo(() => getFilterByName(selectedFilter), [selectedFilter]);
 
     const handleApply = () => {
         setStep('review');
@@ -86,13 +55,22 @@ export function FilterScreen() {
                 transition={{ delay: 0.1 }}
                 className="flex-1 flex items-center justify-center max-h-[50vh] mb-4"
             >
-                <div className="elegant-card overflow-hidden rounded-xl">
-                    {previewImage ? (
-                        <img
-                            src={previewImage}
-                            alt="Filtered preview"
-                            className="max-h-[45vh] w-auto object-contain"
-                        />
+                <div className="elegant-card overflow-hidden rounded-xl relative">
+                    {firstPhoto ? (
+                        <>
+                            <img
+                                src={firstPhoto}
+                                alt="Filtered preview"
+                                className="max-h-[45vh] w-auto object-contain transition-[filter] duration-200"
+                                style={{ filter: currentFilter.cssFilter }}
+                            />
+                            {currentFilter.overlay && (
+                                <div
+                                    className="absolute inset-0 pointer-events-none"
+                                    style={{ backgroundColor: currentFilter.overlay.color }}
+                                />
+                            )}
+                        </>
                     ) : (
                         <div className="w-48 aspect-[3/4] bg-muted flex items-center justify-center">
                             <p className="text-muted-foreground text-sm">Loading...</p>

@@ -53,6 +53,7 @@ const DEFAULT_SESSION: Partial<BoothSession> = {
     review_timeout_seconds: 60,
     print_copies: 1,
     default_filter: 'none',
+    filter_enabled: true,
     payment_bypass: false,
     event_mode: false,
     slideshow_enabled: false,
@@ -504,6 +505,15 @@ export function SessionManager() {
                                                     checked={editingSession.payment_bypass || false}
                                                     onCheckedChange={(v) =>
                                                         setEditingSession({ ...editingSession, payment_bypass: v })
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <Label>Filter selection step</Label>
+                                                <Switch
+                                                    checked={editingSession.filter_enabled ?? true}
+                                                    onCheckedChange={(v) =>
+                                                        setEditingSession({ ...editingSession, filter_enabled: v })
                                                     }
                                                 />
                                             </div>

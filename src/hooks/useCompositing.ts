@@ -30,8 +30,78 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Helper function to draw a photo in its slot
-            const drawPhotoInSlot = async (photoIndex: number) => {
+            // Helper: apply filter to an image using offscreen canvas
+            // Uses ctx.filter when available, otherwise falls back to pixel manipulation
+            const applyFilterToImage = (img: HTMLImageElement, filterDef: ReturnType<typeof getFilterByName>): HTMLCanvasElement => {
+                const offscreen = document.createElement('canvas');
+                offscreen.width = img.naturalWidth;
+                offscreen.height = img.naturalHeight;
+                const offCtx = offscreen.getContext('2d')!;
+
+                // Try ctx.filter first
+                const supportsCtxFilter = typeof offCtx.filter !== 'undefined' && offCtx.filter !== undefined;
+
+                if (supportsCtxFilter && filterDef.cssFilter !== 'none') {
+                    offCtx.filter = filterDef.cssFilter;
+                    offCtx.drawImage(img, 0, 0);
+                    offCtx.filter = 'none';
+                } else if (filterDef.cssFilter !== 'none') {
+                    // Fallback: pixel manipulation for common filters
+                    offCtx.drawImage(img, 0, 0);
+                    const imageData = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+                    const data = imageData.data;
+
+                    if (filterDef.name === 'bw') {
+                        for (let j = 0; j < data.length; j += 4) {
+                            const gray = data[j] * 0.299 + data[j + 1] * 0.587 + data[j + 2] * 0.114;
+                            data[j] = data[j + 1] = data[j + 2] = gray;
+                        }
+                    } else if (filterDef.name === 'vintage') {
+                        for (let j = 0; j < data.length; j += 4) {
+                            const r = data[j], g = data[j + 1], b = data[j + 2];
+                            data[j] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189);
+                            data[j + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168);
+                            data[j + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131);
+                        }
+                    } else {
+                        // For other filters (warm, cool, film, vivid),
+                        // apply simulated adjustments
+                        for (let j = 0; j < data.length; j += 4) {
+                            if (filterDef.name === 'warm') {
+                                data[j] = Math.min(255, data[j] * 1.1);
+                                data[j + 2] = data[j + 2] * 0.9;
+                            } else if (filterDef.name === 'cool') {
+                                data[j] = data[j] * 0.9;
+                                data[j + 2] = Math.min(255, data[j + 2] * 1.1);
+                            } else if (filterDef.name === 'film') {
+                                const gray = data[j] * 0.299 + data[j + 1] * 0.587 + data[j + 2] * 0.114;
+                                data[j] = Math.min(255, data[j] * 0.85 + gray * 0.15);
+                                data[j + 1] = Math.min(255, data[j + 1] * 0.85 + gray * 0.15);
+                                data[j + 2] = Math.min(255, data[j + 2] * 0.85 + gray * 0.15);
+                            } else if (filterDef.name === 'vivid') {
+                                const avg = (data[j] + data[j + 1] + data[j + 2]) / 3;
+                                data[j] = Math.min(255, data[j] + (data[j] - avg) * 0.5);
+                                data[j + 1] = Math.min(255, data[j + 1] + (data[j + 1] - avg) * 0.5);
+                                data[j + 2] = Math.min(255, data[j + 2] + (data[j + 2] - avg) * 0.5);
+                            }
+                        }
+                    }
+                    offCtx.putImageData(imageData, 0, 0);
+                } else {
+                    offCtx.drawImage(img, 0, 0);
+                }
+
+                // Apply overlay
+                if (filterDef.overlay) {
+                    offCtx.fillStyle = filterDef.overlay.color;
+                    offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
+                }
+
+                return offscreen;
+            };
+
+            // Helper function to draw a photo in its slot (with filter pre-applied)
+            const drawPhotoInSlot = async (photoIndex: number, filterDef: ReturnType<typeof getFilterByName>) => {
                 const photo = capturedPhotos[photoIndex];
                 const slot = selectedFrame.photo_slots?.[photoIndex];
 
@@ -40,6 +110,9 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                 const img = new Image();
                 await new Promise<void>((resolve) => {
                     img.onload = () => {
+                        // Pre-apply filter to the photo
+                        const filteredCanvas = applyFilterToImage(img, filterDef);
+
                         const destX = (slot.x / 1000) * canvas.width;
                         const destY = (slot.y / 1000) * canvas.height;
                         const destW = (slot.width / 1000) * canvas.width;
@@ -70,7 +143,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                         }
 
                         ctx.drawImage(
-                            img,
+                            filteredCanvas,
                             srcX, srcY, srcW, srcH,
                             destX, destY, destW, destH
                         );
@@ -88,15 +161,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
             for (let i = 0; i < capturedPhotos.length; i++) {
                 const slot = selectedFrame.photo_slots?.[i];
                 if (!slot || slot.layer === 'above') continue;
-                ctx.filter = filter.cssFilter;
-                await drawPhotoInSlot(i);
-                ctx.filter = 'none';
-            }
-
-            // Apply filter overlay (warm/cool tint) BEFORE frame
-            if (filter.overlay) {
-                ctx.fillStyle = filter.overlay.color;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                await drawPhotoInSlot(i, filter);
             }
 
             // Draw frame overlay
@@ -118,9 +183,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
             for (let i = 0; i < capturedPhotos.length; i++) {
                 const slot = selectedFrame.photo_slots?.[i];
                 if (!slot || slot.layer !== 'above') continue;
-                ctx.filter = filter.cssFilter;
-                await drawPhotoInSlot(i);
-                ctx.filter = 'none';
+                await drawPhotoInSlot(i, filter);
             }
 
             // Event mode: draw hashtag overlay

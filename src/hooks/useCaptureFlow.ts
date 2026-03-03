@@ -3,7 +3,7 @@ import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { useSessionProfileStore } from '@/store/session-profile-store';
 
-export type CapturePhase = 'countdown' | 'capturing' | 'preview';
+export type CapturePhase = 'waiting' | 'countdown' | 'capturing' | 'preview';
 
 export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: boolean) {
     const {
@@ -22,15 +22,24 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
     // Session settings take priority over booth settings
     const countdownSec = activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3;
     const previewSec = activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5;
+    const filterEnabled = activeSession?.filter_enabled ?? true;
+    const nextStepAfterCapture = filterEnabled ? 'filter' : 'review';
 
     const [flashActive, setFlashActive] = useState(false);
-    const [phase, setPhase] = useState<CapturePhase>('countdown');
+    const [phase, setPhase] = useState<CapturePhase>('waiting');
     const [countdown, setCountdown] = useState(countdownSec);
     const [previewCountdown, setPreviewCountdown] = useState(previewSec);
     const [lastCapturedPhoto, setLastCapturedPhoto] = useState<string | null>(null);
     const [retakingIndex, setRetakingIndex] = useState<number | null>(null);
 
     const totalPhotos = selectedFrame?.photo_slots?.length || 3;
+
+    const startCountdown = useCallback(() => {
+        if (cameraReady && phase === 'waiting') {
+            setPhase('countdown');
+            setCountdown(countdownSec);
+        }
+    }, [cameraReady, phase, countdownSec]);
 
     const capturePhoto = useCallback(() => {
         setPhase('capturing');
@@ -78,7 +87,7 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
 
                 // If all photos are captured, go to filter selection
                 if (capturedPhotos.length >= totalPhotos) {
-                    setStep('filter');
+                    setStep(nextStepAfterCapture);
                 } else {
                     // Resume normal flow at next uncaptured slot
                     setCurrentPhotoIndex(savedIndex);
@@ -94,7 +103,7 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
                 });
 
                 if (photoIndex + 1 >= totalPhotos) {
-                    setStep('filter');
+                    setStep(nextStepAfterCapture);
                 } else {
                     setCurrentPhotoIndex(photoIndex + 1);
                     setCountdown(countdownSec);
@@ -102,7 +111,7 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
                 }
             }
         }
-    }, [lastCapturedPhoto, phase, currentPhotoIndex, totalPhotos, addCapturedPhoto, replaceCapturedPhoto, setStep, setCurrentPhotoIndex, countdownSec, retakingIndex, capturedPhotos.length]);
+    }, [lastCapturedPhoto, phase, currentPhotoIndex, totalPhotos, addCapturedPhoto, replaceCapturedPhoto, setStep, setCurrentPhotoIndex, countdownSec, retakingIndex, capturedPhotos.length, nextStepAfterCapture]);
 
     // Preview auto-continue timer
     useEffect(() => {
@@ -140,5 +149,6 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
         handleRetake,
         handleContinue,
         retakePhoto,
+        startCountdown,
     };
 }

@@ -96,6 +96,7 @@ export interface BoothSession {
   review_timeout_seconds: number;
   print_copies: number;
   default_filter: string;
+  filter_enabled: boolean;
   payment_bypass: boolean;
   event_mode: boolean;
   event_name: string | null;
