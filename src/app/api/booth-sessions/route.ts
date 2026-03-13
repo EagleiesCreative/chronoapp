@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getBoothFromRequest } from '@/lib/booth-auth';
 
 /**
  * GET /api/booth-sessions?boothId=xxx
  * List all booth sessions for a booth
+ * SECURITY: Requires booth JWT auth, boothId must match authenticated booth
  */
 export async function GET(req: NextRequest) {
     try {
+        // Require booth authentication
+        const booth = await getBoothFromRequest(req);
+        if (!booth) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+
         const boothId = req.nextUrl.searchParams.get('boothId');
         if (!boothId) {
             return NextResponse.json({ error: 'boothId is required' }, { status: 400 });
+        }
+
+        // Verify boothId matches authenticated booth
+        if (boothId !== booth.booth_id) {
+            return NextResponse.json({ error: 'Not found' }, { status: 404 });
         }
 
         const { data, error } = await supabase
@@ -43,14 +56,26 @@ export async function GET(req: NextRequest) {
 /**
  * POST /api/booth-sessions
  * Create a new booth session
+ * SECURITY: Requires booth JWT auth, boothId must match authenticated booth
  */
 export async function POST(req: NextRequest) {
     try {
+        // Require booth authentication
+        const boothAuth = await getBoothFromRequest(req);
+        if (!boothAuth) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+
         const body = await req.json();
         const { boothId, name, frameIds, ...settings } = body;
 
         if (!boothId || !name) {
             return NextResponse.json({ error: 'boothId and name are required' }, { status: 400 });
+        }
+
+        // Verify boothId matches authenticated booth
+        if (boothId !== boothAuth.booth_id) {
+            return NextResponse.json({ error: 'Not found' }, { status: 404 });
         }
 
         // Insert booth session

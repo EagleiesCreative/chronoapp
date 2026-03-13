@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getBoothFromRequest } from '@/lib/booth-auth';
 
 /**
  * POST /api/booth-sessions/[id]/duplicate
  * Duplicate a booth session with all settings and frame assignments
+ * SECURITY: Requires booth JWT auth
  */
 export async function POST(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const boothAuth = await getBoothFromRequest(req);
+        if (!boothAuth) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+
         const { id } = await params;
 
         // Fetch the source session

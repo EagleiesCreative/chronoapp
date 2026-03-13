@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireAuth } from '@/lib/admin-auth';
+import { getBoothFromRequest } from '@/lib/booth-auth';
 
 // Allowed file types (images and GIF)
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+
+// Allowed upload folders (prevents path traversal)
+const ALLOWED_FOLDERS = ['frames', 'photos', 'sessions', 'backgrounds'];
 
 // Max file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -37,10 +41,27 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // For admin uploads (frames folder), require authentication
+        // Validate folder against whitelist
+        if (!ALLOWED_FOLDERS.includes(folder)) {
+            return NextResponse.json(
+                { error: `Invalid folder. Allowed: ${ALLOWED_FOLDERS.join(', ')}` },
+                { status: 400 }
+            );
+        }
+
+        // For admin uploads (frames folder), require admin authentication
         if (folder === 'frames') {
             const authError = await requireAuth(request);
             if (authError) return authError;
+        } else {
+            // For other folders, require at least booth authentication
+            const boothSession = await getBoothFromRequest(request);
+            if (!boothSession) {
+                return NextResponse.json(
+                    { error: 'Authentication required' },
+                    { status: 401 }
+                );
+            }
         }
 
         // Sanitize filename - only allow alphanumeric, dots, and hyphens

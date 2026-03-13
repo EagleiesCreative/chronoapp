@@ -165,10 +165,19 @@ export async function getInvoice(invoiceId: string): Promise<InvoiceResponse> {
     return response.json();
 }
 
-// Verify webhook callback token
+// Verify webhook callback token (timing-safe to prevent brute-force via timing attacks)
 export function verifyWebhookToken(token: string): boolean {
     const webhookToken = process.env.XENDIT_WEBHOOK_TOKEN;
-    return token === webhookToken;
+    if (!webhookToken) return false;
+    try {
+        const a = Buffer.from(token);
+        const b = Buffer.from(webhookToken);
+        if (a.length !== b.length) return false;
+        const { timingSafeEqual } = require('crypto');
+        return timingSafeEqual(a, b);
+    } catch {
+        return false;
+    }
 }
 
 // Format currency for display

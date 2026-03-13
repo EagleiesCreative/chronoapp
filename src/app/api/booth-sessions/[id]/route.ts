@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getBoothFromRequest } from '@/lib/booth-auth';
 
 /**
  * GET /api/booth-sessions/[id]
  * Get a single booth session with its frame assignments
+ * SECURITY: Requires booth JWT auth
  */
 export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const boothAuth = await getBoothFromRequest(req);
+        if (!boothAuth) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+
         const { id } = await params;
 
         const { data, error } = await supabase
@@ -36,6 +43,11 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const boothAuth = await getBoothFromRequest(req);
+        if (!boothAuth) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+
         const { id } = await params;
         const body = await req.json();
 
@@ -67,6 +79,11 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const boothAuth = await getBoothFromRequest(req);
+        if (!boothAuth) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+
         const { id } = await params;
 
         // Check if session is active

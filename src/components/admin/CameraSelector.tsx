@@ -4,12 +4,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, VideoOff, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAdminStore } from '@/store/booth-store';
+import { invoke } from '@tauri-apps/api/core';
+
 
 interface CameraDevice {
-    deviceId: string;
-    label: string;
+    id: string; // Changed from deviceId to match backend
+    name: string; // Changed from label to match backend
 }
 
 export function CameraSelector() {
@@ -45,25 +46,23 @@ export function CameraSelector() {
         }
 
         try {
-            // First request permission to access media devices
-            await navigator.mediaDevices.getUserMedia({ video: true });
+            // First request permission via browser if needed (for webcams)
+            // But we primarily want to use Tauri's list_cameras
+            if (isMediaSupported) {
+               try { await navigator.mediaDevices.getUserMedia({ video: true }); } catch(e) {}
+            }
 
-            // Then enumerate devices
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices
-                .filter(device => device.kind === 'videoinput')
-                .map((device, index) => ({
-                    deviceId: device.deviceId,
-                    label: device.label || `Camera ${index + 1}`,
-                }));
+            // Call Tauri backend to get unified camera list (System + Canon)
+            const videoDevices = await invoke<CameraDevice[]>('list_cameras');
 
             setCameras(videoDevices);
 
             // Auto-select first camera if none selected
             if (!selectedCameraId && videoDevices.length > 0) {
-                setSelectedCameraId(videoDevices[0].deviceId);
+                setSelectedCameraId(videoDevices[0].id);
             }
         } catch (error) {
+
             console.error('Error loading cameras:', error);
             if (error instanceof Error) {
                 if (error.name === 'NotAllowedError') {
@@ -105,23 +104,37 @@ export function CameraSelector() {
         setCameraError(null);
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    deviceId: { exact: selectedCameraId },
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                },
-            });
+            // Start the camera in the backend
+            const status = await invoke('start_camera', { device_id: selectedCameraId });
+            console.log('Camera started:', status);
 
-            setPreviewStream(stream);
+            // For non-Canon cameras, we can still use browser preview if we want
+            // but for unified experience we'll use base64 preview frames from backend
+            // For now, let's stick to browser preview for system cams if possible
+            if (!selectedCameraId.startsWith('canon_')) {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        deviceId: { exact: selectedCameraId },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                    },
+                });
 
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                await videoRef.current.play();
+                setPreviewStream(stream);
+
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                    await videoRef.current.play();
+                }
+            } else {
+                // For Canon, we'd need a polling mechanism to get preview frames
+                // This will be implemented next
+                setCameraTestStatus('success');
             }
 
             setCameraTestStatus('success');
         } catch (error) {
+
             console.error('Camera test failed:', error);
             setCameraTestStatus('error');
             if (error instanceof Error) {
@@ -179,36 +192,61 @@ export function CameraSelector() {
                     </div>
                 )}
 
-                {/* Camera selector dropdown */}
-                <div className="space-y-2">
-                    <label className="text-sm font-medium">Select Camera</label>
-                    <div className="flex gap-2">
-                        <Select
-                            value={selectedCameraId || ''}
-                            onValueChange={handleCameraChange}
-                            disabled={isLoading || cameras.length === 0}
-                        >
-                            <SelectTrigger className="flex-1">
-                                <SelectValue placeholder={isLoading ? "Loading cameras..." : "Select a camera"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {cameras.map((camera) => (
-                                    <SelectItem key={camera.deviceId} value={camera.deviceId}>
-                                        {camera.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                {/* Camera selector cards */}
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">Select Camera</label>
                         <Button
                             variant="outline"
-                            size="icon"
+                            size="sm"
                             onClick={loadCameras}
                             disabled={isLoading}
                             title="Refresh camera list"
+                            className="h-8 text-xs"
                         >
-                            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`w-3 h-3 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                            Refresh
                         </Button>
                     </div>
+
+                    {isLoading ? (
+                        <div className="text-sm text-muted-foreground py-4 text-center border rounded-lg border-dashed">
+                            Loading cameras...
+                        </div>
+                    ) : !isMediaSupported ? (
+                        <div className="text-sm text-muted-foreground py-4 text-center border rounded-lg border-dashed">
+                            Camera API unavailable
+                        </div>
+                    ) : cameras.length === 0 ? (
+                        <div className="text-sm text-muted-foreground py-4 text-center border rounded-lg border-dashed">
+                            No cameras found
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-3 max-h-[300px] overflow-y-auto pr-2">
+                            {cameras.map((camera) => (
+                                <div
+                                    key={camera.id}
+                                    onClick={() => handleCameraChange(camera.id)}
+                                    className={`relative p-4 rounded-xl border cursor-pointer transition-all ${
+                                        selectedCameraId === camera.id 
+                                            ? 'border-primary ring-1 ring-primary bg-primary/5' 
+                                            : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                                    }`}
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-center gap-2 font-medium">
+                                            <Video className="w-4 h-4 text-primary shrink-0" />
+                                            <span className="line-clamp-2" title={camera.name}>{camera.name}</span>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                        <div className={`w-1.5 h-1.5 rounded-full ${selectedCameraId === camera.id ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+                                        <span>{selectedCameraId === camera.id ? 'Selected' : 'Ready'}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Camera preview */}

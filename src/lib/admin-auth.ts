@@ -1,5 +1,8 @@
 import { cookies } from 'next/headers';
+import { randomUUID } from 'crypto';
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { storeAdminToken, hasAdminToken, removeAdminToken } from '@/lib/redis';
 
 // Admin PIN from environment variable - required in production
 const adminPinEnv = process.env.ADMIN_PIN;
@@ -14,20 +17,28 @@ const SESSION_COOKIE = 'chronosnap_admin_session';
 // Session duration: 24 hours
 const SESSION_DURATION = 24 * 60 * 60 * 1000;
 
-/**
- * Generate a simple session token
- */
+// In-memory fallback when Redis is not configured (local dev)
+const localTokens = new Set<string>();
+
+// Session duration in seconds (24 hours)
+const SESSION_TTL_SECONDS = 24 * 60 * 60;
+
 function generateSessionToken(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 15);
-    return `${timestamp}_${random}`;
+    return randomUUID();
 }
 
 /**
  * Verify if the provided PIN is correct
  */
 export function verifyPin(pin: string): boolean {
-    return pin === ADMIN_PIN;
+    try {
+        const a = Buffer.from(pin);
+        const b = Buffer.from(ADMIN_PIN);
+        if (a.length !== b.length) return false;
+        return timingSafeEqual(a, b);
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -35,14 +46,20 @@ export function verifyPin(pin: string): boolean {
  */
 export async function createSession(): Promise<string> {
     const token = generateSessionToken();
-    const expires = new Date(Date.now() + SESSION_DURATION);
+    const expires = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
+
+    // Store token in Redis (persists across cold starts) with fallback to in-memory
+    try {
+        await storeAdminToken(token, SESSION_TTL_SECONDS);
+    } catch {
+        // Redis unavailable — fall back to in-memory
+    }
+    localTokens.add(token);
 
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE, token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        // Production (Tauri -> Cloud): Cross-Origin, requires None
-        // Development (Localhost): Same-Origin, requires Lax
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         expires,
         path: '/',
@@ -60,9 +77,7 @@ export async function checkSession(request?: NextRequest): Promise<boolean> {
     if (request) {
         const adminToken = request.headers.get('x-admin-token');
         if (adminToken) {
-            // In this simple implementation, the token IS the session record
-            // Real production might check this against a database or cache
-            return true;
+            return await isTokenValid(adminToken);
         }
     }
 
@@ -70,10 +85,33 @@ export async function checkSession(request?: NextRequest): Promise<boolean> {
     try {
         const cookieStore = await cookies();
         const session = cookieStore.get(SESSION_COOKIE);
-        return !!session?.value;
+        if (!session?.value) return false;
+        return await isTokenValid(session.value);
     } catch {
         return false;
     }
+}
+
+/**
+ * Validate a token against Redis (primary) and in-memory (fallback)
+ */
+async function isTokenValid(token: string): Promise<boolean> {
+    // Check in-memory first (fast path)
+    if (localTokens.has(token)) return true;
+
+    // Check Redis (survives cold starts)
+    try {
+        const exists = await hasAdminToken(token);
+        if (exists) {
+            // Re-populate in-memory cache for subsequent requests in this instance
+            localTokens.add(token);
+            return true;
+        }
+    } catch {
+        // Redis unavailable — rely on in-memory only
+    }
+
+    return false;
 }
 
 /**
@@ -91,8 +129,22 @@ export async function getAdminFromRequest(request: NextRequest): Promise<string 
  * Clear the admin session
  */
 export async function clearSession(): Promise<void> {
-    const cookieStore = await cookies();
-    cookieStore.delete(SESSION_COOKIE);
+    try {
+        const cookieStore = await cookies();
+        const session = cookieStore.get(SESSION_COOKIE);
+        if (session?.value) {
+            // Remove from both stores
+            localTokens.delete(session.value);
+            try {
+                await removeAdminToken(session.value);
+            } catch {
+                // Redis unavailable — already removed from in-memory
+            }
+        }
+        cookieStore.delete(SESSION_COOKIE);
+    } catch {
+        // Ignore errors during cleanup
+    }
 }
 
 /**
@@ -120,7 +172,14 @@ const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
  */
 export function verifyApiKey(apiKey: string | null): boolean {
     if (!ADMIN_API_KEY || !apiKey) return false;
-    return apiKey === ADMIN_API_KEY;
+    try {
+        const a = Buffer.from(apiKey);
+        const b = Buffer.from(ADMIN_API_KEY);
+        if (a.length !== b.length) return false;
+        return timingSafeEqual(a, b);
+    } catch {
+        return false;
+    }
 }
 
 /**

@@ -27,8 +27,7 @@ export default function proxy(request: NextRequest) {
     // Check if origin is allowed
     const isAllowed =
         (origin && (allowedOrigins.includes(origin) || isVercelPreview || isTauriOrigin)) ||
-        (hasNoOrigin && isTauriUserAgent) || // Allow Tauri apps with no origin
-        hasNoOrigin; // Temporarily allow all no-origin requests for debugging
+        (hasNoOrigin && isTauriUserAgent); // Only allow no-origin from Tauri apps
 
     // Log for debugging (will appear in Vercel logs)
     console.log('[Middleware] Request:', {

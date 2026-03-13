@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Printer, PrinterCheck, AlertTriangle, FileText, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
 // Type for printer info from Rust
@@ -156,45 +155,69 @@ export function PrinterSelector() {
                     </div>
                 )}
 
-                {/* Printer selector dropdown */}
-                <div className="space-y-2">
-                    <label className="text-sm font-medium">Select Printer</label>
-                    <div className="flex gap-2">
-                        <Select
-                            value={selectedPrinter}
-                            onValueChange={setSelectedPrinter}
-                            disabled={isLoading || printers.length === 0}
-                        >
-                            <SelectTrigger className="flex-1">
-                                <SelectValue placeholder={isLoading ? "Loading printers..." : "Select a printer"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {printers.map((printer) => (
-                                    <SelectItem key={printer.system_name} value={printer.system_name}>
-                                        <div className="flex items-center gap-2">
-                                            <span>{printer.name}</span>
-                                            {printer.is_default && (
-                                                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                                                    Default
-                                                </span>
-                                            )}
-                                            <span className="text-xs text-muted-foreground">{printer.name}</span>
-                                        </div>
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                {/* Printer selector cards */}
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">Select Printer</label>
                         <Button
                             variant="outline"
-                            size="icon"
+                            size="sm"
                             onClick={loadPrinters}
                             disabled={isLoading}
                             title="Refresh printer list"
+                            className="h-8 text-xs"
                         >
-                            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`w-3 h-3 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                            Refresh
                         </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">{printers.length} printer(s) found</p>
+
+                    {isLoading ? (
+                        <div className="text-sm text-muted-foreground py-4 text-center border rounded-lg border-dashed">
+                            Loading printers...
+                        </div>
+                    ) : printers.length === 0 ? (
+                        <div className="text-sm text-muted-foreground py-4 text-center border rounded-lg border-dashed">
+                            No printers found
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-3 max-h-[300px] overflow-y-auto pr-2">
+                            {printers.map((printer) => (
+                                <div
+                                    key={printer.system_name}
+                                    onClick={() => setSelectedPrinter(printer.system_name)}
+                                    className={`relative p-4 rounded-xl border cursor-pointer transition-all ${
+                                        selectedPrinter === printer.system_name 
+                                            ? 'border-primary ring-1 ring-primary bg-primary/5' 
+                                            : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                                    }`}
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-center gap-2 font-medium">
+                                            <Printer className="w-4 h-4 text-primary" />
+                                            <span className="line-clamp-1" title={printer.name}>{printer.name}</span>
+                                        </div>
+                                        {printer.is_default && (
+                                            <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 font-medium">
+                                                Default
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                                        <div className="flex items-center gap-1.5 line-clamp-1">
+                                            <FileText className="w-3 h-3 shrink-0" />
+                                            <span title={printer.driver_name || 'Generic Driver'}>{printer.driver_name || 'Generic Driver'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className={`w-1.5 h-1.5 rounded-full ${printer.state.toLowerCase() === 'idle' || printer.state === '' ? 'bg-green-500' : 'bg-amber-500'}`} />
+                                            <span>{printer.state || 'Ready'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <p className="text-xs text-muted-foreground text-right">{printers.length} printer(s) found</p>
                 </div>
 
                 {/* Selected printer info */}

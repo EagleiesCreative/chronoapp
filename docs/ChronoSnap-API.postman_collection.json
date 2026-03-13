@@ -1,14 +1,34 @@
 {
     "info": {
-        "_postman_id": "chronosnap-api-v1",
+        "_postman_id": "chronosnap-api-v2",
         "name": "ChronoSnap Photobooth API",
-        "description": "API documentation for ChronoSnap Photobooth application.\n\n## Authentication\n\nThis API uses two authentication methods:\n\n1. **Admin PIN Authentication** (`/api/admin`)\n   - Used for admin panel access\n   - Sets HttpOnly cookie: `chronosnap_admin_session`\n\n2. **Booth JWT Authentication** (`/api/auth/booth-login`)\n   - Used for booth/tenant access\n   - Sets HttpOnly cookie: `chronosnap_booth_session`\n   - Rate limited: 5 attempts per minute\n\n## Base URL\n\nLocal: `http://localhost:3000`\nProduction: Set your production URL in the environment variables.",
+        "description": "Complete API documentation for ChronoSnap Photobooth application (v2).\n\n## Authentication\n\nThis API uses two authentication methods:\n\n1. **Admin PIN Authentication** (`/api/admin`)\n   - Returns JWT token stored as `admin_token` in localStorage\n   - Sent via `X-Admin-Token` header\n\n2. **Booth JWT Authentication** (`/api/auth/booth-login`)\n   - Returns JWT token stored as `booth_token` in localStorage\n   - Sent via `Authorization: Bearer <token>` header\n   - Rate limited: 5 attempts per minute\n\n## Base URL\n\n- Local: `http://localhost:3000`\n- Production: `https://chronosnap.eagleies.com`",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "variable": [
         {
             "key": "baseUrl",
             "value": "http://localhost:3000",
+            "type": "string"
+        },
+        {
+            "key": "boothId",
+            "value": "booth-uuid-here",
+            "type": "string"
+        },
+        {
+            "key": "sessionId",
+            "value": "session-uuid-here",
+            "type": "string"
+        },
+        {
+            "key": "boothSessionId",
+            "value": "booth-session-uuid-here",
+            "type": "string"
+        },
+        {
+            "key": "frameId",
+            "value": "frame-uuid-here",
             "type": "string"
         }
     ],
@@ -27,10 +47,6 @@
                                 "value": "application/json"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"pin\": \"1234\"\n}"
-                        },
                         "url": {
                             "raw": "{{baseUrl}}/api/admin",
                             "host": [
@@ -41,14 +57,18 @@
                                 "admin"
                             ]
                         },
-                        "description": "Login to admin panel using PIN.\n\n**Request Body:**\n- `pin` (string, required): Admin PIN code\n\n**Response:**\n- Sets HttpOnly cookie `chronosnap_admin_session`\n- Returns `{ success: true }` on success"
+                        "description": "Login to admin panel using PIN.\n\n**Request Body:**\n- `pin` (string, required): Admin PIN code\n\n**Response:**\n- Returns JWT token for admin access",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"pin\": \"1234\"\n}"
+                        }
                     },
                     "response": [
                         {
                             "name": "Success",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n    \"success\": true\n}"
+                            "body": "{\n    \"success\": true,\n    \"token\": \"jwt-token-here\"\n}"
                         },
                         {
                             "name": "Invalid PIN",
@@ -59,36 +79,15 @@
                     ]
                 },
                 {
-                    "name": "Admin Logout",
-                    "request": {
-                        "method": "DELETE",
-                        "header": [],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin"
-                            ]
-                        },
-                        "description": "Logout from admin panel.\n\n**Response:**\n- Clears `chronosnap_admin_session` cookie"
-                    },
-                    "response": [
-                        {
-                            "name": "Success",
-                            "status": "OK",
-                            "code": 200,
-                            "body": "{\n    \"success\": true\n}"
-                        }
-                    ]
-                },
-                {
                     "name": "Admin Check Session",
                     "request": {
                         "method": "GET",
-                        "header": [],
+                        "header": [
+                            {
+                                "key": "X-Admin-Token",
+                                "value": "{{adminToken}}"
+                            }
+                        ],
                         "url": {
                             "raw": "{{baseUrl}}/api/admin",
                             "host": [
@@ -99,7 +98,7 @@
                                 "admin"
                             ]
                         },
-                        "description": "Check if admin session is active.\n\n**Response:**\n- `authenticated` (boolean): Session status"
+                        "description": "Check if admin session is active.\n\n**Headers:**\n- `X-Admin-Token`: Admin JWT token\n\n**Response:**\n- `authenticated` (boolean): Session status"
                     },
                     "response": [
                         {
@@ -126,10 +125,6 @@
                                 "value": "application/json"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"code\": \"XXXX-0000\"\n}"
-                        },
                         "url": {
                             "raw": "{{baseUrl}}/api/auth/booth-login",
                             "host": [
@@ -141,14 +136,18 @@
                                 "booth-login"
                             ]
                         },
-                        "description": "Login to a booth using booth code.\n\n**Rate Limiting:** 5 attempts per minute\n\n**Request Body:**\n- `code` (string, required): Booth code in format XXXX-0000\n\n**Response:**\n- Sets HttpOnly JWT cookie `chronosnap_booth_session`\n- Returns booth information"
+                        "description": "Login to a booth using booth code.\n\n**Rate Limiting:** 5 attempts per minute\n\n**Request Body:**\n- `code` (string, required): Booth code in format XXXX-0000\n\n**Response:**\n- Returns JWT booth token and booth info",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"code\": \"XXXX-0000\"\n}"
+                        }
                     },
                     "response": [
                         {
                             "name": "Success",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n    \"success\": true,\n    \"booth\": {\n        \"id\": \"uuid\",\n        \"name\": \"Booth Name\",\n        \"location\": \"Location\",\n        \"price\": 15000\n    }\n}"
+                            "body": "{\n    \"success\": true,\n    \"token\": \"jwt-booth-token\",\n    \"booth\": {\n        \"id\": \"uuid\",\n        \"name\": \"Booth Name\",\n        \"location\": \"Location\",\n        \"price\": 15000\n    }\n}"
                         },
                         {
                             "name": "Invalid Code",
@@ -168,7 +167,12 @@
                     "name": "Booth Check Session",
                     "request": {
                         "method": "GET",
-                        "header": [],
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{boothToken}}"
+                            }
+                        ],
                         "url": {
                             "raw": "{{baseUrl}}/api/auth/booth-login",
                             "host": [
@@ -180,14 +184,20 @@
                                 "booth-login"
                             ]
                         },
-                        "description": "Check if booth session is active.\n\n**Response:**\n- `authenticated` (boolean): Session status\n- `booth` (object): Booth information if authenticated"
+                        "description": "Check if booth session is active.\n\n**Headers:**\n- `Authorization`: Bearer booth token\n\n**Response:**\n- `authenticated` (boolean)\n- `booth` (object): Booth info if authenticated\n- `reason` (string): If session invalidated (e.g. `logged_in_elsewhere`)"
                     },
                     "response": [
                         {
                             "name": "Authenticated",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n    \"authenticated\": true,\n    \"booth\": {\n        \"booth_id\": \"uuid\",\n        \"booth_name\": \"Booth Name\"\n    }\n}"
+                            "body": "{\n    \"authenticated\": true,\n    \"booth\": {\n        \"id\": \"uuid\",\n        \"name\": \"Booth Name\"\n    }\n}"
+                        },
+                        {
+                            "name": "Logged In Elsewhere",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"authenticated\": false,\n    \"reason\": \"logged_in_elsewhere\"\n}"
                         }
                     ]
                 },
@@ -195,7 +205,12 @@
                     "name": "Booth Logout",
                     "request": {
                         "method": "DELETE",
-                        "header": [],
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{boothToken}}"
+                            }
+                        ],
                         "url": {
                             "raw": "{{baseUrl}}/api/auth/booth-login",
                             "host": [
@@ -207,7 +222,7 @@
                                 "booth-login"
                             ]
                         },
-                        "description": "Logout from booth session.\n\n**Response:**\n- Clears `chronosnap_booth_session` cookie"
+                        "description": "Logout from booth session.\n\n**Headers:**\n- `Authorization`: Bearer booth token"
                     },
                     "response": [
                         {
@@ -222,13 +237,18 @@
         },
         {
             "name": "Booth",
-            "description": "Booth information endpoints",
+            "description": "Booth information and settings endpoints",
             "item": [
                 {
                     "name": "Get Booth Info",
                     "request": {
                         "method": "GET",
-                        "header": [],
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{boothToken}}"
+                            }
+                        ],
                         "url": {
                             "raw": "{{baseUrl}}/api/booth/:id",
                             "host": [
@@ -242,30 +262,507 @@
                             "variable": [
                                 {
                                     "key": "id",
-                                    "value": "booth-uuid-here"
+                                    "value": "{{boothId}}"
                                 }
                             ]
                         },
-                        "description": "Get booth information by ID.\n\n**Authentication:** Booth JWT required (can only access own booth)\n\n**Path Parameters:**\n- `id` (UUID, required): Booth ID\n\n**Response:**\n- Returns booth details including name, location, price"
+                        "description": "Get booth information by ID.\n\n**Authentication:** Booth JWT required\n\n**Path Parameters:**\n- `id` (UUID): Booth ID"
                     },
                     "response": [
                         {
                             "name": "Success",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n    \"success\": true,\n    \"booth\": {\n        \"id\": \"uuid\",\n        \"name\": \"Booth Name\",\n        \"location\": \"Location\",\n        \"price\": 15000,\n        \"status\": \"active\"\n    }\n}"
+                            "body": "{\n    \"success\": true,\n    \"booth\": {\n        \"id\": \"uuid\",\n        \"name\": \"Booth Name\",\n        \"location\": \"Jakarta\",\n        \"price\": 15000,\n        \"status\": \"active\"\n    }\n}"
                         },
                         {
                             "name": "Unauthorized",
                             "status": "Unauthorized",
                             "code": 401,
                             "body": "{\n    \"error\": \"Authentication required\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Booth Settings",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{boothToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth/settings",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth",
+                                "settings"
+                            ]
+                        },
+                        "description": "Get booth settings (background, branding, event mode).\n\n**Authentication:** Booth JWT required"
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": true,\n    \"settings\": {\n        \"background_image\": null,\n        \"background_color\": \"#ffffff\",\n        \"countdown_seconds\": 3,\n        \"preview_seconds\": 5,\n        \"print_copies\": 1,\n        \"slideshow_enabled\": false,\n        \"brand_title\": \"ChronoSnap\",\n        \"event_mode\": false\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Update Booth Settings",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{boothToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth/settings",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth",
+                                "settings"
+                            ]
+                        },
+                        "description": "Update booth settings.\n\n**Authentication:** Booth JWT required\n\n**Request Body (all optional):**\n- `booth_id` (UUID, required): Must match authenticated booth\n- `background_image`, `background_color`, `countdown_seconds`, `preview_seconds`, `print_copies`, `slideshow_enabled`, `brand_logo_url`, `brand_title`, `brand_subtitle`, `brand_primary_color`, `brand_accent_color`, `event_mode`, `event_name`, `event_date`, `event_hashtag`, `event_splash_image`, `event_message`",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"booth_id\": \"{{boothId}}\",\n    \"background_color\": \"#000000\",\n    \"countdown_seconds\": 5,\n    \"brand_title\": \"My Photo Booth\"\n}"
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": true\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Send Heartbeat",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{boothToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth/heartbeat",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth",
+                                "heartbeat"
+                            ]
+                        },
+                        "description": "Report booth device online status. Called periodically.\n\n**Authentication:** Booth JWT required\n\n**Request Body (optional):**\n- `deviceName` (string): Custom device name",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"deviceName\": \"MacBook Pro - Booth 1\"\n}"
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": true,\n    \"timestamp\": \"2026-03-04T00:00:00.000Z\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Recent Photos",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{boothToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth/recent-photos?limit=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth",
+                                "recent-photos"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "10",
+                                    "description": "Max photos to return"
+                                }
+                            ]
+                        },
+                        "description": "Get recent completed session photos for slideshow.\n\n**Authentication:** Booth JWT required\n\n**Query Parameters:**\n- `limit` (number, default: 10): Max photos to return"
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"photos\": [\n        \"https://storage.supabase.co/photo1.jpg\",\n        \"https://storage.supabase.co/photo2.jpg\"\n    ]\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Booth Sessions",
+            "description": "Booth session profile management — sessions override booth-level defaults for pricing, timing, filters, branding, etc.",
+            "item": [
+                {
+                    "name": "List Booth Sessions",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth-sessions?boothId={{boothId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth-sessions"
+                            ],
+                            "query": [
+                                {
+                                    "key": "boothId",
+                                    "value": "{{boothId}}"
+                                }
+                            ]
+                        },
+                        "description": "List all booth sessions for a booth.\n\n**Query Parameters:**\n- `boothId` (UUID, required): Booth ID\n\n**Response includes:**\n- Session settings + frame assignments + photo_count"
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"data\": [\n        {\n            \"id\": \"uuid\",\n            \"name\": \"Default Session\",\n            \"is_active\": true,\n            \"price\": 15000,\n            \"countdown_seconds\": 3,\n            \"preview_seconds\": 5,\n            \"filter_enabled\": true,\n            \"photo_count\": 42\n        }\n    ]\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Booth Session",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth-sessions/:id",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth-sessions",
+                                ":id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "{{boothSessionId}}"
+                                }
+                            ]
+                        },
+                        "description": "Get a single booth session with its frame assignments.\n\n**Path Parameters:**\n- `id` (UUID): Session ID"
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"data\": {\n        \"id\": \"uuid\",\n        \"name\": \"Default Session\",\n        \"is_active\": true,\n        \"booth_session_frames\": []\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Create Booth Session",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth-sessions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth-sessions"
+                            ]
+                        },
+                        "description": "Create a new booth session profile.\n\n**Request Body:**\n- `boothId` (UUID, required)\n- `name` (string, required)\n- `frameIds` (string[], optional): Frames to assign\n- `price`, `countdown_seconds`, `preview_seconds`, `print_copies`, `filter_enabled`, `voucher_enabled`, `print_enabled` (all optional)",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"boothId\": \"{{boothId}}\",\n    \"name\": \"New Session\",\n    \"price\": 20000,\n    \"countdown_seconds\": 5,\n    \"filter_enabled\": true,\n    \"frameIds\": [\n        \"frame-uuid-1\"\n    ]\n}"
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Created",
+                            "status": "Created",
+                            "code": 201,
+                            "body": "{\n    \"data\": {\n        \"id\": \"uuid\",\n        \"name\": \"New Session\",\n        \"is_active\": false\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Update Booth Session",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth-sessions/:id",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth-sessions",
+                                ":id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "{{boothSessionId}}"
+                                }
+                            ]
+                        },
+                        "description": "Update a booth session settings.\n\n**Path Parameters:**\n- `id` (UUID): Session ID\n\n**Request Body:** Any updatable session fields",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Updated Session\",\n    \"price\": 25000,\n    \"filter_enabled\": false\n}"
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"data\": {\n        \"id\": \"uuid\",\n        \"name\": \"Updated Session\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Delete Booth Session",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth-sessions/:id",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth-sessions",
+                                ":id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "{{boothSessionId}}"
+                                }
+                            ]
+                        },
+                        "description": "Delete a booth session.\n\n**Note:** Cannot delete the currently active session.\n\n**Path Parameters:**\n- `id` (UUID): Session ID"
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": true\n}"
                         },
                         {
-                            "name": "Forbidden",
-                            "status": "Forbidden",
-                            "code": 403,
-                            "body": "{\n    \"error\": \"You can only access your own booth information\"\n}"
+                            "name": "Active Session",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "body": "{\n    \"error\": \"Cannot delete the active session. Activate another session first.\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Activate Booth Session",
+                    "request": {
+                        "method": "PUT",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth-sessions/:id/activate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth-sessions",
+                                ":id",
+                                "activate"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "{{boothSessionId}}"
+                                }
+                            ]
+                        },
+                        "description": "Activate a booth session (deactivates the current active one).\n\n**Path Parameters:**\n- `id` (UUID): Session ID to activate"
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"data\": {\n        \"id\": \"uuid\",\n        \"is_active\": true\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Duplicate Booth Session",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth-sessions/:id/duplicate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth-sessions",
+                                ":id",
+                                "duplicate"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "{{boothSessionId}}"
+                                }
+                            ]
+                        },
+                        "description": "Duplicate a booth session with all settings and frame assignments.\n\n**Path Parameters:**\n- `id` (UUID): Source session ID\n\n**Note:** Creates an inactive copy with \" (Copy)\" suffix"
+                    },
+                    "response": [
+                        {
+                            "name": "Created",
+                            "status": "Created",
+                            "code": 201,
+                            "body": "{\n    \"data\": {\n        \"id\": \"new-uuid\",\n        \"name\": \"Session Name (Copy)\",\n        \"is_active\": false\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Session Frames",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth-sessions/:id/frames",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth-sessions",
+                                ":id",
+                                "frames"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "{{boothSessionId}}"
+                                }
+                            ]
+                        },
+                        "description": "Get frames assigned to a booth session.\n\n**Path Parameters:**\n- `id` (UUID): Session ID"
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"data\": [\n        {\n            \"frame_id\": \"uuid\",\n            \"is_active\": true,\n            \"sort_order\": 0,\n            \"frames\": {\n                \"id\": \"uuid\",\n                \"name\": \"Frame 1\"\n            }\n        }\n    ]\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Replace Session Frames",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/booth-sessions/:id/frames",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "booth-sessions",
+                                ":id",
+                                "frames"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "{{boothSessionId}}"
+                                }
+                            ]
+                        },
+                        "description": "Replace all frame assignments for a booth session.\n\n**Path Parameters:**\n- `id` (UUID): Session ID\n\n**Request Body:**\n- `frames` (array, required): `[{ frameId, isActive, sortOrder }]`",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"frames\": [\n        {\n            \"frameId\": \"frame-uuid-1\",\n            \"isActive\": true,\n            \"sortOrder\": 0\n        },\n        {\n            \"frameId\": \"frame-uuid-2\",\n            \"isActive\": true,\n            \"sortOrder\": 1\n        }\n    ]\n}"
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"data\": []\n}"
                         }
                     ]
                 }
@@ -273,7 +770,7 @@
         },
         {
             "name": "Frames",
-            "description": "Frame management endpoints",
+            "description": "Frame template management endpoints",
             "item": [
                 {
                     "name": "List Frames",
@@ -290,14 +787,14 @@
                                 "frames"
                             ]
                         },
-                        "description": "Get list of available frames.\n\n**Authentication:** Optional (booth JWT)\n- Without auth: Returns only public/active frames\n- With booth auth: Returns public frames + booth-specific frames\n\n**Response:**\n- `frames` (array): List of frame objects"
+                        "description": "Get list of available frames.\n\n**Authentication:** Optional\n- Without auth: Public/active frames only\n- With booth auth: Includes booth-specific frames"
                     },
                     "response": [
                         {
                             "name": "Success",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n    \"success\": true,\n    \"frames\": [\n        {\n            \"id\": \"uuid\",\n            \"name\": \"Frame Name\",\n            \"image_url\": \"https://...\",\n            \"photo_slots\": [...],\n            \"is_active\": true,\n            \"is_public\": true,\n            \"canvas_width\": 1200,\n            \"canvas_height\": 1800\n        }\n    ]\n}"
+                            "body": "{\n    \"success\": true,\n    \"frames\": [\n        {\n            \"id\": \"uuid\",\n            \"name\": \"Frame Name\",\n            \"image_url\": \"https://...\",\n            \"photo_slots\": [\n                {\n                    \"id\": \"slot_1\",\n                    \"x\": 50,\n                    \"y\": 100,\n                    \"width\": 300,\n                    \"height\": 400\n                }\n            ],\n            \"is_active\": true,\n            \"canvas_width\": 600,\n            \"canvas_height\": 1050\n        }\n    ]\n}"
                         }
                     ]
                 },
@@ -311,10 +808,6 @@
                                 "value": "application/json"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"name\": \"New Frame\",\n    \"imageUrl\": \"https://example.com/frame.png\",\n    \"photoSlots\": [\n        {\n            \"id\": \"slot_1\",\n            \"x\": 100,\n            \"y\": 100,\n            \"width\": 300,\n            \"height\": 400,\n            \"rotation\": 0\n        }\n    ],\n    \"isActive\": true,\n    \"isPublic\": true,\n    \"canvasWidth\": 1200,\n    \"canvasHeight\": 1800\n}"
-                        },
                         "url": {
                             "raw": "{{baseUrl}}/api/frames",
                             "host": [
@@ -325,7 +818,11 @@
                                 "frames"
                             ]
                         },
-                        "description": "Create a new frame.\n\n**Authentication:** Admin session OR Booth JWT required\n\n**Request Body:**\n- `name` (string, required): Frame name\n- `imageUrl` (string, required): URL to frame image\n- `photoSlots` (array, required): Array of photo slot definitions\n- `isActive` (boolean): Whether frame is active\n- `isPublic` (boolean): Whether frame is public or booth-specific\n- `boothId` (UUID, optional): Assign to specific booth\n- `canvasWidth` (number): Canvas width in pixels\n- `canvasHeight` (number): Canvas height in pixels"
+                        "description": "Create a new frame template.\n\n**Authentication:** Admin or Booth JWT required\n\n**Request Body:**\n- `name` (string, required)\n- `imageUrl` (string, required): URL to frame image\n- `photoSlots` (array, required): Slot definitions\n- `isActive` (boolean)\n- `canvasWidth` / `canvasHeight` (number)",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"New Frame\",\n    \"imageUrl\": \"https://example.com/frame.png\",\n    \"photoSlots\": [\n        {\n            \"id\": \"slot_1\",\n            \"x\": 100,\n            \"y\": 100,\n            \"width\": 300,\n            \"height\": 400,\n            \"rotation\": 0\n        }\n    ],\n    \"isActive\": true,\n    \"canvasWidth\": 600,\n    \"canvasHeight\": 1050\n}"
+                        }
                     },
                     "response": [
                         {
@@ -333,12 +830,6 @@
                             "status": "OK",
                             "code": 200,
                             "body": "{\n    \"success\": true,\n    \"frame\": {\n        \"id\": \"uuid\",\n        \"name\": \"New Frame\"\n    }\n}"
-                        },
-                        {
-                            "name": "Validation Error",
-                            "status": "Bad Request",
-                            "code": 400,
-                            "body": "{\n    \"error\": \"Invalid input\",\n    \"details\": [...]\n}"
                         }
                     ]
                 },
@@ -352,10 +843,6 @@
                                 "value": "application/json"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"id\": \"frame-uuid-here\",\n    \"name\": \"Updated Frame Name\",\n    \"isActive\": false\n}"
-                        },
                         "url": {
                             "raw": "{{baseUrl}}/api/frames",
                             "host": [
@@ -366,14 +853,18 @@
                                 "frames"
                             ]
                         },
-                        "description": "Update an existing frame.\n\n**Authentication:** Admin session OR Booth JWT required\n\n**Request Body:**\n- `id` (UUID, required): Frame ID to update\n- Other fields are optional and will update if provided"
+                        "description": "Update an existing frame.\n\n**Request Body:**\n- `id` (UUID, required)\n- Other fields optional",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"id\": \"frame-uuid\",\n    \"name\": \"Updated Frame\",\n    \"isActive\": false\n}"
+                        }
                     },
                     "response": [
                         {
                             "name": "Success",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n    \"success\": true,\n    \"frame\": {...}\n}"
+                            "body": "{\n    \"success\": true,\n    \"frame\": {}\n}"
                         }
                     ]
                 },
@@ -383,7 +874,7 @@
                         "method": "DELETE",
                         "header": [],
                         "url": {
-                            "raw": "{{baseUrl}}/api/frames?id=frame-uuid-here&force=false",
+                            "raw": "{{baseUrl}}/api/frames?id={{frameId}}&force=false",
                             "host": [
                                 "{{baseUrl}}"
                             ],
@@ -394,17 +885,17 @@
                             "query": [
                                 {
                                     "key": "id",
-                                    "value": "frame-uuid-here",
-                                    "description": "Frame UUID to delete"
+                                    "value": "{{frameId}}",
+                                    "description": "Frame UUID"
                                 },
                                 {
                                     "key": "force",
                                     "value": "false",
-                                    "description": "Set to true to delete even if sessions reference this frame"
+                                    "description": "Force delete"
                                 }
                             ]
                         },
-                        "description": "Delete a frame.\n\n**Authentication:** Admin session OR Booth JWT required\n\n**Query Parameters:**\n- `id` (UUID, required): Frame ID to delete\n- `force` (boolean, optional): Force delete even if frame has session references\n\n**Note:** If frame has active sessions and force=false, returns 409 Conflict"
+                        "description": "Delete a frame.\n\n**Query Parameters:**\n- `id` (UUID, required)\n- `force` (boolean, optional): Delete even if sessions reference it"
                     },
                     "response": [
                         {
@@ -417,7 +908,7 @@
                             "name": "Has References",
                             "status": "Conflict",
                             "code": 409,
-                            "body": "{\n    \"error\": \"This frame has 5 session(s) associated with it. Use force=true to delete anyway.\",\n    \"hasReferences\": true,\n    \"sessionCount\": 5\n}"
+                            "body": "{\n    \"error\": \"This frame has 5 session(s). Use force=true.\",\n    \"hasReferences\": true,\n    \"sessionCount\": 5\n}"
                         }
                     ]
                 }
@@ -425,7 +916,7 @@
         },
         {
             "name": "Payments",
-            "description": "Payment processing endpoints",
+            "description": "Payment processing via Xendit (QRIS)",
             "item": [
                 {
                     "name": "Create Payment",
@@ -435,12 +926,12 @@
                             {
                                 "key": "Content-Type",
                                 "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{boothToken}}"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"frameId\": \"frame-uuid-here\"\n}"
-                        },
                         "url": {
                             "raw": "{{baseUrl}}/api/payment/create",
                             "host": [
@@ -452,7 +943,11 @@
                                 "create"
                             ]
                         },
-                        "description": "Create a new payment session.\n\n**Authentication:** Booth JWT required\n\n**Request Body:**\n- `frameId` (UUID, required): Selected frame ID\n\n**Note:** Price is determined server-side from booth settings (client cannot manipulate price)\n\n**Response:**\n- Creates Xendit invoice\n- Returns invoice URL for QR code display"
+                        "description": "Create a Xendit QRIS invoice for a session.\n\n**Authentication:** Booth JWT required\n\n**Request Body:**\n- `frameId` (UUID, required)\n\n**Note:** Price is determined server-side from booth/session settings",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"frameId\": \"{{frameId}}\"\n}"
+                        }
                     },
                     "response": [
                         {
@@ -460,12 +955,6 @@
                             "status": "OK",
                             "code": 200,
                             "body": "{\n    \"success\": true,\n    \"sessionId\": \"uuid\",\n    \"paymentId\": \"uuid\",\n    \"invoiceUrl\": \"https://checkout.xendit.co/...\",\n    \"amount\": 15000\n}"
-                        },
-                        {
-                            "name": "Unauthorized",
-                            "status": "Unauthorized",
-                            "code": 401,
-                            "body": "{\n    \"error\": \"Booth authentication required\"\n}"
                         }
                     ]
                 },
@@ -475,7 +964,7 @@
                         "method": "GET",
                         "header": [],
                         "url": {
-                            "raw": "{{baseUrl}}/api/payment/status?sessionId=session-uuid-here",
+                            "raw": "{{baseUrl}}/api/payment/status?sessionId={{sessionId}}",
                             "host": [
                                 "{{baseUrl}}"
                             ],
@@ -487,18 +976,24 @@
                             "query": [
                                 {
                                     "key": "sessionId",
-                                    "value": "session-uuid-here"
+                                    "value": "{{sessionId}}"
                                 }
                             ]
                         },
-                        "description": "Check payment status for a session.\n\n**Query Parameters:**\n- `sessionId` (UUID, required): Session ID\n\n**Response:**\n- Checks with Xendit and updates local status\n- Returns current payment status"
+                        "description": "Check payment status for a session (used for polling).\n\n**Query Parameters:**\n- `sessionId` (UUID, required)"
                     },
                     "response": [
                         {
-                            "name": "Success",
+                            "name": "Paid",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n    \"success\": true,\n    \"status\": \"paid\",\n    \"paymentId\": \"uuid\",\n    \"invoiceId\": \"xendit-invoice-id\",\n    \"amount\": 15000\n}"
+                            "body": "{\n    \"success\": true,\n    \"status\": \"paid\",\n    \"paymentId\": \"uuid\",\n    \"amount\": 15000\n}"
+                        },
+                        {
+                            "name": "Pending",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": true,\n    \"status\": \"pending\"\n}"
                         },
                         {
                             "name": "Not Found",
@@ -509,7 +1004,7 @@
                     ]
                 },
                 {
-                    "name": "Webhook (Xendit Callback)",
+                    "name": "Xendit Webhook",
                     "request": {
                         "method": "POST",
                         "header": [
@@ -522,10 +1017,6 @@
                                 "value": "your-xendit-webhook-token"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"id\": \"xendit-invoice-id\",\n    \"external_id\": \"chrono_session-uuid_1234567890\",\n    \"status\": \"PAID\"\n}"
-                        },
                         "url": {
                             "raw": "{{baseUrl}}/api/payment/webhook",
                             "host": [
@@ -537,7 +1028,11 @@
                                 "webhook"
                             ]
                         },
-                        "description": "Xendit webhook callback endpoint.\n\n**Authentication:** `x-callback-token` header must match configured webhook token\n\n**Request Body (from Xendit):**\n- `id`: Xendit invoice ID\n- `external_id`: Custom external ID containing session ID\n- `status`: Payment status (PAID, EXPIRED, FAILED, etc.)\n\n**Note:** This endpoint is called by Xendit, not the client"
+                        "description": "Xendit webhook callback.\n\n**⚠️ Called by Xendit, not the client**\n\n**Headers:**\n- `x-callback-token`: Xendit webhook verification token\n\n**Request Body (from Xendit):**\n- `id`: Xendit invoice ID\n- `external_id`: Contains session ID\n- `status`: PAID, EXPIRED, FAILED",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"id\": \"xendit-invoice-id\",\n    \"external_id\": \"chrono_session-uuid_1234567890\",\n    \"status\": \"PAID\"\n}"
+                        }
                     },
                     "response": [
                         {
@@ -564,10 +1059,6 @@
                                 "value": "application/json"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"sessionId\": \"session-uuid-here\"\n}"
-                        },
                         "url": {
                             "raw": "{{baseUrl}}/api/payment/simulate",
                             "host": [
@@ -579,7 +1070,11 @@
                                 "simulate"
                             ]
                         },
-                        "description": "Simulate a successful payment (for testing only).\n\n**⚠️ Testing Only:** This endpoint bypasses Xendit and directly marks a payment as paid.\n\n**Request Body:**\n- `sessionId` (UUID, required): Session ID to mark as paid"
+                        "description": "Simulate a payment for testing.\n\n**⚠️ Testing Only**\n\n**Request Body:**\n- `sessionId` (UUID, required)",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"sessionId\": \"{{sessionId}}\"\n}"
+                        }
                     },
                     "response": [
                         {
@@ -593,14 +1088,131 @@
             ]
         },
         {
+            "name": "Sessions",
+            "description": "Photo session lifecycle endpoints",
+            "item": [
+                {
+                    "name": "Complete Session",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/session/complete",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "session",
+                                "complete"
+                            ]
+                        },
+                        "description": "Mark a session as completed with final image.\n\n**Request Body (validated with Zod):**\n- `sessionId` (UUID, required)\n- `finalImageUrl` (URL, required): Composited strip URL\n- `photosUrls` (URL[], optional): Individual photo URLs\n- `videoUrl` (URL, optional): GIF/video URL",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"sessionId\": \"{{sessionId}}\",\n    \"finalImageUrl\": \"https://storage.supabase.co/.../final.jpg\",\n    \"photosUrls\": [\n        \"https://storage.supabase.co/.../photo_0.jpg\"\n    ],\n    \"videoUrl\": \"https://storage.supabase.co/.../animation.gif\"\n}"
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": true\n}"
+                        },
+                        {
+                            "name": "Validation Error",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "body": "{\n    \"error\": \"Invalid uuid\"\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Vouchers",
+            "description": "Voucher validation endpoints",
+            "item": [
+                {
+                    "name": "Validate Voucher",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{boothToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/voucher/validate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "voucher",
+                                "validate"
+                            ]
+                        },
+                        "description": "Validate a voucher code and calculate discount.\n\n**Authentication:** Booth JWT required\n\n**Request Body:**\n- `code` (string, required): Voucher code\n\n**Checks:** Active status, expiration, usage limits\n**Discount types:** `fixed` (IDR amount) or `percentage`",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"code\": \"DISCOUNT50\"\n}"
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Valid",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": true,\n    \"valid\": true,\n    \"voucher\": {\n        \"id\": \"uuid\",\n        \"code\": \"DISCOUNT50\",\n        \"discount_amount\": 50,\n        \"discount_type\": \"percentage\"\n    },\n    \"original_price\": 15000,\n    \"discount_value\": 7500,\n    \"final_price\": 7500\n}"
+                        },
+                        {
+                            "name": "Invalid",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": false,\n    \"valid\": false,\n    \"error\": \"Invalid voucher code\"\n}"
+                        },
+                        {
+                            "name": "Expired",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": false,\n    \"valid\": false,\n    \"error\": \"This voucher has expired\"\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
             "name": "Upload",
-            "description": "File upload endpoints",
+            "description": "File upload to Supabase Storage",
             "item": [
                 {
                     "name": "Upload File",
                     "request": {
                         "method": "POST",
                         "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/upload",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "upload"
+                            ]
+                        },
+                        "description": "Upload an image file to Supabase Storage.\n\n**Authentication:** Admin session required for `frames` folder\n\n**Request Body (multipart/form-data):**\n- `file` (File, required): Image file (PNG, JPG, WEBP)\n- `folder` (string, optional): Target folder\n\n**Constraints:** Max 5MB, allowed types: PNG, JPG, JPEG, WEBP",
                         "body": {
                             "mode": "formdata",
                             "formdata": [
@@ -613,40 +1225,117 @@
                                     "key": "folder",
                                     "value": "frames",
                                     "type": "text",
-                                    "description": "Upload folder (frames requires admin auth)"
+                                    "description": "Upload folder"
                                 }
                             ]
-                        },
-                        "url": {
-                            "raw": "{{baseUrl}}/api/upload",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "upload"
-                            ]
-                        },
-                        "description": "Upload an image file to Supabase Storage.\n\n**Authentication:** Admin session required for `frames` folder\n\n**Request Body (multipart/form-data):**\n- `file` (File, required): Image file to upload\n- `folder` (string, optional): Target folder (default: 'frames')\n\n**Constraints:**\n- Allowed types: PNG, JPG, JPEG, WEBP\n- Max size: 5MB\n\n**Response:**\n- Returns public URL of uploaded file"
+                        }
                     },
                     "response": [
                         {
                             "name": "Success",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n    \"success\": true,\n    \"url\": \"https://your-supabase.storage.../frames/1234567890_abc123.png\",\n    \"fileName\": \"frames/1234567890_abc123.png\"\n}"
+                            "body": "{\n    \"success\": true,\n    \"url\": \"https://supabase.storage.../frames/abc123.png\",\n    \"fileName\": \"frames/abc123.png\"\n}"
                         },
                         {
-                            "name": "Invalid File Type",
+                            "name": "Invalid Type",
                             "status": "Bad Request",
                             "code": 400,
                             "body": "{\n    \"error\": \"Invalid file type. Allowed: PNG, JPG, WEBP\"\n}"
                         },
                         {
-                            "name": "File Too Large",
+                            "name": "Too Large",
                             "status": "Bad Request",
                             "code": 400,
                             "body": "{\n    \"error\": \"File too large. Maximum size: 5MB\"\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Health",
+            "description": "System health and monitoring",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/health",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "health"
+                            ]
+                        },
+                        "description": "Check API and database health.\n\n**No authentication required**"
+                    },
+                    "response": [
+                        {
+                            "name": "Healthy",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"status\": \"healthy\",\n    \"timestamp\": \"2026-03-04T00:00:00.000Z\",\n    \"version\": \"0.1.0\"\n}"
+                        },
+                        {
+                            "name": "Unhealthy",
+                            "status": "Service Unavailable",
+                            "code": 503,
+                            "body": "{\n    \"status\": \"unhealthy\",\n    \"error\": \"Database connection failed\"\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Admin",
+            "description": "Admin-only endpoints for platform management",
+            "item": [
+                {
+                    "name": "List Device Status",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "X-Admin-Token",
+                                "value": "{{adminToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/admin/devices?organization_id=&status=all",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "devices"
+                            ],
+                            "query": [
+                                {
+                                    "key": "organization_id",
+                                    "value": "",
+                                    "description": "Filter by organization (optional)"
+                                },
+                                {
+                                    "key": "status",
+                                    "value": "all",
+                                    "description": "online | offline | all"
+                                }
+                            ]
+                        },
+                        "description": "Get status of all booth devices.\n\n**Authentication:** Admin JWT or API key required\n\n**Query Parameters:**\n- `organization_id` (string, optional): Filter by org\n- `status` (string, optional): `online` | `offline` | `all` (default: `all`)\n\n**Device status:** `online` (heartbeat < 2min ago), `offline`, `never_connected`"
+                    },
+                    "response": [
+                        {
+                            "name": "Success",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n    \"success\": true,\n    \"summary\": {\n        \"total\": 5,\n        \"online\": 3,\n        \"offline\": 1,\n        \"never_connected\": 1\n    },\n    \"devices\": [\n        {\n            \"booth_id\": \"uuid\",\n            \"booth_name\": \"Booth 1\",\n            \"status\": \"online\",\n            \"device_name\": \"MacBook Pro\",\n            \"device_ip\": \"192.168.1.10\",\n            \"last_heartbeat\": \"2026-03-04T00:00:00.000Z\"\n        }\n    ],\n    \"timestamp\": \"2026-03-04T00:00:00.000Z\"\n}"
                         }
                     ]
                 }

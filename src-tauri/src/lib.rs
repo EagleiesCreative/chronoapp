@@ -1,6 +1,7 @@
 mod printer;
 mod camera;
 mod filesystem;
+mod canon;
 
 use camera::CameraState;
 

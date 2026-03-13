@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInvoice } from '@/lib/xendit';
 import { getPaymentBySessionId, updatePaymentStatus, updateSession } from '@/lib/supabase';
+import { getBoothFromRequest } from '@/lib/booth-auth';
 
 export async function GET(request: NextRequest) {
     try {
+        // Require booth authentication
+        const boothSession = await getBoothFromRequest(request);
+        if (!boothSession) {
+            return NextResponse.json(
+                { error: 'Booth authentication required' },
+                { status: 401 }
+            );
+        }
+
         let sessionId: string | null = null;
 
         try {

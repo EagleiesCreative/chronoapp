@@ -10,15 +10,18 @@ use std::sync::mpsc::{self, Sender, Receiver};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+use crate::canon::CanonSdk;
 use tauri::State;
+
 
 /// Messages sent to the camera thread
 enum CameraCommand {
-    Start { device_id: Option<String>, reply: Sender<Result<CameraStatus, String>> },
+    Start { device_id: String, is_canon: bool, reply: Sender<Result<CameraStatus, String>> },
     Stop { reply: Sender<Result<(), String>> },
     Capture { quality: u8, reply: Sender<Result<String, String>> },
     GetStatus { reply: Sender<Result<CameraStatus, String>> },
 }
+
 
 /// Camera state managed by Tauri - holds a channel to the camera thread
 pub struct CameraState {
@@ -51,52 +54,68 @@ pub struct CameraStatus {
 /// Camera thread that owns the non-Send Camera
 fn camera_thread(receiver: Receiver<CameraCommand>) {
     let mut camera: Option<Camera> = None;
+    let canon_sdk = CanonSdk::load().ok();
+    // For now, we only hold a boolean for Canon since we don't have full FFI implementation yet
+    let mut is_canon_active = false;
+
     
     while let Ok(cmd) = receiver.recv() {
         match cmd {
-            CameraCommand::Start { device_id, reply } => {
+            CameraCommand::Start { device_id, is_canon, reply } => {
                 // Stop existing camera if any
                 if let Some(mut cam) = camera.take() {
                     cam.stop_stream().ok();
                 }
+                is_canon_active = is_canon;
                 
                 let result = (|| -> Result<CameraStatus, String> {
-                    let index = match device_id {
-                        Some(id) => {
-                            let idx: u32 = id.parse().unwrap_or(0);
-                            CameraIndex::Index(idx)
+                    if is_canon {
+                        // TODO: Implement actual Canon session opening
+                        // For now we assume success if SDK is loaded
+                        if canon_sdk.is_some() {
+                            Ok(CameraStatus {
+                                is_active: true,
+                                device_name: Some(format!("Canon Camera ({})", device_id)),
+                                resolution: Some((5184, 3456)), // Example DSLR res
+                            })
+                        } else {
+                            Err("Canon SDK not loaded".to_string())
                         }
-                        None => CameraIndex::Index(0),
-                    };
-                    
-                    let requested = RequestedFormat::new::<RgbFormat>(
-                        RequestedFormatType::HighestResolution(Resolution::new(1920, 1080))
-                    );
-                    
-                    let mut cam = Camera::new(index, requested)
-                        .map_err(|e| format!("Failed to create camera: {}", e))?;
-                    
-                    cam.open_stream()
-                        .map_err(|e| format!("Failed to open camera stream: {}", e))?;
-                    
-                    let resolution = cam.resolution();
-                    let device_name = cam.info().human_name().to_string();
-                    
-                    let status = CameraStatus {
-                        is_active: true,
-                        device_name: Some(device_name),
-                        resolution: Some((resolution.width(), resolution.height())),
-                    };
-                    
-                    camera = Some(cam);
-                    Ok(status)
+                    } else {
+                        let idx: u32 = device_id.parse().unwrap_or(0);
+                        let index = CameraIndex::Index(idx);
+                        
+                        let requested = RequestedFormat::new::<RgbFormat>(
+                            RequestedFormatType::HighestResolution(Resolution::new(1920, 1080))
+                        );
+                        
+                        let mut cam = Camera::new(index, requested)
+                            .map_err(|e| format!("Failed to create camera: {}", e))?;
+                        
+                        cam.open_stream()
+                            .map_err(|e| format!("Failed to open camera stream: {}", e))?;
+                        
+                        let resolution = cam.resolution();
+                        let device_name = cam.info().human_name().to_string();
+                        
+                        let status = CameraStatus {
+                            is_active: true,
+                            device_name: Some(device_name),
+                            resolution: Some((resolution.width(), resolution.height())),
+                        };
+                        
+                        camera = Some(cam);
+                        Ok(status)
+                    }
                 })();
                 
                 reply.send(result).ok();
             }
             
             CameraCommand::Stop { reply } => {
-                if let Some(mut cam) = camera.take() {
+                if is_canon_active {
+                    is_canon_active = false;
+                } else if let Some(mut cam) = camera.take() {
                     cam.stop_stream().ok();
                 }
                 reply.send(Ok(())).ok();
@@ -104,46 +123,57 @@ fn camera_thread(receiver: Receiver<CameraCommand>) {
             
             CameraCommand::Capture { quality, reply } => {
                 let result = (|| -> Result<String, String> {
-                    let cam = camera.as_mut()
-                        .ok_or_else(|| "Camera not started".to_string())?;
-                    
-                    let frame = cam.frame()
-                        .map_err(|e| format!("Failed to capture frame: {}", e))?;
-                    
-                    // Use decode_image which properly handles format conversion
-                    let img = frame.decode_image::<RgbFormat>()
-                        .map_err(|e| format!("Failed to decode frame: {}", e))?;
-                    
-                    let mut jpeg_buffer = Cursor::new(Vec::new());
-                    
-                    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buffer, quality)
-                        .encode_image(&img)
-                        .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
-                    
-                    let base64_data = STANDARD.encode(jpeg_buffer.into_inner());
-                    let data_url = format!("data:image/jpeg;base64,{}", base64_data);
-                    
-                    Ok(data_url)
+                    if is_canon_active {
+                        // TODO: Implement Canon native capture
+                        Err("Canon native capture not yet implemented (requires framework)".to_string())
+                    } else if let Some(cam) = camera.as_mut() {
+                        let frame = cam.frame()
+                            .map_err(|e| format!("Failed to capture frame: {}", e))?;
+                        
+                        let img = frame.decode_image::<RgbFormat>()
+                            .map_err(|e| format!("Failed to decode frame: {}", e))?;
+                        
+                        let mut jpeg_buffer = Cursor::new(Vec::new());
+                        
+                        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buffer, quality)
+                            .encode_image(&img)
+                            .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
+                        
+                        let base64_data = STANDARD.encode(jpeg_buffer.into_inner());
+                        let data_url = format!("data:image/jpeg;base64,{}", base64_data);
+                        
+                        Ok(data_url)
+                    } else {
+                        Err("Camera not started".to_string())
+                    }
                 })();
                 
                 reply.send(result).ok();
             }
             
             CameraCommand::GetStatus { reply } => {
-                let status = match &camera {
-                    Some(cam) => {
-                        let resolution = cam.resolution();
-                        CameraStatus {
-                            is_active: true,
-                            device_name: Some(cam.info().human_name().to_string()),
-                            resolution: Some((resolution.width(), resolution.height())),
-                        }
+                let status = if is_canon_active {
+                    CameraStatus {
+                        is_active: true,
+                        device_name: Some("Canon Camera".to_string()),
+                        resolution: Some((5184, 3456)),
                     }
-                    None => CameraStatus {
-                        is_active: false,
-                        device_name: None,
-                        resolution: None,
-                    },
+                } else {
+                    match &camera {
+                        Some(cam) => {
+                            let resolution = cam.resolution();
+                            CameraStatus {
+                                is_active: true,
+                                device_name: Some(cam.info().human_name().to_string()),
+                                resolution: Some((resolution.width(), resolution.height())),
+                            }
+                        }
+                        None => CameraStatus {
+                            is_active: false,
+                            device_name: None,
+                            resolution: None,
+                        },
+                    }
                 };
                 reply.send(Ok(status)).ok();
             }
@@ -174,38 +204,54 @@ fn get_or_create_sender(state: &CameraState) -> Result<Sender<CameraCommand>, St
 pub fn list_cameras() -> Result<Vec<CameraDevice>, String> {
     log::info!("Listing available cameras");
     
-    let devices = nokhwa::query(nokhwa::utils::ApiBackend::Auto)
-        .map_err(|e| format!("Failed to query cameras: {}", e))?;
+    let mut cameras = Vec::new();
+
+    // 1. Get system cameras
+    if let Ok(devices) = nokhwa::query(nokhwa::utils::ApiBackend::Auto) {
+        for info in devices {
+            cameras.push(CameraDevice {
+                id: info.index().to_string(),
+                name: format!("{} (System)", info.human_name()),
+            });
+        }
+    }
     
-    let cameras: Vec<CameraDevice> = devices
-        .iter()
-        .map(|info| CameraDevice {
-            id: info.index().to_string(),
-            name: info.human_name().to_string(),
-        })
-        .collect();
+    // 2. Get Canon cameras if SDK is available
+    if let Ok(sdk) = CanonSdk::load() {
+        if let Ok(canon_devices) = sdk.list_cameras() {
+            for cam in canon_devices {
+                cameras.push(CameraDevice {
+                    id: cam.id,
+                    name: format!("{} (Canon SDK)", cam.name),
+                });
+            }
+        }
+    }
     
     log::info!("Found {} cameras", cameras.len());
     Ok(cameras)
 }
 
+
 /// Start the camera with specified device ID
 #[tauri::command]
 pub fn start_camera(
     state: State<'_, CameraState>,
-    device_id: Option<String>,
+    device_id: String,
 ) -> Result<CameraStatus, String> {
-    log::info!("Starting camera with device_id: {:?}", device_id);
+    log::info!("Starting camera with device_id: {}", device_id);
     
+    let is_canon = device_id.starts_with("canon_");
     let sender = get_or_create_sender(&state)?;
     let (reply_tx, reply_rx) = mpsc::channel();
     
-    sender.send(CameraCommand::Start { device_id, reply: reply_tx })
+    sender.send(CameraCommand::Start { device_id, is_canon, reply: reply_tx })
         .map_err(|e| format!("Failed to send command: {}", e))?;
     
     reply_rx.recv_timeout(Duration::from_secs(5))
         .map_err(|e| format!("Camera command timeout: {}", e))?
 }
+
 
 /// Stop the camera
 #[tauri::command]

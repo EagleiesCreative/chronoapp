@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
+import { getBoothFromRequest } from '@/lib/booth-auth';
 
 const completeSessionSchema = z.object({
     sessionId: z.string().uuid(),
@@ -12,9 +13,19 @@ const completeSessionSchema = z.object({
 /**
  * POST /api/session/complete
  * Mark a session as completed with final image and optional video
+ * SECURITY: Requires booth JWT auth + session ownership verification
  */
 export async function POST(request: NextRequest) {
     try {
+        // Require booth authentication
+        const boothSession = await getBoothFromRequest(request);
+        if (!boothSession) {
+            return NextResponse.json(
+                { error: 'Booth authentication required' },
+                { status: 401 }
+            );
+        }
+
         const body = await request.json();
 
         const validation = completeSessionSchema.safeParse(body);

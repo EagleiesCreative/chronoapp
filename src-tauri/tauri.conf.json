@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "ChronoSnap 2",
+  "productName": "Framr Studio",
   "version": "0.1.0",
   "identifier": "com.chronosnap.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ChronoSnap 2",
+        "title": "Framr Studio",
         "width": 1280,
         "height": 720,
         "resizable": true,

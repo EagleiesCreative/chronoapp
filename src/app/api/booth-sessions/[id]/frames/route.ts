@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getBoothFromRequest } from '@/lib/booth-auth';
 
 /**
  * GET /api/booth-sessions/[id]/frames
  * Get frames assigned to a booth session
+ * SECURITY: Requires booth JWT auth
  */
 export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const boothAuth = await getBoothFromRequest(req);
+        if (!boothAuth) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+
         const { id } = await params;
 
         const { data, error } = await supabase
@@ -37,6 +44,11 @@ export async function PUT(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const boothAuth = await getBoothFromRequest(req);
+        if (!boothAuth) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+
         const { id } = await params;
         const body = await req.json();
         const { frames } = body;
