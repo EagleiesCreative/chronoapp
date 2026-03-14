@@ -147,3 +147,117 @@ pub fn print_photo(image_data: String, printer_name: Option<String>) -> Result<S
         None => Err("No printer found".to_string()),
     }
 }
+
+/// Print job info returned to the frontend
+#[derive(Debug, Serialize)]
+pub struct PrintJobInfo {
+    pub id: String,
+    pub user: String,
+    pub size: String,
+    pub date: String,
+}
+
+/// Get the active print queue for a specific printer
+#[command]
+pub fn get_print_queue(printer_name: String) -> Result<Vec<PrintJobInfo>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        
+        // Execute lpstat -W not-completed -o printer_name
+        let output = Command::new("lpstat")
+            .arg("-W")
+            .arg("not-completed")
+            .arg("-o")
+            .arg(&printer_name)
+            .output()
+            .map_err(|e| format!("Failed to execute lpstat: {}", e))?;
+            
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // It's normal for lpstat to return cleanly with empty output or minor errors if queue is empty
+            if stderr.contains("not found") {
+                return Err(format!("Printer queue not found: {}", stderr));
+            }
+        }
+        
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut jobs = Vec::new();
+        
+        for line in stdout.lines() {
+            // Example output: 
+            // Brother_DCP_T710W-123  user  1024   Thu 14 Mar 12:00:00 2026
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 4 {
+                jobs.push(PrintJobInfo {
+                    id: parts[0].to_string(),
+                    user: parts[1].to_string(),
+                    size: parts[2].to_string(),
+                    date: parts[3..].join(" "),
+                });
+            }
+        }
+        
+        Ok(jobs)
+    }
+    
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Print queue management is currently only supported on macOS".to_string())
+    }
+}
+
+/// Clear all pending jobs for a specific printer
+#[command]
+pub fn clear_print_queue(printer_name: String) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        
+        // Execute cancel -a printer_name
+        let output = Command::new("cancel")
+            .arg("-a")
+            .arg(&printer_name)
+            .output()
+            .map_err(|e| format!("Failed to execute cancel: {}", e))?;
+            
+        if output.status.success() {
+            Ok(format!("Cleared print queue for {}", printer_name))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("Failed to clear queue: {}", stderr))
+        }
+    }
+    
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Print queue management is currently only supported on macOS".to_string())
+    }
+}
+
+/// Forcefully resume a paused printer
+#[command]
+pub fn resume_printer(printer_name: String) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        
+        // Execute cupsenable printer_name
+        let output = Command::new("cupsenable")
+            .arg(&printer_name)
+            .output()
+            .map_err(|e| format!("Failed to execute cupsenable: {}", e))?;
+            
+        if output.status.success() {
+            Ok(format!("Resumed printer {}", printer_name))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("Failed to resume printer: {}", stderr))
+        }
+    }
+    
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Printer resume is currently only supported on macOS".to_string())
+    }
+}

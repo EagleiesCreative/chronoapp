@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://*.supabase.co https://chronosnap.eagleies.com blob:; connect-src 'self' data: blob: http://localhost:3000 ws://localhost:3000 https://*.supabase.co https://api.xendit.co https://chronosnap.eagleies.com wss://*.supabase.co; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob:;"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: http://localhost:3030 https://*.supabase.co https://chronosnap.eagleies.com blob:; connect-src 'self' data: blob: http://localhost:3000 ws://localhost:3000 https://*.supabase.co https://api.xendit.co https://chronosnap.eagleies.com wss://*.supabase.co; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob:;"
     }
   },
   "bundle": {

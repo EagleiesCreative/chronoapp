@@ -104,14 +104,16 @@ export function CameraSelector() {
         setCameraError(null);
 
         try {
-            // Start the camera in the backend
-            const status = await invoke('start_camera', { device_id: selectedCameraId });
-            console.log('Camera started:', status);
+            const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
 
-            // For non-Canon cameras, we can still use browser preview if we want
-            // but for unified experience we'll use base64 preview frames from backend
-            // For now, let's stick to browser preview for system cams if possible
-            if (!selectedCameraId.startsWith('canon_')) {
+            if (isTauri) {
+                // Start the camera in the backend
+                const status = await invoke('start_camera', { device_id: selectedCameraId });
+                console.log('Camera started:', status);
+                
+                // Keep previewStream null so the UI switches to the MJPEG img tag
+                setPreviewStream(null);
+            } else {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         deviceId: { exact: selectedCameraId },
@@ -126,15 +128,10 @@ export function CameraSelector() {
                     videoRef.current.srcObject = stream;
                     await videoRef.current.play();
                 }
-            } else {
-                // For Canon, we'd need a polling mechanism to get preview frames
-                // This will be implemented next
-                setCameraTestStatus('success');
             }
-
+            
             setCameraTestStatus('success');
         } catch (error) {
-
             console.error('Camera test failed:', error);
             setCameraTestStatus('error');
             if (error instanceof Error) {
@@ -252,13 +249,21 @@ export function CameraSelector() {
                 {/* Camera preview */}
                 {isTesting && (
                     <div className="relative rounded-lg overflow-hidden bg-muted aspect-video">
-                        <video
-                            ref={videoRef}
-                            autoPlay
-                            playsInline
-                            muted
-                            className="w-full h-full object-cover"
-                        />
+                        {previewStream ? (
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full h-full object-cover"
+                            />
+                        ) : (
+                            <img 
+                                src={`http://localhost:3030/stream?t=${Date.now()}`} 
+                                alt="Camera Stream"
+                                className="w-full h-full object-cover"
+                            />
+                        )}
                         {/* Status overlay */}
                         {cameraTestStatus === 'success' && (
                             <div className="absolute top-3 right-3 bg-green-500/90 text-white px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">

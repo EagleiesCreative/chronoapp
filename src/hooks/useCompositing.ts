@@ -16,12 +16,88 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
         async function compositeImages() {
             if (!selectedFrame || capturedPhotos.length === 0 || !canvasRef.current) return;
 
+            const canvasWidth = selectedFrame.canvas_width || 600;
+            const canvasHeight = selectedFrame.canvas_height || 1050;
+
+            // First, check if we are running in Tauri and can use the fast Rust backend
+            let isTauri = false;
+            let invoke: any = null;
+            try {
+                const tauriApi = await import('@tauri-apps/api/core');
+                invoke = tauriApi.invoke;
+                isTauri = true;
+            } catch (err) {
+                // Not in Tauri
+            }
+
+            if (isTauri && invoke) {
+                try {
+                    // Gather the data for Rust
+                    
+                    // 1. Get the base64 of the frame PNG
+                    let frameBase64: string | undefined = undefined;
+                    if (selectedFrame.image_url) {
+                        try {
+                            const cachedUrl = await getCachedImageUrl(selectedFrame.image_url);
+                            const urlToUse = cachedUrl || getAssetUrl(selectedFrame.image_url);
+                            
+                            // Fetch the image as blob, then convert to base64
+                            const response = await fetch(urlToUse);
+                            const blob = await response.blob();
+                            
+                            // Only set if we actually got an image back
+                            if (blob.type.startsWith('image/')) {
+                                frameBase64 = await new Promise<string>((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                        if (typeof reader.result === 'string') {
+                                            resolve(reader.result);
+                                        } else {
+                                            reject(new Error("Failed to convert frame to base64"));
+                                        }
+                                    };
+                                    reader.onerror = reject;
+                                    reader.readAsDataURL(blob);
+                                });
+                            }
+                        } catch (err) {
+                            console.error("Failed to load frame image for Rust backend:", err);
+                        }
+                    }
+
+                    // 2. Format the payload
+                    const req = {
+                        frame_base64: frameBase64,
+                        frame_width: canvasWidth,
+                        frame_height: canvasHeight,
+                        photos_base64: capturedPhotos.map(p => p.dataUrl),
+                        photo_slots: selectedFrame.photo_slots || [],
+                        filter: selectedFilter || 'none',
+                        event_hashtag: booth?.event_mode && booth?.event_hashtag ? booth.event_hashtag : undefined
+                    };
+
+                    // 3. Call Rust
+                    const result: { final_base64: string } = await invoke('composite_image_rust', { req });
+                    
+                    if (result && result.final_base64) {
+                        setCompositeImage(result.final_base64);
+                        setFinalImage(result.final_base64);
+                        setIsCompositing(false);
+                        return; // Successfully composited in Rust!
+                    }
+                } catch (err) {
+                    console.error("Rust compositing failed, falling back to Canvas:", err);
+                    // Fall through to Canvas method
+                }
+            }
+
+            // ==========================================
+            // FALLBACK: HTML5 Canvas Compositing
+            // ==========================================
+            
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
-
-            const canvasWidth = selectedFrame.canvas_width || 600;
-            const canvasHeight = selectedFrame.canvas_height || 1050;
 
             canvas.width = canvasWidth;
             canvas.height = canvasHeight;

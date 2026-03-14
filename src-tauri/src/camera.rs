@@ -26,12 +26,14 @@ enum CameraCommand {
 /// Camera state managed by Tauri - holds a channel to the camera thread
 pub struct CameraState {
     sender: Mutex<Option<Sender<CameraCommand>>>,
+    frame_tx: crossbeam_channel::Sender<Vec<u8>>,
 }
 
-impl Default for CameraState {
-    fn default() -> Self {
+impl CameraState {
+    pub fn new(frame_tx: crossbeam_channel::Sender<Vec<u8>>) -> Self {
         Self {
             sender: Mutex::new(None),
+            frame_tx,
         }
     }
 }
@@ -52,130 +54,153 @@ pub struct CameraStatus {
 }
 
 /// Camera thread that owns the non-Send Camera
-fn camera_thread(receiver: Receiver<CameraCommand>) {
+fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel::Sender<Vec<u8>>) {
     let mut camera: Option<Camera> = None;
     let canon_sdk = CanonSdk::load().ok();
     // For now, we only hold a boolean for Canon since we don't have full FFI implementation yet
     let mut is_canon_active = false;
 
     
-    while let Ok(cmd) = receiver.recv() {
-        match cmd {
-            CameraCommand::Start { device_id, is_canon, reply } => {
-                // Stop existing camera if any
-                if let Some(mut cam) = camera.take() {
-                    cam.stop_stream().ok();
+    while let Ok(cmd) = receiver.recv_timeout(if camera.is_some() || is_canon_active { Duration::from_millis(33) } else { Duration::from_secs(1) })
+        .map(Some)
+        .or_else(|e| {
+            if e == mpsc::RecvTimeoutError::Timeout { Ok(None) } else { Err(e) }
+        })
+    {
+        // Handle stream broadcasting outside of command handling
+        if let Some(cam) = camera.as_mut() {
+            if let Ok(frame) = cam.frame() {
+                if let Ok(img) = frame.decode_image::<RgbFormat>() {
+                    let mut jpeg_buffer = Cursor::new(Vec::new());
+                    if image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buffer, 60)
+                        .encode_image(&img)
+                        .is_ok()
+                    {
+                        // Send to stream server (ignore errors if no clients connected)
+                        let _ = frame_tx.try_send(jpeg_buffer.into_inner());
+                    }
                 }
-                is_canon_active = is_canon;
-                
-                let result = (|| -> Result<CameraStatus, String> {
-                    if is_canon {
-                        // TODO: Implement actual Canon session opening
-                        // For now we assume success if SDK is loaded
-                        if canon_sdk.is_some() {
-                            Ok(CameraStatus {
-                                is_active: true,
-                                device_name: Some(format!("Canon Camera ({})", device_id)),
-                                resolution: Some((5184, 3456)), // Example DSLR res
-                            })
-                        } else {
-                            Err("Canon SDK not loaded".to_string())
-                        }
-                    } else {
-                        let idx: u32 = device_id.parse().unwrap_or(0);
-                        let index = CameraIndex::Index(idx);
-                        
-                        let requested = RequestedFormat::new::<RgbFormat>(
-                            RequestedFormatType::HighestResolution(Resolution::new(1920, 1080))
-                        );
-                        
-                        let mut cam = Camera::new(index, requested)
-                            .map_err(|e| format!("Failed to create camera: {}", e))?;
-                        
-                        cam.open_stream()
-                            .map_err(|e| format!("Failed to open camera stream: {}", e))?;
-                        
-                        let resolution = cam.resolution();
-                        let device_name = cam.info().human_name().to_string();
-                        
-                        let status = CameraStatus {
-                            is_active: true,
-                            device_name: Some(device_name),
-                            resolution: Some((resolution.width(), resolution.height())),
-                        };
-                        
-                        camera = Some(cam);
-                        Ok(status)
-                    }
-                })();
-                
-                reply.send(result).ok();
             }
-            
-            CameraCommand::Stop { reply } => {
-                if is_canon_active {
-                    is_canon_active = false;
-                } else if let Some(mut cam) = camera.take() {
-                    cam.stop_stream().ok();
-                }
-                reply.send(Ok(())).ok();
-            }
-            
-            CameraCommand::Capture { quality, reply } => {
-                let result = (|| -> Result<String, String> {
-                    if is_canon_active {
-                        // TODO: Implement Canon native capture
-                        Err("Canon native capture not yet implemented (requires framework)".to_string())
-                    } else if let Some(cam) = camera.as_mut() {
-                        let frame = cam.frame()
-                            .map_err(|e| format!("Failed to capture frame: {}", e))?;
-                        
-                        let img = frame.decode_image::<RgbFormat>()
-                            .map_err(|e| format!("Failed to decode frame: {}", e))?;
-                        
-                        let mut jpeg_buffer = Cursor::new(Vec::new());
-                        
-                        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buffer, quality)
-                            .encode_image(&img)
-                            .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
-                        
-                        let base64_data = STANDARD.encode(jpeg_buffer.into_inner());
-                        let data_url = format!("data:image/jpeg;base64,{}", base64_data);
-                        
-                        Ok(data_url)
-                    } else {
-                        Err("Camera not started".to_string())
+        } else if is_canon_active {
+            // TODO: Broadcast Canon frames when Canon SDK is properly implemented here
+        }
+
+        if let Some(cmd) = cmd {
+            match cmd {
+                CameraCommand::Start { device_id, is_canon, reply } => {
+                    // Stop existing camera if any
+                    if let Some(mut cam) = camera.take() {
+                        cam.stop_stream().ok();
                     }
-                })();
-                
-                reply.send(result).ok();
-            }
-            
-            CameraCommand::GetStatus { reply } => {
-                let status = if is_canon_active {
-                    CameraStatus {
-                        is_active: true,
-                        device_name: Some("Canon Camera".to_string()),
-                        resolution: Some((5184, 3456)),
-                    }
-                } else {
-                    match &camera {
-                        Some(cam) => {
-                            let resolution = cam.resolution();
-                            CameraStatus {
-                                is_active: true,
-                                device_name: Some(cam.info().human_name().to_string()),
-                                resolution: Some((resolution.width(), resolution.height())),
+                    is_canon_active = is_canon;
+                    
+                    let result = (|| -> Result<CameraStatus, String> {
+                        if is_canon {
+                            // TODO: Implement actual Canon session opening
+                            if canon_sdk.is_some() {
+                                Ok(CameraStatus {
+                                    is_active: true,
+                                    device_name: Some(format!("Canon Camera ({})", device_id)),
+                                    resolution: Some((5184, 3456)), // Example DSLR res
+                                })
+                            } else {
+                                Err("Canon SDK not loaded".to_string())
                             }
+                        } else {
+                            let idx: u32 = device_id.parse().unwrap_or(0);
+                            let index = CameraIndex::Index(idx);
+                            
+                            let requested = RequestedFormat::new::<RgbFormat>(
+                                RequestedFormatType::HighestResolution(Resolution::new(1920, 1080))
+                            );
+                            
+                            let mut cam = Camera::new(index, requested)
+                                .map_err(|e| format!("Failed to create camera: {}", e))?;
+                            
+                            cam.open_stream()
+                                .map_err(|e| format!("Failed to open camera stream: {}", e))?;
+                            
+                            let resolution = cam.resolution();
+                            let device_name = cam.info().human_name().to_string();
+                            
+                            let status = CameraStatus {
+                                is_active: true,
+                                device_name: Some(device_name),
+                                resolution: Some((resolution.width(), resolution.height())),
+                            };
+                            
+                            camera = Some(cam);
+                            Ok(status)
                         }
-                        None => CameraStatus {
-                            is_active: false,
-                            device_name: None,
-                            resolution: None,
-                        },
+                    })();
+                    
+                    reply.send(result).ok();
+                }
+                
+                CameraCommand::Stop { reply } => {
+                    if is_canon_active {
+                        is_canon_active = false;
+                    } else if let Some(mut cam) = camera.take() {
+                        cam.stop_stream().ok();
                     }
-                };
-                reply.send(Ok(status)).ok();
+                    reply.send(Ok(())).ok();
+                }
+                
+                CameraCommand::Capture { quality, reply } => {
+                    let result = (|| -> Result<String, String> {
+                        if is_canon_active {
+                            Err("Canon native capture not yet implemented (requires framework)".to_string())
+                        } else if let Some(cam) = camera.as_mut() {
+                            let frame = cam.frame()
+                                .map_err(|e| format!("Failed to capture frame: {}", e))?;
+                            
+                            let img = frame.decode_image::<RgbFormat>()
+                                .map_err(|e| format!("Failed to decode frame: {}", e))?;
+                            
+                            let mut jpeg_buffer = Cursor::new(Vec::new());
+                            
+                            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buffer, quality)
+                                .encode_image(&img)
+                                .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
+                            
+                            let base64_data = STANDARD.encode(jpeg_buffer.into_inner());
+                            let data_url = format!("data:image/jpeg;base64,{}", base64_data);
+                            
+                            Ok(data_url)
+                        } else {
+                            Err("Camera not started".to_string())
+                        }
+                    })();
+                    
+                    reply.send(result).ok();
+                }
+                
+                CameraCommand::GetStatus { reply } => {
+                    let status = if is_canon_active {
+                        CameraStatus {
+                            is_active: true,
+                            device_name: Some("Canon Camera".to_string()),
+                            resolution: Some((5184, 3456)),
+                        }
+                    } else {
+                        match &camera {
+                            Some(cam) => {
+                                let resolution = cam.resolution();
+                                CameraStatus {
+                                    is_active: true,
+                                    device_name: Some(cam.info().human_name().to_string()),
+                                    resolution: Some((resolution.width(), resolution.height())),
+                                }
+                            }
+                            None => CameraStatus {
+                                is_active: false,
+                                device_name: None,
+                                resolution: None,
+                            },
+                        }
+                    };
+                    reply.send(Ok(status)).ok();
+                }
             }
         }
     }
@@ -192,7 +217,8 @@ fn get_or_create_sender(state: &CameraState) -> Result<Sender<CameraCommand>, St
     
     if sender_guard.is_none() {
         let (tx, rx) = mpsc::channel();
-        thread::spawn(move || camera_thread(rx));
+        let frame_tx = state.frame_tx.clone();
+        thread::spawn(move || camera_thread(rx, frame_tx));
         *sender_guard = Some(tx);
     }
     

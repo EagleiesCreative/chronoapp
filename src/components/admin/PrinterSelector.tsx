@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Printer, PrinterCheck, AlertTriangle, FileText, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Printer, PrinterCheck, AlertTriangle, FileText, RefreshCw, CheckCircle2, Trash2, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -17,6 +17,14 @@ interface PrinterInfo {
     state: string;
 }
 
+// Type for print job info from Rust
+interface PrintJobInfo {
+    id: string;
+    user: string;
+    size: string;
+    date: string;
+}
+
 export function PrinterSelector() {
     const [printers, setPrinters] = useState<PrinterInfo[]>([]);
     const [selectedPrinter, setSelectedPrinter] = useState<string>('');
@@ -25,6 +33,12 @@ export function PrinterSelector() {
     const [lastTestResult, setLastTestResult] = useState<'idle' | 'success' | 'error'>('idle');
     const [error, setError] = useState<string | null>(null);
     const [isTauriAvailable, setIsTauriAvailable] = useState(false);
+    
+    // Print Queue State
+    const [printQueue, setPrintQueue] = useState<PrintJobInfo[]>([]);
+    const [isQueueLoading, setIsQueueLoading] = useState(false);
+    const [isClearingQueue, setIsClearingQueue] = useState(false);
+    const [isResuming, setIsResuming] = useState(false);
 
     // Check if Tauri is available by trying to import the API
     useEffect(() => {
@@ -94,12 +108,79 @@ export function PrinterSelector() {
             const result = await invoke<string>('print_test_page', { printerName: selectedPrinter });
             setLastTestResult('success');
             toast.success(result);
+            fetchQueue(selectedPrinter); // Refresh queue after test
         } catch (err) {
             console.error('Print test failed:', err);
             setLastTestResult('error');
             toast.error(`Print failed: ${err}`);
         } finally {
             setIsTesting(false);
+        }
+    };
+
+    // Fetch Print Queue
+    const fetchQueue = useCallback(async (printerName: string = selectedPrinter) => {
+        if (!printerName || !isTauriAvailable) return;
+        
+        try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const queue = await invoke<PrintJobInfo[]>('get_print_queue', { printerName });
+            setPrintQueue(queue);
+        } catch (err) {
+            console.error('Failed to fetch print queue:', err);
+            // Don't show toast for polling errors to avoid spam
+        }
+    }, [isTauriAvailable, selectedPrinter]);
+
+    // Poll queue every 3 seconds for the selected printer
+    useEffect(() => {
+        if (!selectedPrinter || !isTauriAvailable) return;
+        
+        // Initial fetch
+        setIsQueueLoading(true);
+        fetchQueue(selectedPrinter).finally(() => setIsQueueLoading(false));
+        
+        // Polling interval
+        const interval = setInterval(() => {
+            fetchQueue(selectedPrinter);
+        }, 3000);
+        
+        return () => clearInterval(interval);
+    }, [selectedPrinter, isTauriAvailable, fetchQueue]);
+
+    // Clear Print Queue
+    const handleClearQueue = async () => {
+        if (!selectedPrinter || !isTauriAvailable) return;
+        
+        setIsClearingQueue(true);
+        try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const result = await invoke<string>('clear_print_queue', { printerName: selectedPrinter });
+            toast.success(result);
+            setPrintQueue([]); // Optimistic update
+        } catch (err) {
+            console.error('Failed to clear queue:', err);
+            toast.error(`Failed to clear queue: ${err}`);
+        } finally {
+            setIsClearingQueue(false);
+            fetchQueue();
+        }
+    };
+
+    // Resume Printer
+    const handleResumePrinter = async () => {
+        if (!selectedPrinter || !isTauriAvailable) return;
+        
+        setIsResuming(true);
+        try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const result = await invoke<string>('resume_printer', { printerName: selectedPrinter });
+            toast.success(result);
+        } catch (err) {
+            console.error('Failed to resume printer:', err);
+            toast.error(`Failed to resume printer: ${err}`);
+        } finally {
+            setIsResuming(false);
         }
     };
 
@@ -234,6 +315,68 @@ export function PrinterSelector() {
                                 </div>
                             );
                         })()}
+                    </div>
+                )}
+
+                {/* Print Queue Management */}
+                {selectedPrinter && (
+                    <div className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-semibold">Print Queue</h4>
+                            <div className="flex items-center gap-2">
+                                {isQueueLoading && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />}
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                    printQueue.length > 0 ? 'bg-amber-100 text-amber-700' : 'bg-muted text-muted-foreground'
+                                }`}>
+                                    {printQueue.length} Active {printQueue.length === 1 ? 'Job' : 'Jobs'}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        {printQueue.length > 0 && (
+                            <div className="max-h-[120px] overflow-y-auto space-y-2 pr-2">
+                                {printQueue.map((job) => (
+                                    <div key={job.id} className="text-xs flex justify-between items-center bg-muted/50 p-2 rounded">
+                                        <div className="truncate pr-2">
+                                            <span className="font-medium">{job.id}</span>
+                                            <span className="text-muted-foreground ml-2">{job.date}</span>
+                                        </div>
+                                        <span className="text-muted-foreground whitespace-nowrap">{job.size}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        
+                        <div className="flex gap-2 pt-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full text-xs"
+                                onClick={handleResumePrinter}
+                                disabled={isResuming || !selectedPrinter}
+                            >
+                                {isResuming ? (
+                                    <RefreshCw className="w-3 h-3 mr-1.5 animate-spin" />
+                                ) : (
+                                    <Play className="w-3 h-3 mr-1.5" />
+                                )}
+                                Resume Printer
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                className="w-full text-xs"
+                                onClick={handleClearQueue}
+                                disabled={isClearingQueue || printQueue.length === 0}
+                            >
+                                {isClearingQueue ? (
+                                    <RefreshCw className="w-3 h-3 mr-1.5 animate-spin" />
+                                ) : (
+                                    <Trash2 className="w-3 h-3 mr-1.5" />
+                                )}
+                                Clear Queue
+                            </Button>
+                        </div>
                     </div>
                 )}
 
