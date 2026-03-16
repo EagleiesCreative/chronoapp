@@ -107,7 +107,7 @@ ChronoSnap Photobooth System
 /// Print a photo to the specified printer (or default if not specified)
 /// Takes base64 encoded image data (JPEG)
 #[command]
-pub fn print_photo(image_data: String, printer_name: Option<String>) -> Result<String, String> {
+pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: Option<String>) -> Result<String, String> {
     // Remove data URL prefix if present
     let base64_data = if image_data.starts_with("data:image") {
         image_data
@@ -134,13 +134,18 @@ pub fn print_photo(image_data: String, printer_name: Option<String>) -> Result<S
     
     match printer {
         Some(p) => {
+            // Setup properties (e.g., PageSize)
+            let mut properties = Vec::new();
+            let page_size_val = page_size.unwrap_or_else(|| "Postcard".to_string()); // Default to Postcard (4R)
+            properties.push(("PageSize", page_size_val.as_str()));
+            
             let options = PrinterJobOptions {
                 name: Some("ChronoSnap Photo"),
-                raw_properties: &[],
+                raw_properties: &properties,
             };
             
             match p.print(&image_bytes, options) {
-                Ok(_) => Ok(format!("Photo sent to printer: {}", p.name)),
+                Ok(_) => Ok(format!("Photo sent to printer: {} (Size: {})", p.name, page_size_val)),
                 Err(e) => Err(format!("Failed to print photo: {:?}", e)),
             }
         }

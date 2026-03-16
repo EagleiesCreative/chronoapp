@@ -351,7 +351,7 @@ export function PrinterSelector() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                className="w-full text-xs"
+                                className="flex-1 text-xs"
                                 onClick={handleResumePrinter}
                                 disabled={isResuming || !selectedPrinter}
                             >
@@ -365,7 +365,7 @@ export function PrinterSelector() {
                             <Button
                                 variant="destructive"
                                 size="sm"
-                                className="w-full text-xs"
+                                className="flex-1 text-xs"
                                 onClick={handleClearQueue}
                                 disabled={isClearingQueue || printQueue.length === 0}
                             >

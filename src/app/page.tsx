@@ -348,7 +348,7 @@ export default function HomePage() {
             </header>
 
             {/* Content */}
-            <div className="h-[calc(100vh-4rem)] overflow-y-auto bg-gray-50 p-6 space-y-6">
+            <div className="h-[calc(100vh-4rem)] w-full overflow-y-auto bg-gray-50 p-6 space-y-6">
               <SessionManager />
               <FrameManager />
               <BackgroundSettings />

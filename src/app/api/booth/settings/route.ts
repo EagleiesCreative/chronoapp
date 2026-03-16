@@ -52,6 +52,10 @@ export async function PATCH(request: NextRequest) {
             event_hashtag,
             event_splash_image,
             event_message,
+            gif_enabled,
+            print_enabled,
+            filter_enabled,
+            booth_type,
         } = body;
 
         // Verify the booth_id matches the authenticated booth
@@ -86,6 +90,10 @@ export async function PATCH(request: NextRequest) {
                 event_hashtag: event_hashtag,
                 event_splash_image: event_splash_image,
                 event_message: event_message,
+                gif_enabled: gif_enabled,
+                print_enabled: print_enabled,
+                filter_enabled: filter_enabled,
+                booth_type: booth_type,
                 updated_at: new Date().toISOString(),
             })
             .eq('id', booth_id);
@@ -123,7 +131,7 @@ export async function GET(request: NextRequest) {
 
         const { data, error } = await supabase
             .from('booths')
-            .select('background_image, background_color, payment_bypass, countdown_seconds, preview_seconds, review_timeout_seconds, print_copies, slideshow_enabled, brand_logo_url, brand_title, brand_subtitle, brand_primary_color, brand_accent_color, event_mode, event_name, event_date, event_hashtag, event_splash_image, event_message')
+            .select('background_image, background_color, payment_bypass, countdown_seconds, preview_seconds, review_timeout_seconds, print_copies, slideshow_enabled, brand_logo_url, brand_title, brand_subtitle, brand_primary_color, brand_accent_color, event_mode, event_name, event_date, event_hashtag, event_splash_image, event_message, gif_enabled, print_enabled, filter_enabled, booth_type')
             .eq('id', booth.booth_id)
             .single();
 

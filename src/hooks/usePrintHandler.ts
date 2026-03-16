@@ -26,10 +26,13 @@ export function usePrintHandler(compositeImage: string | null) {
             try {
                 const { invoke } = await import('@tauri-apps/api/core');
 
+                const pageSize = booth?.booth_type === 'A3_NEWSPAPER' ? 'A3' : 'Postcard';
+
                 for (let i = 0; i < printCopiesCount; i++) {
                     await invoke('print_photo', {
                         imageData: compositeImage,
-                        printerName: null // Use default printer
+                        printerName: null, // Use default printer
+                        pageSize: pageSize
                     });
                 }
                 usedTauri = true;

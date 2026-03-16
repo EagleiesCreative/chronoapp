@@ -61,9 +61,14 @@ export function BoothLayout() {
         }
     }
 
+    const isNewspaper = booth?.booth_type === 'A3_NEWSPAPER';
+
     return (
         <BoothErrorBoundary fallbackMessage="The photo booth encountered an unexpected error. Don't worry, we'll get you back on track.">
-            <div style={brandingStyle}>
+            <div 
+                style={brandingStyle} 
+                className={isNewspaper ? 'newspaper-layout w-full min-h-screen' : 'w-full min-h-screen'}
+            >
                 <CameraProvider>
                     <AnimatePresence mode="wait">
                         {step === 'idle' && <IdleScreen key="idle" />}

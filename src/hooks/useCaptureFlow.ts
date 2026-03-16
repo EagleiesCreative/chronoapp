@@ -22,7 +22,7 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
     // Session settings take priority over booth settings
     const countdownSec = activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3;
     const previewSec = activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5;
-    const filterEnabled = activeSession?.filter_enabled ?? true;
+    const filterEnabled = activeSession?.filter_enabled ?? booth?.filter_enabled ?? true;
     const nextStepAfterCapture = filterEnabled ? 'filter' : 'review';
 
     const [flashActive, setFlashActive] = useState(false);

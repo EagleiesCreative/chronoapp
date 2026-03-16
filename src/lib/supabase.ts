@@ -97,6 +97,9 @@ export interface BoothSession {
   print_copies: number;
   default_filter: string;
   filter_enabled: boolean;
+  gif_enabled: boolean;
+  print_enabled: boolean;
+  booth_type: 'REGULAR_4R' | 'A3_NEWSPAPER';
   payment_bypass: boolean;
   event_mode: boolean;
   event_name: string | null;
@@ -186,6 +189,12 @@ export interface Booth {
   printer_status?: string;
   prints_remaining?: number | null;
   telemetry_updated_at?: string;
+
+  // Feature toggles
+  gif_enabled?: boolean;
+  print_enabled?: boolean;
+  filter_enabled?: boolean;
+  booth_type?: 'REGULAR_4R' | 'A3_NEWSPAPER';
 
   created_at: string;
   updated_at: string;
