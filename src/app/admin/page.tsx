@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FrameManager, CameraSelector, PrinterSelector, SessionManager, SessionSelector } from '@/components/admin';
+import { FrameManager, CameraSelector, PrinterSelector, SessionManager, SessionSelector, DeviceTelemetryDashboard } from '@/components/admin';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 
@@ -258,42 +258,7 @@ export default function AdminPage() {
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                         >
-                            <div className="grid gap-6 md:grid-cols-3 mb-6">
-                                <Card className="border">
-                                    <CardHeader className="pb-2">
-                                        <CardDescription>Total Sessions</CardDescription>
-                                        <CardTitle className="text-3xl">--</CardTitle>
-                                    </CardHeader>
-                                </Card>
-                                <Card className="border">
-                                    <CardHeader className="pb-2">
-                                        <CardDescription>Total Revenue</CardDescription>
-                                        <CardTitle className="text-3xl">Rp --</CardTitle>
-                                    </CardHeader>
-                                </Card>
-                                <Card className="border">
-                                    <CardHeader className="pb-2">
-                                        <CardDescription>Active Frames</CardDescription>
-                                        <CardTitle className="text-3xl">--</CardTitle>
-                                    </CardHeader>
-                                </Card>
-                            </div>
-
-                            <Card className="border">
-                                <CardHeader>
-                                    <CardTitle>Analytics Dashboard</CardTitle>
-                                    <CardDescription>
-                                        Session and revenue statistics
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="text-center py-12 text-muted-foreground">
-                                        <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                                        <p>Analytics will appear here</p>
-                                        <p className="text-sm mt-1">Connect to Supabase to see statistics</p>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <DeviceTelemetryDashboard />
                         </motion.div>
                     </TabsContent>
 

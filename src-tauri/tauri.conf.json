@@ -16,10 +16,12 @@
         "width": 1280,
         "height": 720,
         "resizable": true,
-        "fullscreen": false,
+        "fullscreen": true,
+        "alwaysOnTop": true,
+        "decorations": false,
         "center": true,
-        "minWidth": 960,
-        "minHeight": 540
+        "minWidth": 1280,
+        "minHeight": 720
       }
     ],
     "security": {

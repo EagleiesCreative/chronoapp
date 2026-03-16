@@ -4,12 +4,15 @@ mod filesystem;
 mod canon;
 mod image_processor;
 mod stream_server;
+mod reliability;
 
 use camera::CameraState;
 use image_processor::{composite_images, CompositeRequest, CompositeResponse};
+use reliability::setup_reliability;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use crossbeam_channel::unbounded;
+use tauri::Manager;
 
 #[tauri::command]
 async fn composite_image_rust(req: CompositeRequest) -> Result<CompositeResponse, String> {
@@ -27,6 +30,10 @@ pub fn run() {
   tauri::Builder::default()
     .manage(CameraState::new(frame_tx))
     .setup(|app| {
+      let reliability_state = setup_reliability(app)
+        .map_err(|e| format!("Failed to initialize reliability worker: {e}"))?;
+      app.manage(reliability_state);
+
       // Start MJPEG Server
       let running = Arc::new(AtomicBool::new(true));
       let _server_thread = std::thread::spawn(move || {
@@ -61,6 +68,9 @@ pub fn run() {
       filesystem::save_file_to_disk,
       filesystem::pick_directory,
       filesystem::check_directory_writable,
+      reliability::queue_session_sync,
+      reliability::set_sync_config,
+      reliability::get_sync_queue_stats,
       composite_image_rust,
     ])
     .run(tauri::generate_context!())

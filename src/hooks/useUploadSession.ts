@@ -6,10 +6,13 @@ import { saveToLocalDisk } from '@/lib/local-save';
 import { generateCompressedGif } from '@/lib/video-generator';
 import { useBoothStore } from '@/store/booth-store';
 import { useLocalSaveStore } from '@/store/local-save-store';
+import { useTenantStore } from '@/store/tenant-store';
 import { enqueueUpload } from '@/lib/upload-queue';
+import { queueSessionSync } from '@/lib/reliability-sync';
 
 export function useUploadSession() {
     const { session, capturedPhotos } = useBoothStore();
+    const { booth } = useTenantStore();
 
     const [downloadQR, setDownloadQR] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -27,6 +30,7 @@ export function useUploadSession() {
             }
 
             const sessionId = session.id;
+            const boothId = booth?.id;
 
             // --- LOCAL SAVE (parallel, non-blocking) ---
             const { enabled: localSaveEnabled, savePath } = useLocalSaveStore.getState();
@@ -51,6 +55,26 @@ export function useUploadSession() {
             }
             // --- END LOCAL SAVE ---
 
+            // --- OFFLINE-FIRST QUEUE (Tauri reliability worker) ---
+            const photoDataUrls = capturedPhotos
+                .map(photo => photo.dataUrl)
+                .filter((dataUrl): dataUrl is string => Boolean(dataUrl));
+
+            let queuedSyncJobId: string | null = null;
+            if (boothId) {
+                queuedSyncJobId = await queueSessionSync({
+                    sessionId,
+                    boothId,
+                    finalImageDataUrl: imageDataUrl,
+                    photoDataUrls,
+                    createdAt: new Date().toISOString(),
+                });
+
+                if (queuedSyncJobId) {
+                    console.log('[ReliabilitySync] Queued local sync job:', queuedSyncJobId);
+                }
+            }
+
             // 1. Upload composite strip image (critical - must succeed)
             setUploadStatus('Uploading photo strip...');
             const stripResponse = await fetch(imageDataUrl);
@@ -73,13 +97,11 @@ export function useUploadSession() {
 
             // 2. Upload individual photos (non-critical - continue on failure)
             const photoUrls: string[] = [];
-            const photoDataUrls: string[] = [];
 
             for (let i = 0; i < capturedPhotos.length; i++) {
                 const photo = capturedPhotos[i];
                 if (photo.dataUrl) {
                     setUploadStatus(`Uploading photo ${i + 1}/${capturedPhotos.length}...`);
-                    photoDataUrls.push(photo.dataUrl);
                     try {
                         const photoResponse = await fetch(photo.dataUrl);
                         const photoBlob = await photoResponse.blob();
@@ -129,24 +151,36 @@ export function useUploadSession() {
             }
 
             // 4. Update session with results (mark as completed)
-            setUploadStatus(`Saving ${photoUrls.length} photos and ${gifUrl ? '1 gif' : '0 gif'}...`);
-            const completionPayload = {
-                sessionId,
-                finalImageUrl: finalUrl,
-                photosUrls: photoUrls,
-                videoUrl: gifUrl,
-            };
+            let completedRemotely = false;
+            if (finalUrl) {
+                setUploadStatus(`Saving ${photoUrls.length} photos and ${gifUrl ? '1 gif' : '0 gif'}...`);
+                const completionPayload = {
+                    sessionId,
+                    finalImageUrl: finalUrl,
+                    photosUrls: photoUrls,
+                    videoUrl: gifUrl,
+                };
 
-            const completionResponse = await apiFetch('/api/session/complete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(completionPayload),
-            });
+                const completionResponse = await apiFetch('/api/session/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(completionPayload),
+                });
 
-            if (!completionResponse.ok) {
-                const errorData = await completionResponse.json();
-                throw new Error(errorData.error || `Failed to save session data (${completionResponse.status})`);
+                if (!completionResponse.ok) {
+                    const errorData = await completionResponse.json();
+                    if (!queuedSyncJobId) {
+                        throw new Error(errorData.error || `Failed to save session data (${completionResponse.status})`);
+                    }
+                    console.warn('[ReliabilitySync] Remote completion failed; will sync later:', errorData.error);
+                } else {
+                    completedRemotely = true;
+                }
+            }
+
+            if (!completedRemotely && !queuedSyncJobId) {
+                throw new Error('Failed to persist session remotely and local reliability queue is unavailable');
             }
 
             // 5. Generate QR for share page

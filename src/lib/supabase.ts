@@ -180,6 +180,13 @@ export interface Booth {
   event_splash_image?: string;
   event_message?: string;
 
+  // Operational telemetry
+  booth_status?: string;
+  camera_battery?: number | null;
+  printer_status?: string;
+  prints_remaining?: number | null;
+  telemetry_updated_at?: string;
+
   created_at: string;
   updated_at: string;
 }

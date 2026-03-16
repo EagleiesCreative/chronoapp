@@ -14,6 +14,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatIDR } from '@/lib/xendit';
 import { Booth, getActiveBoothSession } from '@/lib/supabase';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
+import { usePrintStore } from '@/store/print-store';
+import { useUploadQueue } from '@/hooks/useUploadQueue';
+import { setReliabilitySyncConfig } from '@/lib/reliability-sync';
 import { toast } from 'sonner';
 import { getApiUrl, apiJson, apiFetch } from '@/lib/api';
 
@@ -21,6 +24,8 @@ export default function HomePage() {
   const { showAdminPanel, setShowAdminPanel } = useAdminStore();
   const { setBooth: setTenantBooth } = useTenantStore();
   const { setActiveSession } = useSessionProfileStore();
+  const printHistory = usePrintStore((state) => state.history);
+  const { queueCount } = useUploadQueue();
   const [booth, setBooth] = useState<Booth | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
@@ -30,8 +35,31 @@ export default function HomePage() {
   const [pin, setPin] = useState('');
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
 
-  // Send heartbeat to track device status (for admin dashboard)
-  useHeartbeat({ isAuthenticated: !!booth });
+  const successfulPrints = printHistory.filter((job) => job.status === 'success').length;
+  const configuredPrintsRemaining = booth?.prints_remaining;
+  const printsRemaining = typeof configuredPrintsRemaining === 'number'
+    ? Math.max(0, configuredPrintsRemaining - successfulPrints)
+    : Math.max(0, 200 - successfulPrints);
+
+  const latestPrint = printHistory[0];
+  const printerStatus = latestPrint?.status === 'failed' ? 'error' : (queueCount > 5 ? 'warning' : 'ready');
+
+  // Send heartbeat + vitals to track device status (for admin dashboard)
+  useHeartbeat({
+    isAuthenticated: !!booth,
+    vitals: {
+      status: typeof navigator !== 'undefined' && navigator.onLine ? 'online' : 'offline',
+      camera_battery: null,
+      printer_status: printerStatus,
+      prints_remaining: printsRemaining,
+    },
+  });
+
+  // Configure Rust background sync target once on mount
+  useEffect(() => {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://chronosnap.eagleies.com';
+    setReliabilitySyncConfig(apiBaseUrl);
+  }, []);
 
   // Check existing session on mount
   useEffect(() => {

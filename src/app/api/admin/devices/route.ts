@@ -17,6 +17,11 @@ interface DeviceStatus {
     last_heartbeat: string | null;
     last_login_at: string | null;
     online_duration_seconds: number | null;
+    booth_status?: string | null;
+    camera_battery?: number | null;
+    printer_status?: string | null;
+    prints_remaining?: number | null;
+    telemetry_updated_at?: string | null;
 }
 
 /**
@@ -111,6 +116,11 @@ export async function GET(request: NextRequest) {
                 last_heartbeat: booth.last_heartbeat,
                 last_login_at: booth.last_login_at,
                 online_duration_seconds: onlineDuration,
+                booth_status: booth.booth_status ?? null,
+                camera_battery: booth.camera_battery ?? null,
+                printer_status: booth.printer_status ?? null,
+                prints_remaining: booth.prints_remaining ?? null,
+                telemetry_updated_at: booth.telemetry_updated_at ?? null,
             };
         });
 

@@ -263,15 +263,16 @@ pub fn list_cameras() -> Result<Vec<CameraDevice>, String> {
 #[tauri::command]
 pub fn start_camera(
     state: State<'_, CameraState>,
-    device_id: String,
+    device_id: Option<String>,
 ) -> Result<CameraStatus, String> {
-    log::info!("Starting camera with device_id: {}", device_id);
+    let resolved_device_id = device_id.unwrap_or_else(|| "0".to_string());
+    log::info!("Starting camera with device_id: {}", resolved_device_id);
     
-    let is_canon = device_id.starts_with("canon_");
+    let is_canon = resolved_device_id.starts_with("canon_");
     let sender = get_or_create_sender(&state)?;
     let (reply_tx, reply_rx) = mpsc::channel();
     
-    sender.send(CameraCommand::Start { device_id, is_canon, reply: reply_tx })
+    sender.send(CameraCommand::Start { device_id: resolved_device_id, is_canon, reply: reply_tx })
         .map_err(|e| format!("Failed to send command: {}", e))?;
     
     reply_rx.recv_timeout(Duration::from_secs(5))

@@ -90,7 +90,7 @@ export function useRustCamera(): UseRustCameraReturn {
             setError(null);
 
             const cameraStatus = await invoke<CameraStatus>('start_camera', {
-                deviceId: deviceId || null
+                device_id: deviceId ?? '0'
             });
 
             if (isMountedRef.current) {

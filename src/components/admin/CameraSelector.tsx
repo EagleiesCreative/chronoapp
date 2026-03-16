@@ -13,12 +13,28 @@ interface CameraDevice {
     name: string; // Changed from label to match backend
 }
 
+const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+
 export function CameraSelector() {
     const [cameras, setCameras] = useState<CameraDevice[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isTesting, setIsTesting] = useState(false);
     const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+    const [previewFrame, setPreviewFrame] = useState<string | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
+    const previewIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const isMountedRef = useRef(true);
+
+    // Track mount state for async safety
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            if (previewIntervalRef.current) {
+                clearInterval(previewIntervalRef.current);
+            }
+        };
+    }, []);
 
     const {
         selectedCameraId,
@@ -86,10 +102,18 @@ export function CameraSelector() {
     }, [loadCameras]);
 
     // Stop preview stream
-    const stopPreview = useCallback(() => {
+    const stopPreview = useCallback(async () => {
         if (previewStream) {
             previewStream.getTracks().forEach(track => track.stop());
             setPreviewStream(null);
+        }
+        if (previewIntervalRef.current) {
+            clearInterval(previewIntervalRef.current);
+            previewIntervalRef.current = null;
+        }
+        setPreviewFrame(null);
+        if (isTauri) {
+            try { await invoke('stop_camera'); } catch { /* ignore */ }
         }
         setIsTesting(false);
         setCameraTestStatus('idle');
@@ -104,15 +128,27 @@ export function CameraSelector() {
         setCameraError(null);
 
         try {
-            const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
-
             if (isTauri) {
                 // Start the camera in the backend
                 const status = await invoke('start_camera', { device_id: selectedCameraId });
                 console.log('Camera started:', status);
-                
-                // Keep previewStream null so the UI switches to the MJPEG img tag
-                setPreviewStream(null);
+
+                // Poll for preview frames via Tauri command
+                let isFetching = false;
+                previewIntervalRef.current = setInterval(async () => {
+                    if (!isMountedRef.current || isFetching) return;
+                    isFetching = true;
+                    try {
+                        const frame = await invoke<string>('get_preview_frame');
+                        if (isMountedRef.current) {
+                            setPreviewFrame(frame);
+                        }
+                    } catch {
+                        // Silently ignore frame errors
+                    } finally {
+                        isFetching = false;
+                    }
+                }, 100); // ~10 FPS
             } else {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
@@ -155,6 +191,9 @@ export function CameraSelector() {
         return () => {
             if (previewStream) {
                 previewStream.getTracks().forEach(track => track.stop());
+            }
+            if (previewIntervalRef.current) {
+                clearInterval(previewIntervalRef.current);
             }
         };
     }, [previewStream]);
@@ -257,12 +296,16 @@ export function CameraSelector() {
                                 muted
                                 className="w-full h-full object-cover"
                             />
-                        ) : (
-                            <img 
-                                src={`http://localhost:3030/stream?t=${Date.now()}`} 
-                                alt="Camera Stream"
+                        ) : previewFrame ? (
+                            <img
+                                src={`data:image/jpeg;base64,${previewFrame}`}
+                                alt="Camera Preview"
                                 className="w-full h-full object-cover"
                             />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
+                                Starting camera preview...
+                            </div>
                         )}
                         {/* Status overlay */}
                         {cameraTestStatus === 'success' && (

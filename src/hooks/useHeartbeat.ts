@@ -8,20 +8,29 @@
 import { useEffect, useRef } from 'react';
 import { apiFetch } from '@/lib/api';
 
-// Send heartbeat every 30 seconds
-const HEARTBEAT_INTERVAL_MS = 30 * 1000;
+// Send heartbeat every 60 seconds
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
+
+export interface HeartbeatVitals {
+    status?: 'online' | 'offline';
+    camera_battery?: number | null;
+    printer_status?: 'ready' | 'warning' | 'error' | 'unknown';
+    prints_remaining?: number | null;
+}
 
 interface HeartbeatOptions {
     /** Whether the booth is authenticated */
     isAuthenticated: boolean;
     /** Custom device name (optional) */
     deviceName?: string;
+    /** Optional telemetry vitals */
+    vitals?: HeartbeatVitals;
 }
 
 /**
  * Hook to send periodic heartbeat to server
  */
-export function useHeartbeat({ isAuthenticated, deviceName }: HeartbeatOptions) {
+export function useHeartbeat({ isAuthenticated, deviceName, vitals }: HeartbeatOptions) {
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
@@ -39,7 +48,7 @@ export function useHeartbeat({ isAuthenticated, deviceName }: HeartbeatOptions) 
             try {
                 await apiFetch('/api/booth/heartbeat', {
                     method: 'POST',
-                    body: JSON.stringify({ deviceName }),
+                    body: JSON.stringify({ deviceName, vitals }),
                 });
             } catch (error) {
                 console.error('Heartbeat failed:', error);
@@ -59,5 +68,5 @@ export function useHeartbeat({ isAuthenticated, deviceName }: HeartbeatOptions) 
                 intervalRef.current = null;
             }
         };
-    }, [isAuthenticated, deviceName]);
+    }, [isAuthenticated, deviceName, vitals]);
 }

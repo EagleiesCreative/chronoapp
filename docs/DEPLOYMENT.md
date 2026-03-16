@@ -85,6 +85,12 @@ In Vercel Dashboard (https://vercel.com/dashboard):
 | `XENDIT_WEBHOOK_TOKEN` | Your callback token | From Xendit webhook settings |
 | `ADMIN_PIN` | Your secure PIN | e.g., `8472` |
 | `JWT_SECRET` | 32+ char secret | Generate: `openssl rand -base64 32` |
+| `RELIABILITY_SYNC_SECRET` | Long random secret | Used by Tauri background sync endpoint auth |
+| `R2_ACCOUNT_ID` | Cloudflare account ID | Required for R2 uploads |
+| `R2_ACCESS_KEY_ID` | R2 access key | Required for R2 uploads |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key | Required for R2 uploads |
+| `R2_BUCKET` | R2 bucket name | Required for R2 uploads |
+| `R2_PUBLIC_BASE_URL` | Public CDN/base URL | Optional public URL prefix |
 
 ### 2.3 Deploy Production
 
@@ -150,6 +156,12 @@ XENDIT_SECRET_KEY=xnd_production_xxx
 XENDIT_WEBHOOK_TOKEN=xxx
 ADMIN_PIN=xxx
 JWT_SECRET=xxx
+RELIABILITY_SYNC_SECRET=xxx
+R2_ACCOUNT_ID=xxx
+R2_ACCESS_KEY_ID=xxx
+R2_SECRET_ACCESS_KEY=xxx
+R2_BUCKET=xxx
+R2_PUBLIC_BASE_URL=https://cdn.yourdomain.com
 # NEXT_PUBLIC_API_URL is NOT needed on the API server itself
 ```
 
@@ -159,7 +171,30 @@ Only needs the API URL:
 
 ```env
 NEXT_PUBLIC_API_URL=https://your-project.vercel.app
+# Must match Vercel RELIABILITY_SYNC_SECRET so Rust worker can authenticate
+RELIABILITY_SYNC_SECRET=xxx
 ```
+
+---
+
+## Kiosk Watchdog Setup
+
+Run a watchdog process on booth machines so the app relaunches within ~3 seconds if closed/crashed.
+
+### macOS
+
+```bash
+chmod +x scripts/watchdog-macos.sh
+./scripts/watchdog-macos.sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\watchdog-windows.ps1
+```
+
+Tip: register either script as a startup service/launch agent on each booth OS.
 
 ---
 

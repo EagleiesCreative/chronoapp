@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getBoothFromRequest, parseDeviceName } from '@/lib/booth-auth';
 
+type HeartbeatVitals = {
+    status?: 'online' | 'offline';
+    camera_battery?: number | null;
+    printer_status?: 'ready' | 'warning' | 'error' | 'unknown';
+    prints_remaining?: number | null;
+};
+
 /**
  * POST /api/booth/heartbeat
  * Called periodically by booth to report online status
@@ -27,9 +34,11 @@ export async function POST(request: NextRequest) {
 
         // Parse device name from user agent or use custom name from body
         let deviceName = 'Unknown Device';
+        let vitals: HeartbeatVitals | null = null;
         try {
             const body = await request.json().catch(() => ({}));
             deviceName = body.deviceName || parseDeviceName(userAgent);
+            vitals = body.vitals || null;
         } catch {
             deviceName = parseDeviceName(userAgent);
         }
@@ -42,6 +51,11 @@ export async function POST(request: NextRequest) {
                 device_ip: ip,
                 device_name: deviceName,
                 last_heartbeat: new Date().toISOString(),
+                booth_status: vitals?.status || 'online',
+                camera_battery: typeof vitals?.camera_battery === 'number' ? vitals.camera_battery : null,
+                printer_status: vitals?.printer_status || 'unknown',
+                prints_remaining: typeof vitals?.prints_remaining === 'number' ? vitals.prints_remaining : null,
+                telemetry_updated_at: new Date().toISOString(),
             })
             .eq('id', booth.booth_id);
 
