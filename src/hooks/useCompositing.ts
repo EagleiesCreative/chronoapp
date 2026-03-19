@@ -12,6 +12,14 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
     const { selectedFrame, capturedPhotos, setFinalImage, setPrintImage, selectedFilter } = useBoothStore();
     const { booth } = useTenantStore();
 
+    // Helper: proxy R2 URLs through our API to avoid CORS issues
+    const getProxiedImageUrl = (url: string): string => {
+        if (url.includes('r2.cloudflarestorage.com')) {
+            return `/api/frames/image?url=${encodeURIComponent(url)}`;
+        }
+        return url;
+    };
+
     useEffect(() => {
         async function compositeImages() {
             if (!selectedFrame || capturedPhotos.length === 0 || !canvasRef.current) {
@@ -50,7 +58,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                     if (selectedFrame.image_url) {
                         try {
                             const cachedUrl = await getCachedImageUrl(selectedFrame.image_url);
-                            const urlToUse = cachedUrl || getAssetUrl(selectedFrame.image_url);
+                            const urlToUse = getProxiedImageUrl(cachedUrl || getAssetUrl(selectedFrame.image_url));
 
                             // Fetch the image as blob, then convert to base64
                             const response = await fetch(urlToUse);
@@ -284,14 +292,14 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
             if (selectedFrame.image_url) {
                 console.log("Drawing frame overlay from:", selectedFrame.image_url);
                 const frameImg = new Image();
-                frameImg.crossOrigin = 'anonymous';
+                // Don't set crossOrigin - rely on proxy endpoint for R2 URLs
                 await new Promise<void>(async (resolve) => {
                     const cachedUrl = await getCachedImageUrl(selectedFrame.image_url);
-                    const frameUrl = cachedUrl || getAssetUrl(selectedFrame.image_url);
+                    const frameUrl = getProxiedImageUrl(cachedUrl || getAssetUrl(selectedFrame.image_url));
 
                     // Timeout after 10 seconds
                     const loadTimeout = setTimeout(() => {
-                        console.warn("Frame loading timeout after 10 seconds");
+                        console.warn("Frame loading timeout after 10 seconds, continuing without frame overlay");
                         resolve();
                     }, 10000);
 
@@ -307,7 +315,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                     };
                     frameImg.onerror = () => {
                         clearTimeout(loadTimeout);
-                        console.error(`Failed to load frame image: ${frameUrl}`);
+                        console.warn(`Frame overlay load failed: ${frameUrl}`);
                         resolve();
                     };
                     frameImg.src = frameUrl;
