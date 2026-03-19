@@ -131,10 +131,10 @@ export function PhotoSlotGrid({
                                         key={slot.id}
                                         className={`absolute overflow-hidden z-0 ${retakingIndex === originalIndex ? 'ring-2 ring-orange-500 rounded-sm' : ''}`}
                                         style={{
-                                            left: `${(slot.x / 1000) * 100}%`,
-                                            top: `${(slot.y / 1000) * 100}%`,
-                                            width: `${(slot.width / 1000) * 100}%`,
-                                            height: `${(slot.height / 1000) * 100}%`,
+                                            left: `${(slot.x / cw) * 100}%`,
+                                            top: `${(slot.y / ch) * 100}%`,
+                                            width: `${(slot.width / cw) * 100}%`,
+                                            height: `${(slot.height / ch) * 100}%`,
                                             transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
                                         }}
                                     >
@@ -167,10 +167,10 @@ export function PhotoSlotGrid({
                                         key={slot.id}
                                         className={`absolute overflow-hidden z-20 ${retakingIndex === originalIndex ? 'ring-2 ring-orange-500 rounded-sm' : ''}`}
                                         style={{
-                                            left: `${(slot.x / 1000) * 100}%`,
-                                            top: `${(slot.y / 1000) * 100}%`,
-                                            width: `${(slot.width / 1000) * 100}%`,
-                                            height: `${(slot.height / 1000) * 100}%`,
+                                            left: `${(slot.x / cw) * 100}%`,
+                                            top: `${(slot.y / ch) * 100}%`,
+                                            width: `${(slot.width / cw) * 100}%`,
+                                            height: `${(slot.height / ch) * 100}%`,
                                             transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
                                         }}
                                     >

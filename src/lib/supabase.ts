@@ -39,15 +39,28 @@ function getSupabaseAdmin(): SupabaseClient {
 }
 
 // Canvas size presets (for printing)
-export const CANVAS_SIZES = {
-  '2R': { width: 600, height: 1050, label: '2R (2.5" × 3.5")' },  // Default
-  '4R': { width: 1200, height: 1800, label: '4R (4" × 6")' },
-  'A4': { width: 2480, height: 3508, label: 'A4 (210mm × 297mm)' },  // 300 DPI
+// Booth type → canvas dimensions (source of truth: dashboard)
+export const BOOTH_TYPE_CANVAS = {
+  'REGULAR_4R': { width: 1200, height: 1800, label: '4R (4" × 6")' },
+  'A3_NEWSPAPER': { width: 2480, height: 3508, label: 'A3 (297mm × 420mm)' },
 } as const;
 
-// Default canvas size (2R)
-export const DEFAULT_CANVAS_WIDTH = CANVAS_SIZES['2R'].width;
-export const DEFAULT_CANVAS_HEIGHT = CANVAS_SIZES['2R'].height;
+// Frame canvas sizes available per booth type
+export const FRAME_CANVAS_SIZES = {
+  'REGULAR_4R': {
+    '2R': { width: 600, height: 1050, label: '2R (2.5" × 3.5")' },
+    '4R': { width: 1200, height: 1800, label: '4R (4" × 6")' },
+  },
+  'A3_NEWSPAPER': {
+    'A3': { width: 2480, height: 3508, label: 'A3 (297mm × 420mm)' },
+  },
+} as const;
+
+export type BoothType = keyof typeof BOOTH_TYPE_CANVAS;
+
+// Default canvas size (4R — most common booth type)
+export const DEFAULT_CANVAS_WIDTH = BOOTH_TYPE_CANVAS['REGULAR_4R'].width;
+export const DEFAULT_CANVAS_HEIGHT = BOOTH_TYPE_CANVAS['REGULAR_4R'].height;
 
 // Database types
 export interface Frame {
@@ -71,6 +84,7 @@ export interface PhotoSlot {
   height: number;
   rotation?: number;
   layer?: 'below' | 'above'; // Whether photo renders below or above the frame
+  capture_index?: number; // Which camera capture to use (0-indexed). Multiple slots can share the same index.
 }
 
 export interface Session {

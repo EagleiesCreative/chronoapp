@@ -56,17 +56,14 @@ export function useUploadSession() {
             // --- END LOCAL SAVE ---
 
             // --- OFFLINE-FIRST QUEUE (Tauri reliability worker) ---
-            const photoDataUrls = capturedPhotos
-                .map(photo => photo.dataUrl)
-                .filter((dataUrl): dataUrl is string => Boolean(dataUrl));
-
+            // Only queue metadata — image uploads are handled by the primary upload path
+            // and the upload-queue retry mechanism. This avoids exceeding Vercel's payload limit.
             let queuedSyncJobId: string | null = null;
             if (boothId) {
                 queuedSyncJobId = await queueSessionSync({
                     sessionId,
                     boothId,
-                    finalImageDataUrl: imageDataUrl,
-                    photoDataUrls,
+                    photoDataUrls: [],  // Don't send base64 — too large for Vercel
                     createdAt: new Date().toISOString(),
                 });
 
@@ -121,6 +118,9 @@ export function useUploadSession() {
             }
 
             // 3. Generate and upload stop-motion GIF (non-critical)
+            const photoDataUrls = capturedPhotos
+                .map(photo => photo.dataUrl)
+                .filter((dataUrl): dataUrl is string => Boolean(dataUrl));
             let gifUrl: string | null = null;
             if (photoDataUrls.length >= 2) {
                 setUploadStatus('Creating stop-motion GIF...');

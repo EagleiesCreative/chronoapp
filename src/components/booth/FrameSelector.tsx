@@ -214,7 +214,7 @@ export function FrameSelector() {
                                                 {effectivePaymentBypass ? '' : formatIDR(effectivePrice)}
                                             </span>
                                             <span className="text-sm text-muted-foreground">
-                                                · {selectedFrame.photo_slots?.length || 0} photos
+                                                · {new Set(selectedFrame.photo_slots?.map((s, i) => s.capture_index ?? i)).size || 0} photos
                                             </span>
                                         </div>
                                     </div>

@@ -8,7 +8,9 @@ export function CountdownScreen() {
     const { setStep, selectedFrame, currentPhotoIndex, setCurrentPhotoIndex } = useBoothStore();
     const [count, setCount] = useState(3);
 
-    const totalPhotos = selectedFrame?.photo_slots?.length || 3;
+    const totalPhotos = (selectedFrame?.photo_slots?.length || 0) > 0
+        ? Math.max(...selectedFrame!.photo_slots.map((s, i) => s.capture_index ?? i)) + 1
+        : 3;
 
     useEffect(() => {
         if (count > 0) {

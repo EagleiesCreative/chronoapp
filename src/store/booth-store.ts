@@ -69,6 +69,10 @@ interface BoothState {
     finalImage: string | null;
     setFinalImage: (image: string | null) => void;
 
+    // Print-ready image (always 4R size — 2R frames duplicated side-by-side)
+    printImage: string | null;
+    setPrintImage: (image: string | null) => void;
+
     // Loading states
     isLoading: boolean;
     setIsLoading: (loading: boolean) => void;
@@ -138,6 +142,9 @@ export const useBoothStore = create<BoothState>((set) => ({
     finalImage: null,
     setFinalImage: (image) => set({ finalImage: image }),
 
+    printImage: null,
+    setPrintImage: (image) => set({ printImage: image }),
+
     isLoading: false,
     setIsLoading: (loading) => set({ isLoading: loading }),
 
@@ -161,6 +168,7 @@ export const useBoothStore = create<BoothState>((set) => ({
         currentPhotoIndex: 0,
         capturedPhotos: [],
         finalImage: null,
+        printImage: null,
         isLoading: false,
         error: null,
         appliedVoucher: null,

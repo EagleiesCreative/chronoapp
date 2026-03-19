@@ -9,15 +9,24 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
     const [compositeImage, setCompositeImage] = useState<string | null>(null);
     const [isCompositing, setIsCompositing] = useState(true);
 
-    const { selectedFrame, capturedPhotos, setFinalImage, selectedFilter } = useBoothStore();
+    const { selectedFrame, capturedPhotos, setFinalImage, setPrintImage, selectedFilter } = useBoothStore();
     const { booth } = useTenantStore();
 
     useEffect(() => {
         async function compositeImages() {
-            if (!selectedFrame || capturedPhotos.length === 0 || !canvasRef.current) return;
+            if (!selectedFrame || capturedPhotos.length === 0 || !canvasRef.current) {
+                console.log("Skipping compositing: missing frame, photos, or canvas ref");
+                return;
+            }
 
-            const canvasWidth = selectedFrame.canvas_width || 600;
-            const canvasHeight = selectedFrame.canvas_height || 1050;
+            console.log("Starting compositing process...");
+            const canvasWidth = selectedFrame.canvas_width || 1200;
+            const canvasHeight = selectedFrame.canvas_height || 1800;
+
+            // 4R print dimensions (always print at this size)
+            const PRINT_4R_WIDTH = 1200;
+            const PRINT_4R_HEIGHT = 1800;
+            const is2R = canvasWidth <= 600;
 
             // First, check if we are running in Tauri and can use the fast Rust backend
             let isTauri = false;
@@ -26,27 +35,32 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                 const tauriApi = await import('@tauri-apps/api/core');
                 invoke = tauriApi.invoke;
                 isTauri = true;
+                console.log("Tauri detected, attempting Rust backend");
             } catch (err) {
                 // Not in Tauri
+                console.log("Not in Tauri, will use Canvas fallback");
             }
 
             if (isTauri && invoke) {
                 try {
                     // Gather the data for Rust
-                    
+
                     // 1. Get the base64 of the frame PNG
                     let frameBase64: string | undefined = undefined;
                     if (selectedFrame.image_url) {
                         try {
                             const cachedUrl = await getCachedImageUrl(selectedFrame.image_url);
                             const urlToUse = cachedUrl || getAssetUrl(selectedFrame.image_url);
-                            
+
                             // Fetch the image as blob, then convert to base64
                             const response = await fetch(urlToUse);
+                            if (!response.ok) {
+                                throw new Error(`Failed to fetch frame: ${response.status} ${response.statusText}`);
+                            }
                             const blob = await response.blob();
-                            
-                            // Only set if we actually got an image back
-                            if (blob.type.startsWith('image/')) {
+
+                            // Convert to base64 (skip type check — CDNs may return application/octet-stream)
+                            if (blob.size > 0) {
                                 frameBase64 = await new Promise<string>((resolve, reject) => {
                                     const reader = new FileReader();
                                     reader.onloadend = () => {
@@ -59,6 +73,8 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                                     reader.onerror = reject;
                                     reader.readAsDataURL(blob);
                                 });
+                            } else {
+                                console.warn("Frame blob is empty");
                             }
                         } catch (err) {
                             console.error("Failed to load frame image for Rust backend:", err);
@@ -77,13 +93,24 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                     };
 
                     // 3. Call Rust
-                    const result: { final_base64: string } = await invoke('composite_image_rust', { req });
-                    
+                    console.log("Calling Rust composite_image_rust with frame:", frameBase64 ? "present" : "missing");
+                    const result: { final_base64: string; print_base64?: string } = await invoke('composite_image_rust', { req: {
+                        ...req,
+                        duplicate_for_print: is2R,
+                        print_width: PRINT_4R_WIDTH,
+                        print_height: PRINT_4R_HEIGHT,
+                    } });
+
                     if (result && result.final_base64) {
+                        console.log("Rust compositing successful");
                         setCompositeImage(result.final_base64);
                         setFinalImage(result.final_base64);
+                        // Print image: use duplicated version if 2R, otherwise same as final
+                        setPrintImage(result.print_base64 || result.final_base64);
                         setIsCompositing(false);
                         return; // Successfully composited in Rust!
+                    } else {
+                        console.error("Rust returned empty result");
                     }
                 } catch (err) {
                     console.error("Rust compositing failed, falling back to Canvas:", err);
@@ -94,10 +121,15 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
             // ==========================================
             // FALLBACK: HTML5 Canvas Compositing
             // ==========================================
-            
+
+            console.log("Using Canvas fallback method");
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
-            if (!ctx) return;
+            if (!ctx) {
+                console.error("Failed to get canvas 2D context");
+                setIsCompositing(false);
+                return;
+            }
 
             canvas.width = canvasWidth;
             canvas.height = canvasHeight;
@@ -177,11 +209,12 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
             };
 
             // Helper function to draw a photo in its slot (with filter pre-applied)
-            const drawPhotoInSlot = async (photoIndex: number, filterDef: ReturnType<typeof getFilterByName>) => {
-                const photo = capturedPhotos[photoIndex];
-                const slot = selectedFrame.photo_slots?.[photoIndex];
+            // Uses capture_index to determine which captured photo to render in each slot
+            const drawPhotoInSlot = async (slot: any, slotIndex: number, filterDef: ReturnType<typeof getFilterByName>) => {
+                const captureIdx = slot.capture_index ?? slotIndex;
+                const photo = capturedPhotos[captureIdx];
 
-                if (!slot || !photo?.dataUrl) return;
+                if (!photo?.dataUrl) return;
 
                 const img = new Image();
                 await new Promise<void>((resolve) => {
@@ -189,10 +222,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                         // Pre-apply filter to the photo
                         const filteredCanvas = applyFilterToImage(img, filterDef);
 
-                        const destX = (slot.x / 1000) * canvas.width;
-                        const destY = (slot.y / 1000) * canvas.height;
-                        const destW = (slot.width / 1000) * canvas.width;
-                        const destH = (slot.height / 1000) * canvas.height;
+                        const destX = slot.x;
+                        const destY = slot.y;
+                        const destW = slot.width;
+                        const destH = slot.height;
 
                         const imgAspect = img.naturalWidth / img.naturalHeight;
                         const slotAspect = destW / destH;
@@ -233,33 +266,65 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
             // Get the active filter
             const filter = getFilterByName(selectedFilter);
 
+            const slots = selectedFrame.photo_slots || [];
+
             // Draw photos with layer='below' or no layer (default: below)
-            for (let i = 0; i < capturedPhotos.length; i++) {
-                const slot = selectedFrame.photo_slots?.[i];
-                if (!slot || slot.layer === 'above') continue;
-                await drawPhotoInSlot(i, filter);
+            console.log(`Drawing ${slots.length} photo slots`);
+            for (let i = 0; i < slots.length; i++) {
+                const slot = slots[i];
+                if (slot.layer === 'above') continue;
+                try {
+                    await drawPhotoInSlot(slot, i, filter);
+                } catch (err) {
+                    console.error(`Error drawing photo slot ${i}:`, err);
+                }
             }
 
             // Draw frame overlay
             if (selectedFrame.image_url) {
+                console.log("Drawing frame overlay from:", selectedFrame.image_url);
                 const frameImg = new Image();
                 frameImg.crossOrigin = 'anonymous';
                 await new Promise<void>(async (resolve) => {
                     const cachedUrl = await getCachedImageUrl(selectedFrame.image_url);
+                    const frameUrl = cachedUrl || getAssetUrl(selectedFrame.image_url);
+
+                    // Timeout after 10 seconds
+                    const loadTimeout = setTimeout(() => {
+                        console.warn("Frame loading timeout after 10 seconds");
+                        resolve();
+                    }, 10000);
+
                     frameImg.onload = () => {
-                        ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+                        clearTimeout(loadTimeout);
+                        try {
+                            ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+                            console.log("Frame overlay drawn successfully");
+                        } catch (err) {
+                            console.error("Error drawing frame overlay:", err);
+                        }
                         resolve();
                     };
-                    frameImg.onerror = () => resolve();
-                    frameImg.src = cachedUrl || getAssetUrl(selectedFrame.image_url);
+                    frameImg.onerror = () => {
+                        clearTimeout(loadTimeout);
+                        console.error(`Failed to load frame image: ${frameUrl}`);
+                        resolve();
+                    };
+                    frameImg.src = frameUrl;
                 });
+            } else {
+                console.warn("No frame image URL provided");
             }
 
             // Draw photos with layer='above'
-            for (let i = 0; i < capturedPhotos.length; i++) {
-                const slot = selectedFrame.photo_slots?.[i];
-                if (!slot || slot.layer !== 'above') continue;
-                await drawPhotoInSlot(i, filter);
+            for (let i = 0; i < slots.length; i++) {
+                const slot = slots[i];
+                if (slot.layer !== 'above') continue;
+                try {
+                    await drawPhotoInSlot(slot, i, filter);
+                } catch (err) {
+                    console.error(`Error drawing above-layer photo slot ${i}:`, err);
+                }
             }
 
             // Event mode: draw hashtag overlay
@@ -274,15 +339,38 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                 ctx.restore();
             }
 
+            // Share image (original frame size)
             const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+            console.log("Canvas compositing complete, final image:", imageDataUrl.substring(0, 50) + "...");
             setCompositeImage(imageDataUrl);
             setFinalImage(imageDataUrl);
+
+            // Print image: always 4R size
+            if (is2R) {
+                // Duplicate 2R side-by-side to fill 4R
+                const printCanvas = document.createElement('canvas');
+                printCanvas.width = PRINT_4R_WIDTH;
+                printCanvas.height = PRINT_4R_HEIGHT;
+                const printCtx = printCanvas.getContext('2d')!;
+                printCtx.fillStyle = '#ffffff';
+                printCtx.fillRect(0, 0, PRINT_4R_WIDTH, PRINT_4R_HEIGHT);
+                // Left half
+                printCtx.drawImage(canvas, 0, 0, canvasWidth, canvasHeight);
+                // Right half
+                printCtx.drawImage(canvas, canvasWidth, 0, canvasWidth, canvasHeight);
+                const printDataUrl = printCanvas.toDataURL('image/jpeg', 0.95);
+                setPrintImage(printDataUrl);
+            } else {
+                setPrintImage(imageDataUrl);
+            }
+
+            console.log("Image compositing finished successfully");
             setIsCompositing(false);
         }
 
         compositeImages();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedFrame, capturedPhotos, setFinalImage, selectedFilter, booth]);
+    }, [selectedFrame, capturedPhotos, setFinalImage, setPrintImage, selectedFilter, booth]);
 
     return { compositeImage, isCompositing };
 }

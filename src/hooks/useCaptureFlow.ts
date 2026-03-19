@@ -32,7 +32,9 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
     const [lastCapturedPhoto, setLastCapturedPhoto] = useState<string | null>(null);
     const [retakingIndex, setRetakingIndex] = useState<number | null>(null);
 
-    const totalPhotos = selectedFrame?.photo_slots?.length || 3;
+    const totalPhotos = (selectedFrame?.photo_slots?.length || 0) > 0
+        ? Math.max(...selectedFrame!.photo_slots.map((s, i) => s.capture_index ?? i)) + 1
+        : 3;
 
     const startCountdown = useCallback(() => {
         if (cameraReady && phase === 'waiting') {

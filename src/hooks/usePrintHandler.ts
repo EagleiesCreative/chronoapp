@@ -5,11 +5,13 @@ import { useTenantStore } from '@/store/tenant-store';
 
 export function usePrintHandler(compositeImage: string | null) {
     const [isPrinting, setIsPrinting] = useState(false);
-    const { session } = useBoothStore();
+    const { session, printImage } = useBoothStore();
     const { addJob } = usePrintStore();
     const { booth } = useTenantStore();
 
     const printCopiesCount = booth?.print_copies ?? 1;
+    // Use printImage (always 4R) for printing, fall back to compositeImage
+    const imageForPrint = printImage || compositeImage;
 
     const handlePrint = async (onPrintInitiated?: () => void) => {
         if (!compositeImage) return;
@@ -30,7 +32,7 @@ export function usePrintHandler(compositeImage: string | null) {
 
                 for (let i = 0; i < printCopiesCount; i++) {
                     await invoke('print_photo', {
-                        imageData: compositeImage,
+                        imageData: imageForPrint,
                         printerName: null, // Use default printer
                         pageSize: pageSize
                     });
@@ -38,7 +40,7 @@ export function usePrintHandler(compositeImage: string | null) {
                 usedTauri = true;
                 console.log(`Printed ${printCopiesCount} copies via Tauri`);
                 addJob({
-                    imageUrl: compositeImage,
+                    imageUrl: imageForPrint!,
                     copies: printCopiesCount,
                     status: 'success',
                     session_id: session?.id
@@ -52,7 +54,7 @@ export function usePrintHandler(compositeImage: string | null) {
                 const printWindow = window.open('', '_blank');
                 if (printWindow) {
                     const imagesHtml = Array(printCopiesCount).fill(0).map(() =>
-                        `<div class="page-break"><img src="${compositeImage}" /></div>`
+                        `<div class="page-break"><img src="${imageForPrint}" /></div>`
                     ).join('');
 
                     printWindow.document.write(`
@@ -92,7 +94,7 @@ export function usePrintHandler(compositeImage: string | null) {
           `);
                     printWindow.document.close();
                     addJob({
-                        imageUrl: compositeImage,
+                        imageUrl: imageForPrint!,
                         copies: printCopiesCount,
                         status: 'success',
                         session_id: session?.id

@@ -14,6 +14,7 @@ pub struct PhotoSlot {
     pub height: f32,
     pub rotation: Option<f32>,
     pub layer: Option<String>,
+    pub capture_index: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,11 +26,15 @@ pub struct CompositeRequest {
     pub photo_slots: Vec<PhotoSlot>,
     pub filter: String,
     pub event_hashtag: Option<String>,
+    pub duplicate_for_print: Option<bool>,
+    pub print_width: Option<u32>,
+    pub print_height: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct CompositeResponse {
     pub final_base64: String,
+    pub print_base64: Option<String>,
 }
 
 // Extract base64 payload from data URL
@@ -150,15 +155,17 @@ pub fn composite_images(req: CompositeRequest) -> Result<CompositeResponse, Stri
     let mut above_slots = Vec::new();
     
     for (i, slot) in req.photo_slots.iter().enumerate() {
-        if i >= req.photos_base64.len() {
-            continue; // Skip if we don't have a photo for this slot
+        // Use capture_index to determine which photo to use for this slot
+        let photo_idx = slot.capture_index.unwrap_or(i);
+        if photo_idx >= req.photos_base64.len() {
+            continue; // Skip if we don't have a photo for this capture index
         }
         
         let is_above = slot.layer.as_deref() == Some("above");
         if is_above {
-            above_slots.push((i, slot));
+            above_slots.push((photo_idx, slot));
         } else {
-            below_slots.push((i, slot));
+            below_slots.push((photo_idx, slot));
         }
     }
 
@@ -170,11 +177,11 @@ pub fn composite_images(req: CompositeRequest) -> Result<CompositeResponse, Stri
         // Apply filter
         apply_filter(&mut photo_img, &req.filter);
         
-        // Calculate dimensions
-        let dest_x = (slot.x / 1000.0 * req.frame_width as f32).round() as i64;
-        let dest_y = (slot.y / 1000.0 * req.frame_height as f32).round() as i64;
-        let dest_w = (slot.width / 1000.0 * req.frame_width as f32).round() as u32;
-        let dest_h = (slot.height / 1000.0 * req.frame_height as f32).round() as u32;
+        // Calculate dimensions — slot coords are absolute canvas pixels
+        let dest_x = slot.x.round() as i64;
+        let dest_y = slot.y.round() as i64;
+        let dest_w = slot.width.round() as u32;
+        let dest_h = slot.height.round() as u32;
         
         // Crop/Resize strategy (center crop)
         let img_aspect = photo_img.width() as f32 / photo_img.height() as f32;
@@ -250,10 +257,25 @@ pub fn composite_images(req: CompositeRequest) -> Result<CompositeResponse, Stri
         }
     }
 
-    // Finalize
-    let final_dyn_image = DynamicImage::ImageRgba8(canvas);
+    // Finalize — share image (original frame size)
+    let final_dyn_image = DynamicImage::ImageRgba8(canvas.clone());
     let final_base64 = encode_to_jpeg_base64(&final_dyn_image, 95)?;
 
+    // Print image: duplicate side-by-side if 2R→4R
+    let print_base64 = if req.duplicate_for_print.unwrap_or(false) {
+        let pw = req.print_width.unwrap_or(1200);
+        let ph = req.print_height.unwrap_or(1800);
+        let mut print_canvas = RgbaImage::from_pixel(pw, ph, Rgba([255, 255, 255, 255]));
+        // Left copy
+        image::imageops::overlay(&mut print_canvas, &canvas, 0, 0);
+        // Right copy
+        image::imageops::overlay(&mut print_canvas, &canvas, req.frame_width as i64, 0);
+        let print_img = DynamicImage::ImageRgba8(print_canvas);
+        Some(encode_to_jpeg_base64(&print_img, 95)?)
+    } else {
+        None
+    };
+
     info!("Composite successful");
-    Ok(CompositeResponse { final_base64 })
+    Ok(CompositeResponse { final_base64, print_base64 })
 }
