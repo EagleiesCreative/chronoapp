@@ -122,34 +122,98 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
     let image_bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, base64_data)
         .map_err(|e| format!("Failed to decode image: {}", e))?;
     
-    // Get the printer
-    let system_printers = printers::get_printers();
-    let printer = if let Some(name) = printer_name {
-        system_printers
-            .into_iter()
-            .find(|p| p.name == name || p.system_name == name)
-    } else {
-        printers::get_default_printer()
-    };
-    
-    match printer {
-        Some(p) => {
-            // Setup properties (e.g., PageSize)
-            let mut properties = Vec::new();
-            let page_size_val = page_size.unwrap_or_else(|| "Postcard".to_string()); // Default to Postcard (4R)
-            properties.push(("PageSize", page_size_val.as_str()));
-            
-            let options = PrinterJobOptions {
-                name: Some("ChronoSnap Photo"),
-                raw_properties: &properties,
-            };
-            
-            match p.print(&image_bytes, options) {
-                Ok(_) => Ok(format!("Photo sent to printer: {} (Size: {})", p.name, page_size_val)),
-                Err(e) => Err(format!("Failed to print photo: {:?}", e)),
-            }
+    // Determine the target printer name
+    let target_printer_name = if let Some(ref name) = printer_name {
+        let system_printers = printers::get_printers();
+        let found = system_printers
+            .iter()
+            .find(|p| p.name == *name || p.system_name == *name);
+        match found {
+            Some(p) => Some(p.system_name.clone()),
+            None => return Err(format!("Printer '{}' not found", name)),
         }
-        None => Err("No printer found".to_string()),
+    } else {
+        // None = use CUPS default printer (don't pass -d flag)
+        None
+    };
+
+    // Determine CUPS media name based on page_size parameter
+    let page_size_val = page_size.unwrap_or_else(|| "4R".to_string());
+    let cups_media = match page_size_val.as_str() {
+        "A3" => "A3",
+        "A4" => "A4",
+        _ => "4x6.Fullbleed", // Default: 4R (4x6") borderless (Brother: Fullbleed)
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::fs;
+        use std::process::Command;
+
+        // Write image bytes to a temp file
+        let temp_path = format!("/tmp/chronosnap_print_{}.jpg", chrono::Utc::now().timestamp_millis());
+        fs::write(&temp_path, &image_bytes)
+            .map_err(|e| format!("Failed to write temp print file: {}", e))?;
+
+        // Build lp command with CUPS options for 4R borderless
+        let mut cmd = Command::new("lp");
+
+        // Specify printer if provided (otherwise CUPS uses its default)
+        if let Some(ref pname) = target_printer_name {
+            cmd.arg("-d").arg(pname);
+        }
+
+        cmd.arg("-o").arg(format!("media={}", cups_media));
+        cmd.arg("-o").arg("MediaType=photographic-glossy");
+        cmd.arg("-o").arg("fit-to-page");
+        cmd.arg("-t").arg("ChronoSnap Photo");
+        cmd.arg(&temp_path);
+
+        let output = cmd.output()
+            .map_err(|e| format!("Failed to execute lp command: {}", e))?;
+
+        // Clean up temp file (best-effort)
+        let _ = fs::remove_file(&temp_path);
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let printer_label = target_printer_name.as_deref().unwrap_or("default");
+            Ok(format!("Photo sent to printer: {} (Media: {}) — {}", printer_label, cups_media, stdout.trim()))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("lp command failed: {}", stderr))
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Fallback: use printers crate on non-macOS
+        let system_printers = printers::get_printers();
+        let printer = if let Some(ref name) = printer_name {
+            system_printers
+                .into_iter()
+                .find(|p| p.name == *name || p.system_name == *name)
+        } else {
+            printers::get_default_printer()
+        };
+
+        match printer {
+            Some(p) => {
+                let mut properties = Vec::new();
+                properties.push(("PageSize", cups_media));
+
+                let options = PrinterJobOptions {
+                    name: Some("ChronoSnap Photo"),
+                    raw_properties: &properties,
+                };
+
+                match p.print(&image_bytes, options) {
+                    Ok(_) => Ok(format!("Photo sent to printer: {} (Size: {})", p.name, cups_media)),
+                    Err(e) => Err(format!("Failed to print photo: {:?}", e)),
+                }
+            }
+            None => Err("No printer found".to_string()),
+        }
     }
 }
 
