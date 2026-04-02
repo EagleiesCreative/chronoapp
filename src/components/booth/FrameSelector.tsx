@@ -13,12 +13,11 @@ import { apiFetch, getAssetUrl } from '@/lib/api';
 import { getCachedFrames, setCachedFrames, getCachedImageUrl, cacheFrameImages } from '@/lib/frame-cache';
 
 export function FrameSelector() {
-    const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, setError, setSession } = useBoothStore();
+    const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, isLoading, setError, setSession } = useBoothStore();
     const { booth } = useTenantStore();
     const activeSession = useSessionProfileStore((s) => s.activeSession);
     const effectivePaymentBypass = activeSession?.payment_bypass ?? booth?.payment_bypass;
     const effectivePrice = activeSession?.price ?? booth?.price ?? 0;
-    const [currentIndex, setCurrentIndex] = useState(0);
     const [cachedOverlayUrls, setCachedOverlayUrls] = useState<Record<string, string>>({});
 
     // Load indexedDB cached images for frames
@@ -107,20 +106,6 @@ export function FrameSelector() {
         fetchFrames();
     }, [setFrames, setSelectedFrame, setIsLoading, setError, activeSession?.id]);
 
-    const handlePrevious = () => {
-        if (frames.length === 0) return;
-        const newIndex = currentIndex === 0 ? frames.length - 1 : currentIndex - 1;
-        setCurrentIndex(newIndex);
-        setSelectedFrame(frames[newIndex]);
-    };
-
-    const handleNext = () => {
-        if (frames.length === 0) return;
-        const newIndex = currentIndex === frames.length - 1 ? 0 : currentIndex + 1;
-        setCurrentIndex(newIndex);
-        setSelectedFrame(frames[newIndex]);
-    };
-
     const handleConfirm = async () => {
         if (!selectedFrame) return;
 
@@ -174,19 +159,56 @@ export function FrameSelector() {
                 </p>
             </motion.div>
 
-            {/* Frame carousel */}
-            <div className="flex items-center justify-center gap-8 w-full max-w-4xl mb-10">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handlePrevious}
-                    className="w-14 h-14 rounded-full border border-border hover:bg-muted touch-target"
-                    disabled={frames.length <= 1}
+            {/* Split Layout: Frame Grid & Preview */}
+            <div className="flex gap-8 w-full max-w-6xl mb-10 flex-1 min-h-0 mt-4 max-h-[65vh]">
+                {/* Left Side: Frame Grid */}
+                <div 
+                    className="w-1/2 overflow-y-auto pr-6 pb-8" 
+                    style={{ 
+                        WebkitMaskImage: 'linear-gradient(to bottom, black 90%, transparent 100%)',
+                        maskImage: 'linear-gradient(to bottom, black 90%, transparent 100%)'
+                    }}
                 >
-                    <ChevronLeft className="w-6 h-6" strokeWidth={1.5} />
-                </Button>
+                    <div className="grid grid-cols-2 gap-5 auto-rows-max">
+                        {frames.map((frame) => (
+                            <button
+                                key={frame.id}
+                                onClick={() => setSelectedFrame(frame)}
+                                className={`relative aspect-[3/4] rounded-2xl overflow-hidden border-2 transition-all duration-300 touch-target ${
+                                    selectedFrame?.id === frame.id 
+                                        ? 'border-primary ring-4 ring-primary/20 scale-[0.98]' 
+                                        : 'border-border hover:border-primary/50 hover:scale-[1.02]'
+                                }`}
+                            >
+                                <img
+                                    src={cachedOverlayUrls[frame.id] || getAssetUrl(frame.image_url)}
+                                    alt={frame.name}
+                                    className="w-full h-full object-contain bg-white"
+                                />
+                                <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col items-start justify-end h-1/2">
+                                    <h4 className="text-white font-medium truncate w-full text-left">{frame.name}</h4>
+                                    <p className="text-white/80 text-xs text-left">
+                                        {new Set(frame.photo_slots?.map((s: any, i: number) => s.capture_index ?? i)).size || 0} photos
+                                    </p>
+                                </div>
+                                {selectedFrame?.id === frame.id && (
+                                    <div className="absolute top-3 right-3 bg-primary text-primary-foreground rounded-full p-1.5 shadow-lg">
+                                        <Check className="w-4 h-4" strokeWidth={3} />
+                                    </div>
+                                )}
+                            </button>
+                        ))}
+                        {frames.length === 0 && !isLoading && (
+                            <div className="col-span-2 py-12 text-center text-muted-foreground bg-muted/30 rounded-2xl border border-dashed border-border flex flex-col items-center justify-center">
+                                <ImageIcon className="w-10 h-10 mb-3 opacity-40 mx-auto" strokeWidth={1} />
+                                <p>No frames available</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
 
-                <div className="relative w-[420px] h-[520px]">
+                {/* Right Side: Preview */}
+                <div className="w-1/2 flex flex-col items-center justify-center bg-muted/20 rounded-3xl p-4 border border-border/50 shadow-inner relative">
                     <AnimatePresence mode="wait">
                         {selectedFrame ? (
                             <motion.div
@@ -195,80 +217,31 @@ export function FrameSelector() {
                                 animate={{ scale: 1, opacity: 1 }}
                                 exit={{ scale: 0.95, opacity: 0 }}
                                 transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                                className="w-full h-full"
+                                className="w-full h-full flex flex-col items-center justify-center"
                             >
-                                <div className="w-full h-full overflow-hidden elegant-card relative">
+                                <div className="relative h-full w-full max-h-full rounded-xl overflow-hidden shadow-2xl flex items-center justify-center">
                                     <img
                                         src={cachedOverlayUrls[selectedFrame.id] || getAssetUrl(selectedFrame.image_url)}
                                         alt={selectedFrame.name}
-                                        className="w-full h-full object-contain"
+                                        className="w-full h-full object-contain drop-shadow-lg"
                                     />
-
-                                    {/* Frame info - clean overlay */}
-                                    <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-white via-white/95 to-transparent">
-                                        <h3 className="text-xl font-medium text-foreground mb-2">
-                                            {selectedFrame.name}
-                                        </h3>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-lg font-medium text-primary">
-                                                {effectivePaymentBypass ? '' : formatIDR(effectivePrice)}
-                                            </span>
-                                            <span className="text-sm text-muted-foreground">
-                                                · {new Set(selectedFrame.photo_slots?.map((s, i) => s.capture_index ?? i)).size || 0} photos
-                                            </span>
-                                        </div>
-                                    </div>
                                 </div>
                             </motion.div>
                         ) : (
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                className="w-full h-full flex items-center justify-center elegant-card"
+                                className="w-full h-full flex items-center justify-center text-center text-muted-foreground"
                             >
-                                <div className="text-center text-muted-foreground">
-                                    <ImageIcon className="w-12 h-12 mx-auto mb-4 opacity-40" strokeWidth={1} />
-                                    <p className="font-light">No frames available</p>
+                                <div>
+                                    <ImageIcon className="w-16 h-16 mx-auto mb-4 opacity-40" strokeWidth={1} />
+                                    <p className="font-light text-lg">Select a frame</p>
                                 </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
                 </div>
-
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleNext}
-                    className="w-14 h-14 rounded-full border border-border hover:bg-muted touch-target"
-                    disabled={frames.length <= 1}
-                >
-                    <ChevronRight className="w-6 h-6" strokeWidth={1.5} />
-                </Button>
             </div>
-
-            {/* Frame indicators */}
-            {frames.length > 1 && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                    className="flex gap-2 mb-10"
-                >
-                    {frames.map((frame, index) => (
-                        <button
-                            key={frame.id}
-                            onClick={() => {
-                                setCurrentIndex(index);
-                                setSelectedFrame(frame);
-                            }}
-                            className={`h-1.5 rounded-full transition-all duration-300 ${index === currentIndex
-                                ? 'bg-primary w-8'
-                                : 'bg-border w-1.5 hover:bg-muted-foreground/40'
-                                }`}
-                        />
-                    ))}
-                </motion.div>
-            )}
 
             {/* Action buttons */}
             <motion.div
