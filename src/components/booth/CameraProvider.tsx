@@ -28,7 +28,7 @@ export const CameraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
     const { step } = useBoothStore();
-    const { selectedCameraId } = useAdminStore();
+    const { browserCameraId } = useAdminStore();
 
     // Camera is active for all steps EXCEPT 'idle' (start screen)
     const shouldBeActive = step !== 'idle';
@@ -62,8 +62,8 @@ export const CameraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const videoConstraints = {
         width: 1920,
         height: 1080,
-        ...(selectedCameraId
-            ? { deviceId: { exact: selectedCameraId } }
+        ...(browserCameraId
+            ? { deviceId: { exact: browserCameraId } }
             : { facingMode: 'user' as const }),
     };
 

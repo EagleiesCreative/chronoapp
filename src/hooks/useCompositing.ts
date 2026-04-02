@@ -1,5 +1,5 @@
 import { useEffect, useState, RefObject } from 'react';
-import { getAssetUrl } from '@/lib/api';
+import { getAssetUrl, getApiUrl } from '@/lib/api';
 import { getCachedImageUrl } from '@/lib/frame-cache';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
@@ -12,9 +12,12 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
     const { selectedFrame, capturedPhotos, setFinalImage, setPrintImage, selectedFilter } = useBoothStore();
     const { booth } = useTenantStore();
 
-    // Helper: proxy R2 URLs through our API to avoid CORS issues
+    // Helper: proxy external URLs through our API to avoid CORS issues in Tauri
     const getProxiedImageUrl = (url: string): string => {
-        if (url.includes('r2.cloudflarestorage.com')) {
+        if (!url) return '';
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            // Avoid double proxying
+            if (url.includes('/api/frames/image')) return url;
             return `/api/frames/image?url=${encodeURIComponent(url)}`;
         }
         return url;
@@ -58,34 +61,44 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                     if (selectedFrame.image_url) {
                         try {
                             const cachedUrl = await getCachedImageUrl(selectedFrame.image_url);
-                            const urlToUse = getProxiedImageUrl(cachedUrl || getAssetUrl(selectedFrame.image_url));
 
-                            // Fetch the image as blob, then convert to base64
-                            const response = await fetch(urlToUse);
-                            if (!response.ok) {
-                                throw new Error(`Failed to fetch frame: ${response.status} ${response.statusText}`);
-                            }
-                            const blob = await response.blob();
-
-                            // Convert to base64 (skip type check — CDNs may return application/octet-stream)
-                            if (blob.size > 0) {
-                                frameBase64 = await new Promise<string>((resolve, reject) => {
-                                    const reader = new FileReader();
-                                    reader.onloadend = () => {
-                                        if (typeof reader.result === 'string') {
-                                            resolve(reader.result);
-                                        } else {
-                                            reject(new Error("Failed to convert frame to base64"));
-                                        }
-                                    };
-                                    reader.onerror = reject;
-                                    reader.readAsDataURL(blob);
-                                });
+                            // If we have a cached base64, use it directly
+                            if (cachedUrl && cachedUrl.startsWith('data:')) {
+                                frameBase64 = cachedUrl;
                             } else {
-                                console.warn("Frame blob is empty");
+                                const urlToUse = getProxiedImageUrl(cachedUrl || getAssetUrl(selectedFrame.image_url));
+
+                                // Add getApiUrl() to ensure Tauri uses the absolute production URL for the proxy route
+                                const finalFetchUrl = urlToUse.startsWith('/') ? getApiUrl(urlToUse) : urlToUse;
+
+                                // Fetch the image as blob, then convert to base64
+                                const response = await fetch(finalFetchUrl);
+                                if (!response.ok) {
+                                    console.warn(`Frame overlay fetch returned ${response.status} — compositing without frame overlay`);
+                                } else {
+                                    const blob = await response.blob();
+
+                                    // Convert to base64 (skip type check — CDNs may return application/octet-stream)
+                                    if (blob.size > 0) {
+                                        frameBase64 = await new Promise<string>((resolve, reject) => {
+                                            const reader = new FileReader();
+                                            reader.onloadend = () => {
+                                                if (typeof reader.result === 'string') {
+                                                    resolve(reader.result);
+                                                } else {
+                                                    reject(new Error("Failed to convert frame to base64"));
+                                                }
+                                            };
+                                            reader.onerror = reject;
+                                            reader.readAsDataURL(blob);
+                                        });
+                                    } else {
+                                        console.warn("Frame blob is empty");
+                                    }
+                                }
                             }
                         } catch (err) {
-                            console.error("Failed to load frame image for Rust backend:", err);
+                            console.warn("Failed to load frame image for Rust backend (compositing without overlay):", err);
                         }
                     }
 

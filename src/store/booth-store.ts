@@ -194,12 +194,39 @@ interface AdminState {
     setShowAdminPanel: (show: boolean) => void;
 
     // Camera settings
+    // selectedCameraId: Tauri numeric index (e.g. "0", "1") used for native camera commands
     selectedCameraId: string | null;
     setSelectedCameraId: (id: string | null) => void;
+    // browserCameraId: browser WebAPI deviceId UUID used for react-webcam / getUserMedia
+    browserCameraId: string | null;
+    setBrowserCameraId: (id: string | null) => void;
     cameraTestStatus: 'idle' | 'testing' | 'success' | 'error';
     setCameraTestStatus: (status: 'idle' | 'testing' | 'success' | 'error') => void;
     cameraError: string | null;
     setCameraError: (error: string | null) => void;
+}
+
+const CAMERA_STORAGE_KEY = 'chronosnap_selected_camera';
+const BROWSER_CAMERA_STORAGE_KEY = 'chronosnap_browser_camera';
+
+function getPersistedValue(key: string): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        return localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+function setPersistedValue(key: string, value: string | null): void {
+    if (typeof window === 'undefined') return;
+    try {
+        if (value) {
+            localStorage.setItem(key, value);
+        } else {
+            localStorage.removeItem(key);
+        }
+    } catch { /* ignore storage errors */ }
 }
 
 export const useAdminStore = create<AdminState>((set) => ({
@@ -215,9 +242,20 @@ export const useAdminStore = create<AdminState>((set) => ({
     showAdminPanel: false,
     setShowAdminPanel: (show) => set({ showAdminPanel: show }),
 
-    // Camera settings
-    selectedCameraId: null,
-    setSelectedCameraId: (id) => set({ selectedCameraId: id }),
+    // Tauri numeric index — persisted to localStorage
+    selectedCameraId: getPersistedValue(CAMERA_STORAGE_KEY),
+    setSelectedCameraId: (id) => {
+        setPersistedValue(CAMERA_STORAGE_KEY, id);
+        set({ selectedCameraId: id });
+    },
+
+    // Browser WebAPI deviceId UUID — persisted to localStorage
+    browserCameraId: getPersistedValue(BROWSER_CAMERA_STORAGE_KEY),
+    setBrowserCameraId: (id) => {
+        setPersistedValue(BROWSER_CAMERA_STORAGE_KEY, id);
+        set({ browserCameraId: id });
+    },
+
     cameraTestStatus: 'idle',
     setCameraTestStatus: (status) => set({ cameraTestStatus: status }),
     cameraError: null,

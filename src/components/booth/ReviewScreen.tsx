@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, Loader2, Printer } from 'lucide-react';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
@@ -81,6 +81,24 @@ export function ReviewScreen() {
             >
                 {/* Hidden canvas */}
                 <canvas ref={canvasRef} className="hidden" />
+
+                {/* Auto-reset countdown overlay */}
+                <div className="absolute top-6 left-6 z-30">
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={autoResetCountdown}
+                            initial={{ scale: 1.3, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.7, opacity: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="w-20 h-20 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center elegant-shadow"
+                        >
+                            <span className="text-4xl font-light text-foreground">
+                                {autoResetCountdown}
+                            </span>
+                        </motion.div>
+                    </AnimatePresence>
+                </div>
 
                 {/* Header */}
                 <motion.div

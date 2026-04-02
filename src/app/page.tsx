@@ -19,6 +19,7 @@ import { useUploadQueue } from '@/hooks/useUploadQueue';
 import { setReliabilitySyncConfig } from '@/lib/reliability-sync';
 import { toast } from 'sonner';
 import { getApiUrl, apiJson, apiFetch } from '@/lib/api';
+import { getVersion } from '@tauri-apps/api/app';
 
 export default function HomePage() {
   const { showAdminPanel, setShowAdminPanel } = useAdminStore();
@@ -34,6 +35,11 @@ export default function HomePage() {
   const [showPinDialog, setShowPinDialog] = useState(false);
   const [pin, setPin] = useState('');
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
 
   const successfulPrints = printHistory.filter((job) => job.status === 'success').length;
   const configuredPrintsRemaining = booth?.prints_remaining;
@@ -313,6 +319,7 @@ export default function HomePage() {
                   <h1 className="text-lg font-semibold">Admin Panel</h1>
                   <p className="text-xs text-muted-foreground">
                     {booth.name} • {formatIDR(booth.price)}
+                    {appVersion && ` • v${appVersion}`}
                   </p>
                 </div>
               </div>

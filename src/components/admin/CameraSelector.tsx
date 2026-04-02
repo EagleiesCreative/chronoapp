@@ -39,6 +39,7 @@ export function CameraSelector() {
     const {
         selectedCameraId,
         setSelectedCameraId,
+        setBrowserCameraId,
         cameraTestStatus,
         setCameraTestStatus,
         cameraError,
@@ -49,6 +50,24 @@ export function CameraSelector() {
     const isMediaSupported = typeof navigator !== 'undefined' &&
         navigator.mediaDevices &&
         typeof navigator.mediaDevices.getUserMedia === 'function';
+
+    // Resolve browser WebAPI deviceId from a Tauri camera name
+    const resolveBrowserDeviceId = useCallback(async (cameraName: string): Promise<string | null> => {
+        if (!navigator.mediaDevices?.enumerateDevices) return null;
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+            // Strip " (System)" / " (Canon SDK)" suffixes for matching
+            const cleanName = cameraName.replace(/ \(System\)$/, '').replace(/ \(Canon SDK\)$/, '').trim();
+            const match = videoDevices.find(d =>
+                d.label.toLowerCase().includes(cleanName.toLowerCase()) ||
+                cleanName.toLowerCase().includes(d.label.toLowerCase())
+            );
+            return match?.deviceId ?? null;
+        } catch {
+            return null;
+        }
+    }, []);
 
     // Load available cameras
     const loadCameras = useCallback(async () => {
@@ -73,9 +92,19 @@ export function CameraSelector() {
 
             setCameras(videoDevices);
 
-            // Auto-select first camera if none selected
-            if (!selectedCameraId && videoDevices.length > 0) {
-                setSelectedCameraId(videoDevices[0].id);
+            if (videoDevices.length > 0) {
+                const persistedStillAvailable = selectedCameraId
+                    && videoDevices.some((d) => d.id === selectedCameraId);
+
+                if (!persistedStillAvailable) {
+                    // Persisted camera gone or no selection — pick first available
+                    const first = videoDevices[0];
+                    setSelectedCameraId(first.id);
+                    // Also resolve the browser deviceId for react-webcam
+                    const browserId = await resolveBrowserDeviceId(first.name);
+                    setBrowserCameraId(browserId);
+                }
+                // else: persisted camera is connected, keep it selected
             }
         } catch (error) {
 
@@ -94,7 +123,7 @@ export function CameraSelector() {
         } finally {
             setIsLoading(false);
         }
-    }, [isMediaSupported, selectedCameraId, setSelectedCameraId, setCameraError]);
+    }, [isMediaSupported, selectedCameraId, setSelectedCameraId, setBrowserCameraId, setCameraError, resolveBrowserDeviceId]);
 
     // Load cameras on mount
     useEffect(() => {
@@ -180,10 +209,16 @@ export function CameraSelector() {
     };
 
     // Handle camera selection change
-    const handleCameraChange = (deviceId: string) => {
+    const handleCameraChange = async (deviceId: string) => {
         // Stop any existing preview
         stopPreview();
         setSelectedCameraId(deviceId);
+        // Resolve and save the browser WebAPI deviceId for react-webcam
+        const selected = cameras.find(c => c.id === deviceId);
+        if (selected) {
+            const browserId = await resolveBrowserDeviceId(selected.name);
+            setBrowserCameraId(browserId);
+        }
     };
 
     // Cleanup on unmount

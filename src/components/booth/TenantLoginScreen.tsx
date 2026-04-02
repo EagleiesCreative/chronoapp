@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Booth } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
+import { getVersion } from '@tauri-apps/api/app';
 
 interface TenantLoginScreenProps {
     onLogin: (booth: Booth) => void;
@@ -18,6 +19,11 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
+    const [appVersion, setAppVersion] = useState<string | null>(null);
+
+    useEffect(() => {
+        getVersion().then(setAppVersion).catch(() => {});
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -182,6 +188,11 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
                 <p className="mt-8 text-xs text-muted-foreground">
                     Contact your administrator if you don't have a booth code
                 </p>
+                {appVersion && (
+                    <p className="mt-2 text-[10px] text-muted-foreground/50">
+                        v{appVersion}
+                    </p>
+                )}
             </motion.div>
         </motion.div>
     );

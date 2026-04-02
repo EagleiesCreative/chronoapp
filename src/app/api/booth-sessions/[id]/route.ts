@@ -51,8 +51,17 @@ export async function PATCH(
         const { id } = await params;
         const body = await req.json();
 
-        // Remove fields that shouldn't be directly updated
-        const { boothId, frameIds, booth_id, ...updates } = body;
+        // Remove fields that shouldn't be directly updated or are joined/calculated data
+        const { 
+            boothId, 
+            frameIds, 
+            booth_id, 
+            booth_session_frames, 
+            photo_count,
+            id: _id, 
+            created_at, 
+            ...updates 
+        } = body;
 
         const { data, error } = await supabase
             .from('booth_sessions')

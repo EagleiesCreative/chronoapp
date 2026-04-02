@@ -33,11 +33,11 @@ export function CaptureOverlay({
             />
 
             {/* Countdown overlay */}
-            {phase === 'countdown' && cameraReady && (
+            {(phase === 'countdown' || phase === 'preview') && cameraReady && (
                 <div className="absolute top-6 left-6 z-30">
                     <AnimatePresence mode="wait">
                         <motion.div
-                            key={countdown}
+                            key={phase === 'countdown' ? countdown : previewCountdown}
                             initial={{ scale: 1.3, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.7, opacity: 0 }}
@@ -45,7 +45,9 @@ export function CaptureOverlay({
                             className="w-20 h-20 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center elegant-shadow"
                         >
                             <span className="text-4xl font-light text-foreground">
-                                {countdown > 0 ? countdown : '📸'}
+                                {phase === 'countdown' 
+                                    ? (countdown > 0 ? countdown : '📸')
+                                    : previewCountdown}
                             </span>
                         </motion.div>
                     </AnimatePresence>
@@ -74,7 +76,7 @@ export function CaptureOverlay({
                 {phase === 'preview' && (
                     <div className="bg-primary/95 px-5 py-2 rounded-full elegant-shadow">
                         <p className="text-primary-foreground font-light text-sm">
-                            Photo captured · Continue in {previewCountdown}s
+                            Photo captured
                         </p>
                     </div>
                 )}

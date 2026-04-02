@@ -61,7 +61,7 @@ export function ReviewActions({
                 className="px-6 py-4 text-sm font-light rounded-full touch-target mt-2"
             >
                 <RotateCcw className="w-4 h-4 mr-2" strokeWidth={1.5} />
-                New Session ({autoResetCountdown}s)
+                New Session
             </Button>
         </motion.div>
     );

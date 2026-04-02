@@ -1,5 +1,5 @@
 import { Frame } from '@/lib/supabase';
-import { getAssetUrl } from '@/lib/api';
+import { getAssetUrl, getApiUrl } from '@/lib/api';
 
 const DB_NAME = 'ChronoSnapDB';
 const STORE_NAME = 'frame_images';
@@ -73,7 +73,16 @@ async function setCachedImageUrl(originalUrl: string, base64: string): Promise<v
 }
 
 async function fetchImageAsBase64(url: string): Promise<string> {
-    const response = await fetch(getAssetUrl(url), {
+    const isExternal = url.startsWith('http://') || url.startsWith('https://');
+    const isAlreadyProxied = url.includes('/api/frames/image');
+
+    // Route external URLs through the proxy to avoid CORS issues in Tauri
+    const proxyPath = `/api/frames/image?url=${encodeURIComponent(url)}`;
+    const fetchUrl = (isExternal && !isAlreadyProxied)
+        ? getApiUrl(proxyPath)
+        : getAssetUrl(url);
+
+    const response = await fetch(fetchUrl, {
         mode: 'cors',
         credentials: 'omit'
     });

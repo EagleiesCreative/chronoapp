@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 /**
  * GET /api/frames/image?url=<encoded_url>
  *
- * Proxy endpoint to serve frame images from R2 storage.
- * This bypasses CORS issues by fetching server-side and serving the binary data.
+ * Proxy endpoint to serve frame images from external storage (R2, Supabase Storage).
+ * Bypasses CORS issues by fetching server-side and serving the binary data.
  *
- * Usage in browser:
- *   /api/frames/image?url=https://...r2.cloudflarestorage.com/frames/...
+ * For R2 URLs with expired pre-signed signatures, it strips the query params
+ * and retries with the bare URL (works if the bucket has public access enabled).
  */
 export async function GET(request: NextRequest) {
     try {
@@ -15,35 +15,50 @@ export async function GET(request: NextRequest) {
         const imageUrl = searchParams.get('url');
 
         if (!imageUrl) {
-            return NextResponse.json(
-                { error: 'url parameter is required' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: 'url parameter is required' }, { status: 400 });
         }
 
-        // Validate the URL is a Cloudflare R2 URL (security check)
-        const urlObj = new URL(imageUrl);
-        const hostname = urlObj.hostname;
+        // Security: only allow known storage URLs
+        let urlObj: URL;
+        try {
+            urlObj = new URL(imageUrl);
+        } catch {
+            return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+        }
 
-        if (!hostname.includes('r2.cloudflarestorage.com') && !hostname.includes('localhost')) {
+        const hostname = urlObj.hostname.toLowerCase();
+        const isR2 = hostname.includes('r2.cloudflarestorage.com');
+        const isSupabaseStorage = hostname.includes('supabase.co') || hostname.includes('supabase.in');
+        const isEagleies = hostname.includes('eagleies.com');
+        const isLocalhost = hostname.includes('localhost') || hostname.includes('127.0.0.1');
+
+        if (!isR2 && !isSupabaseStorage && !isEagleies && !isLocalhost) {
             return NextResponse.json(
-                { error: 'Only Cloudflare R2 URLs are supported' },
+                { error: `Hostname ${hostname} is not in the allowed list of storage providers` },
                 { status: 403 }
             );
         }
 
-        // Fetch the image from R2
-        const response = await fetch(imageUrl, {
+        // --- Attempt 1: Fetch the URL as-is ---
+        let response = await fetch(imageUrl, {
             method: 'GET',
-            headers: {
-                'Accept': 'image/*',
-            },
+            headers: { 'Accept': 'image/*' },
         });
+
+        // --- Attempt 2: For R2, if pre-signed URL expired (403), try unsigned URL ---
+        if (!response.ok && isR2 && response.status === 403) {
+            console.warn(`R2 pre-signed URL returned 403, trying unsigned URL...`);
+            const unsignedUrl = `${urlObj.origin}${urlObj.pathname}`;
+            response = await fetch(unsignedUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'image/*' },
+            });
+        }
 
         if (!response.ok) {
             console.error(`Frame image fetch failed: ${response.status} ${response.statusText}`);
             return NextResponse.json(
-                { error: 'Failed to fetch frame image' },
+                { error: `Failed to fetch frame image: ${response.status}` },
                 { status: response.status }
             );
         }
@@ -51,15 +66,15 @@ export async function GET(request: NextRequest) {
         const buffer = await response.arrayBuffer();
         const contentType = response.headers.get('content-type') || 'image/png';
 
-        // Return the image with CORS headers so browser can use it in canvas
         return new NextResponse(buffer, {
             status: 200,
             headers: {
                 'Content-Type': contentType,
-                'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
+                'Cache-Control': 'public, max-age=604800, immutable',
                 'Access-Control-Allow-Origin': '*',
             },
         });
+
     } catch (err: any) {
         console.error('/api/frames/image GET error:', err);
         return NextResponse.json(
