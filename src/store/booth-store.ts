@@ -20,6 +20,8 @@ interface CapturedPhoto {
     index: number;
     dataUrl: string;
     url?: string;
+    videoBlob?: Blob;
+    videoUrl?: string;
 }
 
 interface BoothState {
@@ -68,6 +70,12 @@ interface BoothState {
     // Final composited image
     finalImage: string | null;
     setFinalImage: (image: string | null) => void;
+
+    // Final composited video
+    finalVideoUrl: string | null;
+    setFinalVideoUrl: (url: string | null) => void;
+    finalVideoBlob: Blob | null;
+    setFinalVideoBlob: (blob: Blob | null) => void;
 
     // Print-ready image (always 4R size — 2R frames duplicated side-by-side)
     printImage: string | null;
@@ -142,6 +150,12 @@ export const useBoothStore = create<BoothState>((set) => ({
     finalImage: null,
     setFinalImage: (image) => set({ finalImage: image }),
 
+    finalVideoUrl: null,
+    setFinalVideoUrl: (url) => set({ finalVideoUrl: url }),
+
+    finalVideoBlob: null,
+    setFinalVideoBlob: (blob) => set({ finalVideoBlob: blob }),
+
     printImage: null,
     setPrintImage: (image) => set({ printImage: image }),
 
@@ -168,6 +182,8 @@ export const useBoothStore = create<BoothState>((set) => ({
         currentPhotoIndex: 0,
         capturedPhotos: [],
         finalImage: null,
+        finalVideoUrl: null,
+        finalVideoBlob: null,
         printImage: null,
         isLoading: false,
         error: null,
@@ -204,10 +220,19 @@ interface AdminState {
     setCameraTestStatus: (status: 'idle' | 'testing' | 'success' | 'error') => void;
     cameraError: string | null;
     setCameraError: (error: string | null) => void;
+    // Camera mirroring
+    isCameraMirrored: boolean;
+    setCameraMirrored: (mirrored: boolean) => void;
+
+    // Live Video Feature Toggle
+    isVideoMode: boolean;
+    setIsVideoMode: (videoMode: boolean) => void;
 }
 
 const CAMERA_STORAGE_KEY = 'chronosnap_selected_camera';
 const BROWSER_CAMERA_STORAGE_KEY = 'chronosnap_browser_camera';
+const MIRROR_CAMERA_STORAGE_KEY = 'chronosnap_mirror_camera';
+const VIDEO_MODE_STORAGE_KEY = 'chronosnap_video_mode';
 
 function getPersistedValue(key: string): string | null {
     if (typeof window === 'undefined') return null;
@@ -260,4 +285,16 @@ export const useAdminStore = create<AdminState>((set) => ({
     setCameraTestStatus: (status) => set({ cameraTestStatus: status }),
     cameraError: null,
     setCameraError: (error) => set({ cameraError: error }),
+    
+    isCameraMirrored: getPersistedValue(MIRROR_CAMERA_STORAGE_KEY) !== 'false', // Default to true
+    setCameraMirrored: (mirrored) => {
+        setPersistedValue(MIRROR_CAMERA_STORAGE_KEY, mirrored ? 'true' : 'false');
+        set({ isCameraMirrored: mirrored });
+    },
+
+    isVideoMode: getPersistedValue(VIDEO_MODE_STORAGE_KEY) !== 'false', // Default to true!
+    setIsVideoMode: (videoMode) => {
+        setPersistedValue(VIDEO_MODE_STORAGE_KEY, videoMode ? 'true' : 'false');
+        set({ isVideoMode: videoMode });
+    },
 }));

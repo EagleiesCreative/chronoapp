@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, Loader2, Printer } from 'lucide-react';
-import { useBoothStore } from '@/store/booth-store';
+import { useBoothStore, useAdminStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 
 import { useCompositing } from '@/hooks/useCompositing';
@@ -17,7 +17,8 @@ import { BoothErrorBoundary } from './BoothErrorBoundary';
 export function ReviewScreen() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    const { setStep, resetSession } = useBoothStore();
+    const { setStep, resetSession, finalVideoUrl } = useBoothStore();
+    const { isVideoMode } = useAdminStore();
     const { booth } = useTenantStore();
     const timeoutSeconds = booth?.review_timeout_seconds ?? 60;
 
@@ -138,6 +139,15 @@ export function ReviewScreen() {
                                         <p className="text-sm text-muted-foreground font-light">Creating photo...</p>
                                     </div>
                                 </div>
+                            ) : isVideoMode && finalVideoUrl ? (
+                                <video
+                                    src={finalVideoUrl}
+                                    autoPlay
+                                    loop
+                                    muted
+                                    playsInline
+                                    className="max-h-[calc(100vh-220px)] w-auto object-contain"
+                                />
                             ) : (
                                 <img
                                     src={compositeImage || ''}

@@ -21,7 +21,7 @@ export function CaptureScreen() {
         capturedPhotos,
     } = useBoothStore();
 
-    const { selectedCameraId } = useAdminStore();
+    const { selectedCameraId, isCameraMirrored } = useAdminStore();
     const { stream, getScreenshot, isCameraReady: cameraReady, cameraError } = useCamera();
     const [cachedOverlayUrl, setCachedOverlayUrl] = useState<string | null>(null);
 
@@ -57,7 +57,7 @@ export function CaptureScreen() {
         handleContinue,
         retakePhoto,
         startCountdown,
-    } = useCaptureFlow(getScreenshot, cameraReady);
+    } = useCaptureFlow(getScreenshot, cameraReady, stream);
 
     return (
         <BoothErrorBoundary fallbackMessage="Camera issue detected. Please return to the start screen.">
@@ -123,7 +123,7 @@ export function CaptureScreen() {
                                     autoPlay
                                     playsInline
                                     muted
-                                    className="w-full h-full object-cover transform scale-x-[-1]"
+                                    className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
                                 />
                             )}
 

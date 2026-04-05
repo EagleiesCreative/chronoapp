@@ -381,8 +381,8 @@ export function ShareGallery({
                                         <Film className="w-4 h-4 text-purple-500" />
                                     </div>
                                     <div className="text-left">
-                                        <p className="text-sm font-medium text-gray-900">Stop-motion GIF</p>
-                                        <p className="text-xs text-gray-500">Animated sequence</p>
+                                        <p className="text-sm font-medium text-gray-900">Live Video</p>
+                                        <p className="text-xs text-gray-500">Live Video</p>
                                     </div>
                                 </div>
                                 <Download className="w-4 h-4 text-gray-400 group-hover:text-gray-900 transition-colors" />
@@ -411,14 +411,6 @@ export function ShareGallery({
                     </div>
 
                     <div className="flex items-center justify-center gap-3">
-                        <button
-                            onClick={handleDownloadAll}
-                            disabled={isDownloading}
-                            className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white py-3.5 px-6 rounded-full font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
-                        >
-                            <Download className="w-5 h-5" />
-                            {isDownloading ? 'Downloading...' : 'Download All'}
-                        </button>
                         <button
                             onClick={handleShare}
                             className="p-3.5 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"

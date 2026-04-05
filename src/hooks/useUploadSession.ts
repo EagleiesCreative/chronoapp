@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import QRCode from 'qrcode';
 import { apiFetch } from '@/lib/api';
-import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient } from '@/lib/upload-client';
+import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient, uploadVideoClient } from '@/lib/upload-client';
 import { saveToLocalDisk } from '@/lib/local-save';
 import { generateCompressedGif } from '@/lib/video-generator';
-import { useBoothStore } from '@/store/booth-store';
+import { useBoothStore, useAdminStore } from '@/store/booth-store';
 import { useLocalSaveStore } from '@/store/local-save-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { enqueueUpload } from '@/lib/upload-queue';
 import { queueSessionSync } from '@/lib/reliability-sync';
 
 export function useUploadSession() {
-    const { session, capturedPhotos } = useBoothStore();
+    const { session, capturedPhotos, finalVideoBlob } = useBoothStore();
+    const { isVideoMode } = useAdminStore();
     const { booth } = useTenantStore();
 
     const [downloadQR, setDownloadQR] = useState<string | null>(null);
@@ -117,48 +118,77 @@ export function useUploadSession() {
                 }
             }
 
-            // 3. Generate and upload stop-motion GIF (non-critical)
-            const photoDataUrls = capturedPhotos
-                .map(photo => photo.dataUrl)
-                .filter((dataUrl): dataUrl is string => Boolean(dataUrl));
+            // 3. Generate and upload media (Video or GIF)
             let gifUrl: string | null = null;
-            if (photoDataUrls.length >= 2) {
-                setUploadStatus('Creating stop-motion GIF...');
-                try {
-                    const gifResult = await generateCompressedGif(photoDataUrls, 1000);
-                    if (gifResult) {
-                        setUploadStatus('Uploading GIF...');
-                        gifUrl = await uploadGifClient(sessionId, gifResult.blob);
-                        setVideoGenerated(true);
-                        setGifDownloadUrl(gifUrl);
-                        console.log(`GIF uploaded: ${(gifResult.size / 1024).toFixed(1)}KB`);
+            let videoUrl: string | null = null;
 
-                        // Save GIF locally (fire-and-forget)
-                        if (localSaveEnabled && savePath && localSessionFolder) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                                const gifDataUrl = reader.result as string;
-                                saveToLocalDisk(savePath, localSessionFolder!, 'stopmotion.gif', gifDataUrl)
-                                    .then(p => p && console.log('[LocalSave] GIF saved:', p))
-                                    .catch(err => console.error('[LocalSave] GIF save failed:', err));
-                            };
-                            reader.readAsDataURL(gifResult.blob);
-                        }
+            if (isVideoMode && finalVideoBlob) {
+                setUploadStatus('Uploading video...');
+                try {
+                    videoUrl = await uploadVideoClient(sessionId, finalVideoBlob);
+                    setVideoGenerated(true);
+                    setGifDownloadUrl(videoUrl);
+                    console.log(`Video uploaded: ${(finalVideoBlob.size / 1024).toFixed(1)}KB`);
+
+                    // Save locally
+                    if (localSaveEnabled && savePath && localSessionFolder) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            const videoDataUrl = reader.result as string;
+                            const extension = finalVideoBlob.type.includes('mp4') ? 'mp4' : 'webm';
+                            saveToLocalDisk(savePath, localSessionFolder!, `video.${extension}`, videoDataUrl)
+                                .then(p => p && console.log('[LocalSave] Video saved:', p))
+                                .catch(err => console.error('[LocalSave] Video save failed:', err));
+                        };
+                        reader.readAsDataURL(finalVideoBlob);
                     }
-                } catch (gifErr) {
-                    console.error('GIF generation/upload failed:', gifErr);
+                } catch (e) {
+                    console.error('Video upload failed:', e);
+                }
+            } else {
+                const photoDataUrls = capturedPhotos
+                    .map(photo => photo.dataUrl)
+                    .filter((dataUrl): dataUrl is string => Boolean(dataUrl));
+                    
+                if (photoDataUrls.length >= 2) {
+                    setUploadStatus('Creating stop-motion GIF...');
+                    try {
+                        const gifResult = await generateCompressedGif(photoDataUrls, 1000);
+                        if (gifResult) {
+                            setUploadStatus('Uploading GIF...');
+                            gifUrl = await uploadGifClient(sessionId, gifResult.blob);
+                            setVideoGenerated(true);
+                            setGifDownloadUrl(gifUrl);
+                            console.log(`GIF uploaded: ${(gifResult.size / 1024).toFixed(1)}KB`);
+
+                            // Save GIF locally (fire-and-forget)
+                            if (localSaveEnabled && savePath && localSessionFolder) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                    const gifDataUrl = reader.result as string;
+                                    saveToLocalDisk(savePath, localSessionFolder!, 'stopmotion.gif', gifDataUrl)
+                                        .then(p => p && console.log('[LocalSave] GIF saved:', p))
+                                        .catch(err => console.error('[LocalSave] GIF save failed:', err));
+                                };
+                                reader.readAsDataURL(gifResult.blob);
+                            }
+                        }
+                    } catch (gifErr) {
+                        console.error('GIF generation/upload failed:', gifErr);
+                    }
                 }
             }
 
             // 4. Update session with results (mark as completed)
             let completedRemotely = false;
             if (finalUrl) {
-                setUploadStatus(`Saving ${photoUrls.length} photos and ${gifUrl ? '1 gif' : '0 gif'}...`);
+                const activeMediaUrl = isVideoMode ? videoUrl : gifUrl;
+                setUploadStatus(`Saving ${photoUrls.length} photos and ${activeMediaUrl ? '1 media' : '0 media'}...`);
                 const completionPayload = {
                     sessionId,
                     finalImageUrl: finalUrl,
                     photosUrls: photoUrls,
-                    videoUrl: gifUrl,
+                    videoUrl: activeMediaUrl,
                 };
 
                 const completionResponse = await apiFetch('/api/session/complete', {

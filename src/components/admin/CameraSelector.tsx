@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, VideoOff, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useAdminStore } from '@/store/booth-store';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -21,7 +23,14 @@ export function CameraSelector() {
     const [isTesting, setIsTesting] = useState(false);
     const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
     const [previewFrame, setPreviewFrame] = useState<string | null>(null);
-    const videoRef = useRef<HTMLVideoElement>(null);
+    const setVideoRef = useCallback((node: HTMLVideoElement | null) => {
+        if (node && previewStream) {
+            // Only update if it's different to prevent resetting the stream on re-renders
+            if (node.srcObject !== previewStream) {
+                node.srcObject = previewStream;
+            }
+        }
+    }, [previewStream]);
     const previewIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const isMountedRef = useRef(true);
 
@@ -39,11 +48,16 @@ export function CameraSelector() {
     const {
         selectedCameraId,
         setSelectedCameraId,
+        browserCameraId,
         setBrowserCameraId,
         cameraTestStatus,
         setCameraTestStatus,
         cameraError,
         setCameraError,
+        isCameraMirrored,
+        setCameraMirrored,
+        isVideoMode,
+        setIsVideoMode,
     } = useAdminStore();
 
     // Check if getUserMedia is available
@@ -157,7 +171,10 @@ export function CameraSelector() {
         setCameraError(null);
 
         try {
-            if (isTauri) {
+            const selectedCamera = cameras.find(c => c.id === selectedCameraId);
+            const isCanon = selectedCamera?.name.includes('(Canon SDK)');
+
+            if (isTauri && isCanon) {
                 // Start the camera in the backend
                 const status = await invoke('start_camera', { device_id: selectedCameraId });
                 console.log('Camera started:', status);
@@ -179,20 +196,16 @@ export function CameraSelector() {
                     }
                 }, 100); // ~10 FPS
             } else {
+                const deviceIdToUse = browserCameraId || undefined;
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        deviceId: { exact: selectedCameraId },
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
+                        ...(deviceIdToUse ? { deviceId: { exact: deviceIdToUse } } : {}),
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
                     },
                 });
 
                 setPreviewStream(stream);
-
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    await videoRef.current.play();
-                }
             }
             
             setCameraTestStatus('success');
@@ -320,22 +333,50 @@ export function CameraSelector() {
                     )}
                 </div>
 
+                {/* Mirror Settings */}
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                        <Label className="text-base font-medium">Mirror Camera</Label>
+                        <p className="text-sm text-muted-foreground">
+                            Flips the camera feed horizontally
+                        </p>
+                    </div>
+                    <Switch
+                        checked={isCameraMirrored}
+                        onCheckedChange={setCameraMirrored}
+                    />
+                </div>
+
+                {/* Video Mode Settings */}
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                        <Label className="text-base font-medium">Live Video Mode</Label>
+                        <p className="text-sm text-muted-foreground">
+                            Record 2-second video clips instead of static photos
+                        </p>
+                    </div>
+                    <Switch
+                        checked={isVideoMode}
+                        onCheckedChange={setIsVideoMode}
+                    />
+                </div>
+
                 {/* Camera preview */}
                 {isTesting && (
-                    <div className="relative rounded-lg overflow-hidden bg-muted aspect-video">
+                    <div className="relative mx-auto rounded-lg overflow-hidden bg-black max-w-[480px] aspect-video flex-shrink-0">
                         {previewStream ? (
                             <video
-                                ref={videoRef}
+                                ref={setVideoRef}
                                 autoPlay
                                 playsInline
                                 muted
-                                className="w-full h-full object-cover"
+                                className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
                             />
                         ) : previewFrame ? (
                             <img
                                 src={`data:image/jpeg;base64,${previewFrame}`}
                                 alt="Camera Preview"
-                                className="w-full h-full object-cover"
+                                className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
                             />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">

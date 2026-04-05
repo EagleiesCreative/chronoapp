@@ -70,7 +70,11 @@ async function uploadToStorage(
     console.log('[Upload] Falling back to API route proxy...');
     try {
         const formData = new FormData();
-        const extension = contentType === 'image/gif' ? 'gif' : 'jpg';
+        let extension = 'jpg';
+        if (contentType === 'image/gif') extension = 'gif';
+        else if (contentType.includes('mp4')) extension = 'mp4';
+        else if (contentType.includes('webm')) extension = 'webm';
+        
         formData.append('file', blob, `upload.${extension}`);
         // Extract folder from filePath (e.g. "sessions/uuid" from "sessions/uuid/file.jpg")
         const folder = filePath.split('/').slice(0, -1).join('/');
@@ -119,4 +123,13 @@ export async function uploadPhotoClient(sessionId: string, photoIndex: number, b
 export async function uploadGifClient(sessionId: string, blob: Blob): Promise<string> {
     const fileName = `sessions/${sessionId}/stopmotion_${Date.now()}.gif`;
     return uploadToStorage(fileName, blob, 'image/gif');
+}
+
+/**
+ * Upload a Video (Live Video Mode)
+ */
+export async function uploadVideoClient(sessionId: string, blob: Blob): Promise<string> {
+    const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    const fileName = `sessions/${sessionId}/video_${Date.now()}.${extension}`;
+    return uploadToStorage(fileName, blob, blob.type || 'video/mp4');
 }

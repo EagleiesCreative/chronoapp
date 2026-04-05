@@ -1,7 +1,7 @@
 import { useEffect, useState, RefObject } from 'react';
 import { getAssetUrl, getApiUrl } from '@/lib/api';
 import { getCachedImageUrl } from '@/lib/frame-cache';
-import { useBoothStore } from '@/store/booth-store';
+import { useBoothStore, useAdminStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { getFilterByName } from '@/lib/photo-filters';
 
@@ -9,7 +9,8 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
     const [compositeImage, setCompositeImage] = useState<string | null>(null);
     const [isCompositing, setIsCompositing] = useState(true);
 
-    const { selectedFrame, capturedPhotos, setFinalImage, setPrintImage, selectedFilter } = useBoothStore();
+    const { selectedFrame, capturedPhotos, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl, selectedFilter } = useBoothStore();
+    const { isVideoMode } = useAdminStore();
     const { booth } = useTenantStore();
 
     // Helper: proxy external URLs through our API to avoid CORS issues in Tauri
@@ -37,6 +38,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
             // 4R print dimensions (always print at this size)
             const PRINT_4R_WIDTH = 1200;
             const PRINT_4R_HEIGHT = 1800;
+            const hasVideoBlobs = capturedPhotos.some(p => !!p.videoBlob);
             const is2R = canvasWidth <= 600;
 
             // First, check if we are running in Tauri and can use the fast Rust backend
@@ -52,7 +54,8 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                 console.log("Not in Tauri, will use Canvas fallback");
             }
 
-            if (isTauri && invoke) {
+            // Skip Rust backend if we are doing live video compositing
+            if (isTauri && invoke && (!isVideoMode || !hasVideoBlobs)) {
                 try {
                     // Gather the data for Rust
 
@@ -229,13 +232,50 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                 return offscreen;
             };
 
-            // Helper function to draw a photo in its slot (with filter pre-applied)
+            // Helper function to draw a photo or video in its slot (with filter pre-applied)
             // Uses capture_index to determine which captured photo to render in each slot
-            const drawPhotoInSlot = async (slot: any, slotIndex: number, filterDef: ReturnType<typeof getFilterByName>) => {
+            const drawContentInSlot = async (slot: any, slotIndex: number, filterDef: ReturnType<typeof getFilterByName>, videoElements?: (HTMLVideoElement | null)[]) => {
                 const captureIdx = slot.capture_index ?? slotIndex;
                 const photo = capturedPhotos[captureIdx];
 
-                if (!photo?.dataUrl) return;
+                if (!photo) return;
+                
+                // If we are doing video, use the video element directly (filters not yet implemented for video performance reasons)
+                if (videoElements && videoElements[captureIdx]) {
+                    const videoNode = videoElements[captureIdx]!;
+                    const destX = slot.x;
+                    const destY = slot.y;
+                    const destW = slot.width;
+                    const destH = slot.height;
+                    const imgAspect = videoNode.videoWidth / videoNode.videoHeight;
+                    const slotAspect = destW / destH;
+
+                    let srcX = 0;
+                    let srcY = 0;
+                    let srcW = videoNode.videoWidth;
+                    let srcH = videoNode.videoHeight;
+
+                    if (imgAspect > slotAspect) {
+                        srcW = videoNode.videoHeight * slotAspect;
+                        srcX = (videoNode.videoWidth - srcW) / 2;
+                    } else {
+                        srcH = videoNode.videoWidth / slotAspect;
+                        srcY = (videoNode.videoHeight - srcH) / 2;
+                    }
+
+                    ctx.save();
+                    if (slot.rotation) {
+                        ctx.translate(destX + destW / 2, destY + destH / 2);
+                        ctx.rotate((slot.rotation * Math.PI) / 180);
+                        ctx.translate(-(destX + destW / 2), -(destY + destH / 2));
+                    }
+                    ctx.drawImage(videoNode, srcX, srcY, srcW, srcH, destX, destY, destW, destH);
+                    ctx.restore();
+                    return;
+                }
+
+                // Standard photo fallback
+                if (!photo.dataUrl) return;
 
                 const img = new Image();
                 await new Promise<void>((resolve) => {
@@ -289,109 +329,155 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
 
             const slots = selectedFrame.photo_slots || [];
 
-            // Draw photos with layer='below' or no layer (default: below)
-            console.log(`Drawing ${slots.length} photo slots`);
-            for (let i = 0; i < slots.length; i++) {
-                const slot = slots[i];
-                if (slot.layer === 'above') continue;
-                try {
-                    await drawPhotoInSlot(slot, i, filter);
-                } catch (err) {
-                    console.error(`Error drawing photo slot ${i}:`, err);
-                }
-            }
+            // Identify if this is video compositing
+            const doingVideo = isVideoMode && hasVideoBlobs;
 
-            // Draw frame overlay
+            // Load frame image first for either mode
+            let frameImg: HTMLImageElement | null = null;
             if (selectedFrame.image_url) {
-                console.log("Drawing frame overlay from:", selectedFrame.image_url);
-                const frameImg = new Image();
-                // Don't set crossOrigin - rely on proxy endpoint for R2 URLs
+                frameImg = new Image();
                 await new Promise<void>(async (resolve) => {
-                    const cachedUrl = await getCachedImageUrl(selectedFrame.image_url);
-                    const frameUrl = getProxiedImageUrl(cachedUrl || getAssetUrl(selectedFrame.image_url));
-
-                    // Timeout after 10 seconds
-                    const loadTimeout = setTimeout(() => {
-                        console.warn("Frame loading timeout after 10 seconds, continuing without frame overlay");
-                        resolve();
-                    }, 10000);
-
-                    frameImg.onload = () => {
-                        clearTimeout(loadTimeout);
-                        try {
-                            ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
-                            console.log("Frame overlay drawn successfully");
-                        } catch (err) {
-                            console.error("Error drawing frame overlay:", err);
-                        }
-                        resolve();
-                    };
-                    frameImg.onerror = () => {
-                        clearTimeout(loadTimeout);
-                        console.warn(`Frame overlay load failed: ${frameUrl}`);
-                        resolve();
-                    };
-                    frameImg.src = frameUrl;
+                    const cachedUrl = await getCachedImageUrl(selectedFrame.image_url!);
+                    const frameUrl = getProxiedImageUrl(cachedUrl || getAssetUrl(selectedFrame.image_url!));
+                    const loadTimeout = setTimeout(resolve, 10000);
+                    frameImg!.onload = () => { clearTimeout(loadTimeout); resolve(); };
+                    frameImg!.onerror = () => { clearTimeout(loadTimeout); frameImg = null; resolve(); };
+                    frameImg!.src = frameUrl;
                 });
-            } else {
-                console.warn("No frame image URL provided");
             }
 
-            // Draw photos with layer='above'
-            for (let i = 0; i < slots.length; i++) {
-                const slot = slots[i];
-                if (slot.layer !== 'above') continue;
-                try {
-                    await drawPhotoInSlot(slot, i, filter);
-                } catch (err) {
-                    console.error(`Error drawing above-layer photo slot ${i}:`, err);
+            const drawFullComposite = async (videoElements?: (HTMLVideoElement | null)[]) => {
+                // Background
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw photos below layer
+                for (let i = 0; i < slots.length; i++) {
+                    const slot = slots[i];
+                    if (slot.layer === 'above') continue;
+                    try { await drawContentInSlot(slot, i, filter, videoElements); } catch (err) {}
                 }
-            }
 
-            // Event mode: draw hashtag overlay
-            if (booth?.event_mode && booth?.event_hashtag) {
-                ctx.save();
-                ctx.font = 'bold 28px Inter, sans-serif';
-                ctx.fillStyle = 'rgba(255,255,255,0.85)';
-                ctx.textAlign = 'center';
-                ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                ctx.shadowBlur = 4;
-                ctx.fillText(booth.event_hashtag, canvas.width / 2, canvas.height - 30);
-                ctx.restore();
-            }
+                // Draw frame overlay
+                if (frameImg) {
+                    ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+                }
 
-            // Share image (original frame size)
-            const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-            console.log("Canvas compositing complete, final image:", imageDataUrl.substring(0, 50) + "...");
-            setCompositeImage(imageDataUrl);
-            setFinalImage(imageDataUrl);
+                // Draw photos above layer
+                for (let i = 0; i < slots.length; i++) {
+                    const slot = slots[i];
+                    if (slot.layer !== 'above') continue;
+                    try { await drawContentInSlot(slot, i, filter, videoElements); } catch (err) {}
+                }
 
-            // Print image: always 4R size
-            if (is2R) {
-                // Duplicate 2R side-by-side to fill 4R
-                const printCanvas = document.createElement('canvas');
-                printCanvas.width = PRINT_4R_WIDTH;
-                printCanvas.height = PRINT_4R_HEIGHT;
-                const printCtx = printCanvas.getContext('2d')!;
-                printCtx.fillStyle = '#ffffff';
-                printCtx.fillRect(0, 0, PRINT_4R_WIDTH, PRINT_4R_HEIGHT);
-                // Left half
-                printCtx.drawImage(canvas, 0, 0, canvasWidth, canvasHeight);
-                // Right half
-                printCtx.drawImage(canvas, canvasWidth, 0, canvasWidth, canvasHeight);
-                const printDataUrl = printCanvas.toDataURL('image/jpeg', 0.95);
-                setPrintImage(printDataUrl);
+                // Event mode: draw hashtag overlay
+                if (booth?.event_mode && booth?.event_hashtag) {
+                    ctx.save();
+                    ctx.font = 'bold 28px Inter, sans-serif';
+                    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                    ctx.shadowBlur = 4;
+                    ctx.fillText(booth.event_hashtag, canvas.width / 2, canvas.height - 30);
+                    ctx.restore();
+                }
+            };
+
+            if (doingVideo) {
+                console.log("Starting Canvas Video Compositing...");
+                // Preload all video blobs as playing video elements
+                const videoElements = await Promise.all(capturedPhotos.map(async p => {
+                    if (!p.videoBlob) return null;
+                    const v = document.createElement('video');
+                    v.src = URL.createObjectURL(p.videoBlob);
+                    v.muted = true;
+                    v.playsInline = true;
+                    // Preload metadata
+                    await new Promise(r => { v.onloadedmetadata = r; v.onerror = r; });
+                    return v;
+                }));
+
+                const stream = canvas.captureStream(30);
+                const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+                const mr = new MediaRecorder(stream, { mimeType });
+                const chunks: Blob[] = [];
+                mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                
+                mr.onstop = () => {
+                    const finalBlob = new Blob(chunks, { type: mimeType });
+                    const finalUrl = URL.createObjectURL(finalBlob);
+                    setFinalVideoBlob(finalBlob);
+                    setFinalVideoUrl(finalUrl);
+                    console.log("Video compositing complete:", finalUrl);
+
+                    // Grab a static thumbnail of the end state
+                    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                    setCompositeImage(imageDataUrl);
+                    setFinalImage(imageDataUrl);
+
+                    videoElements.forEach(v => {
+                        if (v) URL.revokeObjectURL(v.src);
+                    });
+                    setIsCompositing(false);
+                };
+
+                mr.start();
+                videoElements.forEach(v => v?.play());
+
+                const duration = 3000; // Recode roughly a 3-second clip
+                const startTime = performance.now();
+
+                const drawFrameLoop = async () => {
+                    const now = performance.now();
+                    if (now - startTime > duration) {
+                        mr.stop();
+                        return;
+                    }
+                    await drawFullComposite(videoElements);
+                    requestAnimationFrame(drawFrameLoop);
+                };
+                
+                requestAnimationFrame(drawFrameLoop);
+                return; // Early return, the onstop handler finishes the state
             } else {
-                setPrintImage(imageDataUrl);
-            }
+                // Static compositing
+                await drawFullComposite();
 
-            console.log("Image compositing finished successfully");
-            setIsCompositing(false);
+                // (The rest of static processing continues if not in video mode)
+
+                // Share image (original frame size)
+                const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                console.log("Canvas compositing complete, final image:", imageDataUrl.substring(0, 50) + "...");
+                setCompositeImage(imageDataUrl);
+                setFinalImage(imageDataUrl);
+
+                // Print image: always 4R size
+                if (is2R) {
+                    // Duplicate 2R side-by-side to fill 4R
+                    const printCanvas = document.createElement('canvas');
+                    printCanvas.width = PRINT_4R_WIDTH;
+                    printCanvas.height = PRINT_4R_HEIGHT;
+                    const printCtx = printCanvas.getContext('2d')!;
+                    printCtx.fillStyle = '#ffffff';
+                    printCtx.fillRect(0, 0, PRINT_4R_WIDTH, PRINT_4R_HEIGHT);
+                    // Left half
+                    printCtx.drawImage(canvas, 0, 0, canvasWidth, canvasHeight);
+                    // Right half
+                    printCtx.drawImage(canvas, canvasWidth, 0, canvasWidth, canvasHeight);
+                    const printDataUrl = printCanvas.toDataURL('image/jpeg', 0.95);
+                    setPrintImage(printDataUrl);
+                } else {
+                    setPrintImage(imageDataUrl);
+                }
+
+                console.log("Image compositing finished successfully");
+                setIsCompositing(false);
+            }
         }
 
         compositeImages();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedFrame, capturedPhotos, setFinalImage, setPrintImage, selectedFilter, booth]);
+    }, [selectedFrame, capturedPhotos, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl, selectedFilter, booth, isVideoMode]);
 
     return { compositeImage, isCompositing };
 }
