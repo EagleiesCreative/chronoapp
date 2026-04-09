@@ -25,6 +25,15 @@ interface QRCodeResponse {
     expires_at?: string;
 }
 
+export interface QRPaymentResponse {
+    id: string;
+    qr_id: string;
+    external_id: string;
+    amount: number;
+    status: string;
+    created: string;
+}
+
 interface InvoiceRequest {
     external_id: string;
     amount: number;
@@ -74,7 +83,7 @@ interface InvoiceResponse {
 export async function createQRCodePayment(
     externalId: string,
     amount: number,
-    callbackUrl: string
+    callbackUrl?: string
 ): Promise<QRCodeResponse> {
     const secretKey = process.env.XENDIT_SECRET_KEY;
 
@@ -189,3 +198,53 @@ export function formatIDR(amount: number): string {
         maximumFractionDigits: 0,
     }).format(amount);
 }
+
+// Get QR Code details
+export async function getQRCode(qrId: string): Promise<QRCodeResponse> {
+    const secretKey = process.env.XENDIT_SECRET_KEY;
+
+    if (!secretKey) {
+        throw new Error('XENDIT_SECRET_KEY is not configured');
+    }
+
+    const response = await fetch(`${XENDIT_API_URL}/qr_codes/${qrId}`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Basic ${Buffer.from(secretKey + ':').toString('base64')}`,
+        },
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to get QR code');
+    }
+
+    return response.json();
+}
+
+// Get QR Code Payments
+export async function getQRCodePayments(qrId: string): Promise<QRPaymentResponse[]> {
+    const secretKey = process.env.XENDIT_SECRET_KEY;
+
+    if (!secretKey) {
+        throw new Error('XENDIT_SECRET_KEY is not configured');
+    }
+
+    const response = await fetch(`${XENDIT_API_URL}/qr_codes/${qrId}/payments`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Basic ${Buffer.from(secretKey + ':').toString('base64')}`,
+        },
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        // If no payments found, Xendit might return 404 or empty array, handle carefully
+        if (response.status === 404) return [];
+        throw new Error(error.message || 'Failed to get QR code payments');
+    }
+
+    const data = await response.json();
+    return data && data.data ? data.data : data || []; // Xendit sometimes wraps in `data` array
+}
+

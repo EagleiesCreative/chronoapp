@@ -1,0 +1,3 @@
+/Users/christinaindahsetiyorini/Documents/Eagleies Creative/chronoapp/src-tauri/sony-bridge/build/CMakeFiles/sony_bridge.dir
+/Users/christinaindahsetiyorini/Documents/Eagleies Creative/chronoapp/src-tauri/sony-bridge/build/CMakeFiles/edit_cache.dir
+/Users/christinaindahsetiyorini/Documents/Eagleies Creative/chronoapp/src-tauri/sony-bridge/build/CMakeFiles/rebuild_cache.dir

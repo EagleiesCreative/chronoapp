@@ -11,15 +11,18 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use crate::canon::CanonSdk;
+use crate::sony::SonySdk;
 use tauri::State;
 
 
 /// Messages sent to the camera thread
 enum CameraCommand {
-    Start { device_id: String, is_canon: bool, reply: Sender<Result<CameraStatus, String>> },
+    Start { device_id: String, is_canon: bool, is_sony: bool, reply: Sender<Result<CameraStatus, String>> },
     Stop { reply: Sender<Result<(), String>> },
     Capture { quality: u8, reply: Sender<Result<String, String>> },
     GetStatus { reply: Sender<Result<CameraStatus, String>> },
+    /// Sony-specific: trigger actual shutter release and return full-res image
+    SonyCapture { quality: u8, reply: Sender<Result<String, String>> },
 }
 
 
@@ -57,11 +60,15 @@ pub struct CameraStatus {
 fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel::Sender<Vec<u8>>) {
     let mut camera: Option<Camera> = None;
     let canon_sdk = CanonSdk::load().ok();
+    let sony_sdk = SonySdk::load().ok();
     // For now, we only hold a boolean for Canon since we don't have full FFI implementation yet
     let mut is_canon_active = false;
+    let mut is_sony_active = false;
+    // Sony session handle (raw pointer managed by bridge)
+    let mut sony_session: Option<crate::sony::SonySession<'_>> = None;
 
     
-    while let Ok(cmd) = receiver.recv_timeout(if camera.is_some() || is_canon_active { Duration::from_millis(33) } else { Duration::from_secs(1) })
+    while let Ok(cmd) = receiver.recv_timeout(if camera.is_some() || is_canon_active || is_sony_active { Duration::from_millis(33) } else { Duration::from_secs(1) })
         .map(Some)
         .or_else(|e| {
             if e == mpsc::RecvTimeoutError::Timeout { Ok(None) } else { Err(e) }
@@ -81,21 +88,51 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                     }
                 }
             }
+        } else if is_sony_active {
+            // Poll Sony live view frames and broadcast to MJPEG stream
+            if let Some(ref session) = sony_session {
+                if let Ok(frame_data) = session.get_live_view_frame() {
+                    let _ = frame_tx.try_send(frame_data);
+                }
+            }
         } else if is_canon_active {
             // TODO: Broadcast Canon frames when Canon SDK is properly implemented here
         }
 
         if let Some(cmd) = cmd {
             match cmd {
-                CameraCommand::Start { device_id, is_canon, reply } => {
+                CameraCommand::Start { device_id, is_canon, is_sony, reply } => {
                     // Stop existing camera if any
                     if let Some(mut cam) = camera.take() {
                         cam.stop_stream().ok();
                     }
+                    // Disconnect existing Sony session
+                    sony_session = None;
+                    is_sony_active = false;
                     is_canon_active = is_canon;
                     
                     let result = (|| -> Result<CameraStatus, String> {
-                        if is_canon {
+                        if is_sony {
+                            // Sony CrSDK: Connect and start live view
+                            if let Some(ref sdk) = sony_sdk {
+                                let idx_str = device_id.strip_prefix("sony_").unwrap_or("0");
+                                let idx: u32 = idx_str.parse().unwrap_or(0);
+
+                                let session = sdk.connect(idx)?;
+                                session.start_live_view().ok(); // Best-effort live view
+
+                                is_sony_active = true;
+                                sony_session = Some(session);
+
+                                Ok(CameraStatus {
+                                    is_active: true,
+                                    device_name: Some(format!("Sony Camera ({})", device_id)),
+                                    resolution: Some((6000, 4000)), // Typical Sony full-frame
+                                })
+                            } else {
+                                Err("Sony SDK not loaded. Place libsony_bridge.dylib in libs/".to_string())
+                            }
+                        } else if is_canon {
                             // TODO: Implement actual Canon session opening
                             if canon_sdk.is_some() {
                                 Ok(CameraStatus {
@@ -138,7 +175,13 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                 }
                 
                 CameraCommand::Stop { reply } => {
-                    if is_canon_active {
+                    if is_sony_active {
+                        if let Some(ref session) = sony_session {
+                            session.stop_live_view().ok();
+                        }
+                        sony_session = None;
+                        is_sony_active = false;
+                    } else if is_canon_active {
                         is_canon_active = false;
                     } else if let Some(mut cam) = camera.take() {
                         cam.stop_stream().ok();
@@ -148,7 +191,18 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                 
                 CameraCommand::Capture { quality, reply } => {
                     let result = (|| -> Result<String, String> {
-                        if is_canon_active {
+                        if is_sony_active {
+                            // For preview capture, grab a live view frame
+                            if let Some(ref session) = sony_session {
+                                let frame_data = session.get_live_view_frame()
+                                    .map_err(|e| format!("Sony preview frame error: {}", e))?;
+                                let base64_data = STANDARD.encode(&frame_data);
+                                let data_url = format!("data:image/jpeg;base64,{}", base64_data);
+                                Ok(data_url)
+                            } else {
+                                Err("Sony session not active".to_string())
+                            }
+                        } else if is_canon_active {
                             Err("Canon native capture not yet implemented (requires framework)".to_string())
                         } else if let Some(cam) = camera.as_mut() {
                             let frame = cam.frame()
@@ -175,8 +229,31 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                     reply.send(result).ok();
                 }
                 
+                CameraCommand::SonyCapture { quality: _, reply } => {
+                    let result = (|| -> Result<String, String> {
+                        if let Some(ref session) = sony_session {
+                            let image_data = session.capture_still()
+                                .map_err(|e| format!("Sony shutter release failed: {}", e))?;
+                            let base64_data = STANDARD.encode(&image_data);
+                            let data_url = format!("data:image/jpeg;base64,{}", base64_data);
+                            Ok(data_url)
+                        } else {
+                            Err("Sony camera not connected".to_string())
+                        }
+                    })();
+                    
+                    reply.send(result).ok();
+                }
+                
                 CameraCommand::GetStatus { reply } => {
-                    let status = if is_canon_active {
+                    let status = if is_sony_active {
+                        let connected = sony_session.as_ref().map_or(false, |s| s.is_connected());
+                        CameraStatus {
+                            is_active: connected,
+                            device_name: Some("Sony Camera".to_string()),
+                            resolution: Some((6000, 4000)),
+                        }
+                    } else if is_canon_active {
                         CameraStatus {
                             is_active: true,
                             device_name: Some("Canon Camera".to_string()),
@@ -253,6 +330,18 @@ pub fn list_cameras() -> Result<Vec<CameraDevice>, String> {
             }
         }
     }
+
+    // 3. Get Sony cameras if CrSDK bridge is available
+    if let Ok(sdk) = SonySdk::load() {
+        if let Ok(sony_devices) = sdk.list_cameras() {
+            for cam in sony_devices {
+                cameras.push(CameraDevice {
+                    id: cam.id,
+                    name: format!("{} (Sony SDK)", cam.name),
+                });
+            }
+        }
+    }
     
     log::info!("Found {} cameras", cameras.len());
     Ok(cameras)
@@ -269,13 +358,16 @@ pub fn start_camera(
     log::info!("Starting camera with device_id: {}", resolved_device_id);
     
     let is_canon = resolved_device_id.starts_with("canon_");
+    let is_sony = resolved_device_id.starts_with("sony_");
     let sender = get_or_create_sender(&state)?;
     let (reply_tx, reply_rx) = mpsc::channel();
     
-    sender.send(CameraCommand::Start { device_id: resolved_device_id, is_canon, reply: reply_tx })
+    sender.send(CameraCommand::Start { device_id: resolved_device_id, is_canon, is_sony, reply: reply_tx })
         .map_err(|e| format!("Failed to send command: {}", e))?;
     
-    reply_rx.recv_timeout(Duration::from_secs(5))
+    // Sony connection can take longer (USB negotiation + PTP handshake)
+    let timeout = if is_sony { Duration::from_secs(15) } else { Duration::from_secs(5) };
+    reply_rx.recv_timeout(timeout)
         .map_err(|e| format!("Camera command timeout: {}", e))?
 }
 
@@ -327,4 +419,22 @@ pub fn capture_frame(state: State<'_, CameraState>, quality: Option<u8>) -> Resu
 #[tauri::command]
 pub fn get_preview_frame(state: State<'_, CameraState>) -> Result<String, String> {
     capture_frame(state, Some(60))
+}
+
+/// Sony-specific: trigger actual shutter release and return full-resolution image
+#[tauri::command]
+pub fn sony_capture_image(state: State<'_, CameraState>, quality: Option<u8>) -> Result<String, String> {
+    log::info!("Sony shutter release triggered");
+    
+    let sender = get_or_create_sender(&state)?;
+    let (reply_tx, reply_rx) = mpsc::channel();
+    
+    let quality = quality.unwrap_or(95);
+    
+    sender.send(CameraCommand::SonyCapture { quality, reply: reply_tx })
+        .map_err(|e| format!("Failed to send command: {}", e))?;
+    
+    // Sony capture can take up to 15 seconds (AF + exposure + transfer)
+    reply_rx.recv_timeout(Duration::from_secs(20))
+        .map_err(|e| format!("Sony capture timeout: {}", e))?
 }

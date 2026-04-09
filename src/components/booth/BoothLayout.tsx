@@ -10,6 +10,7 @@ import { PaymentScreen } from './PaymentScreen';
 import { CountdownScreen } from './CountdownScreen';
 import { CaptureScreen } from './CaptureScreen';
 import { FilterScreen } from './FilterScreen';
+import { FinalReviewScreen } from './FinalReviewScreen';
 import { ReviewScreen } from './ReviewScreen';
 
 import { CameraProvider } from './CameraProvider';
@@ -78,6 +79,7 @@ export function BoothLayout() {
                         {step === 'countdown' && <CountdownScreen key="countdown" />}
                         {step === 'capturing' && <CaptureScreen key="capturing" />}
                         {step === 'filter' && <FilterScreen key="filter" />}
+                        {step === 'final-review' && <FinalReviewScreen key="final-review" />}
                         {step === 'review' && <ReviewScreen key="review" />}
                     </AnimatePresence>
                 </CameraProvider>

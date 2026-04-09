@@ -1,14 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { QrCode, Clock, CheckCircle, XCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Shield, CheckCircle, XCircle, Loader2, ArrowLeft } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { formatIDR } from '@/lib/xendit';
-import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 
 export function PaymentScreen() {
@@ -31,12 +30,10 @@ export function PaymentScreen() {
     const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
     const [isCreating, setIsCreating] = useState(false);
 
-    // Price info from store or booth
-    const originalPrice = appliedVoucher?.original_price ?? booth?.price ?? 0;
-    const discountAmount = appliedVoucher?.discount_value ?? 0;
-    const finalPrice = appliedVoucher?.final_price ?? booth?.price ?? 0;
+    const [originalPrice, setOriginalPrice] = useState<number>(appliedVoucher?.original_price ?? booth?.price ?? 0);
+    const [discountAmount, setDiscountAmount] = useState<number>(appliedVoucher?.discount_value ?? 0);
+    const [finalPrice, setFinalPrice] = useState<number>(appliedVoucher?.final_price ?? booth?.price ?? 0);
 
-    // Create payment on mount
     useEffect(() => {
         async function createPayment() {
             if (!selectedFrame || isCreating) return;
@@ -56,14 +53,16 @@ export function PaymentScreen() {
                 const data = await response.json();
 
                 if (data.success) {
+                    // Update state with server-authoritative prices directly from DB
+                    if (data.originalAmount !== undefined) setOriginalPrice(data.originalAmount);
+                    if (data.discountAmount !== undefined) setDiscountAmount(data.discountAmount);
+                    if (data.amount !== undefined) setFinalPrice(data.amount);
+
                     setSession({ id: data.sessionId });
 
-                    // Handle free session (100% discount)
                     if (data.isFree) {
                         setPaymentStatus('paid');
-                        setTimeout(() => {
-                            setStep('capturing');
-                        }, 1500);
+                        setTimeout(() => setStep('capturing'), 1500);
                         return;
                     }
 
@@ -73,10 +72,7 @@ export function PaymentScreen() {
                     const qrDataUrl = await QRCode.toDataURL(data.invoiceUrl, {
                         width: 320,
                         margin: 2,
-                        color: {
-                            dark: '#1A1A1A',
-                            light: '#FFFFFF',
-                        },
+                        color: { dark: '#1A1A1A', light: '#FFFFFF' },
                     });
                     setQrCodeImage(qrDataUrl);
                 } else {
@@ -89,11 +85,9 @@ export function PaymentScreen() {
                 setIsLoading(false);
             }
         }
-
         createPayment();
-    }, [selectedFrame]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [selectedFrame]);
 
-    // Poll for payment status
     useEffect(() => {
         if (!session?.id || paymentStatus !== 'pending') return;
 
@@ -104,7 +98,6 @@ export function PaymentScreen() {
 
                 if (data.success) {
                     setPaymentStatus(data.status);
-
                     if (data.status === 'paid') {
                         setStep('capturing');
                     }
@@ -117,7 +110,6 @@ export function PaymentScreen() {
         return () => clearInterval(pollInterval);
     }, [session?.id, paymentStatus, setStep]);
 
-    // Countdown timer
     useEffect(() => {
         if (paymentStatus !== 'pending' || timeLeft <= 0) return;
 
@@ -133,6 +125,19 @@ export function PaymentScreen() {
 
         return () => clearInterval(timer);
     }, [paymentStatus, timeLeft]);
+
+    // Return to start screen when expired
+    useEffect(() => {
+        if (paymentStatus === 'expired') {
+            const timeout = setTimeout(() => {
+                setStep('idle');
+                setSession(null);
+                setPayment(null);
+                setInvoiceUrl(null);
+            }, 3000); // Wait 3 seconds then return to start page
+            return () => clearTimeout(timeout);
+        }
+    }, [paymentStatus, setStep, setSession, setPayment, setInvoiceUrl]);
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -154,215 +159,224 @@ export function PaymentScreen() {
         setPayment(null);
         setInvoiceUrl(null);
         setQrCodeImage(null);
+        setIsCreating(false);
     };
 
-    const handleSimulatePaid = async () => {
-        if (!session?.id) return;
-
-        try {
-            const response = await apiFetch('/api/payment/simulate', {
-                method: 'POST',
-                body: JSON.stringify({ sessionId: session.id }),
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                setPaymentStatus('paid');
-                setTimeout(() => {
-                    setStep('capturing');
-                }, 1500);
-            } else {
-                console.error('Failed to simulate payment:', data.error);
-            }
-        } catch (err) {
-            console.error('Simulate payment error:', err);
-        }
-    };
+    const progress = (timeLeft / 300) * 100;
 
     return (
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen flex flex-col items-center justify-center p-8 bg-white kiosk"
+            className="min-h-screen bg-white font-sans text-slate-900 flex flex-col md:flex-row border-t-4 border-yellow-400"
         >
-            {/* Header */}
-            <motion.div
-                initial={{ y: -20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                className="text-center mb-10"
-            >
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full border border-border mb-5">
-                    <QrCode className="w-6 h-6 text-primary" strokeWidth={1.5} />
-                </div>
-                <h2 className="text-3xl font-light mb-2">Scan to Pay</h2>
-                <p className="text-muted-foreground font-light">
-                    Use your payment app to scan the QR code
-                </p>
-            </motion.div>
+            {/* Left Column: Instructions */}
+            <div className="flex-1 p-8 md:p-12 border-r border-slate-100 flex flex-col justify-between">
+                <div>
+                    <div className="flex items-center justify-between mb-12">
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-black rounded-full"></div>
+                            <span className="font-black tracking-widest text-lg">PHOTOBOOTH</span>
+                        </div>
+                    </div>
 
-            {/* Main content */}
-            <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.2 }}
-            >
-                <div className="elegant-card p-8">
-                    {/* QR Code */}
-                    <div className="relative mb-6">
-                        {qrCodeImage && paymentStatus === 'pending' ? (
-                            <motion.div
-                                initial={{ scale: 0.9 }}
-                                animate={{ scale: 1 }}
-                                className="p-4"
-                            >
-                                <img
-                                    src={qrCodeImage}
-                                    alt="Payment QR Code"
-                                    className="w-72 h-72"
-                                />
-                            </motion.div>
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-full mb-8">
+                        {paymentStatus === 'pending' ? (
+                            <>
+                                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                                <span className="text-yellow-700 font-medium text-sm">Waiting for payment</span>
+                            </>
                         ) : paymentStatus === 'paid' ? (
-                            <div className="w-72 h-72 flex items-center justify-center">
-                                <motion.div
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    transition={{ type: 'spring', stiffness: 200 }}
-                                >
-                                    <CheckCircle className="w-24 h-24 text-primary" strokeWidth={1} />
-                                </motion.div>
-                            </div>
-                        ) : paymentStatus === 'expired' || paymentStatus === 'failed' ? (
-                            <div className="w-72 h-72 flex items-center justify-center">
-                                <XCircle className="w-24 h-24 text-destructive" strokeWidth={1} />
-                            </div>
+                            <>
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                                <span className="text-green-700 font-medium text-sm">Payment Successful</span>
+                            </>
                         ) : (
-                            <div className="w-72 h-72 flex items-center justify-center">
-                                <Loader2 className="w-12 h-12 animate-spin text-muted-foreground" />
-                            </div>
+                            <>
+                                <XCircle className="w-4 h-4 text-red-500" />
+                                <span className="text-red-700 font-medium text-sm">Payment Failed/Expired</span>
+                            </>
                         )}
                     </div>
 
-                    {/* Payment info */}
-                    <div className="text-center">
-                        {/* Show discount if applied */}
-                        {discountAmount > 0 && (
-                            <div className="mb-2">
-                                <p className="text-sm text-muted-foreground line-through">
-                                    {formatIDR(originalPrice)}
-                                </p>
-                                <p className="text-xs text-green-600">
-                                    -{formatIDR(discountAmount)} discount
-                                </p>
+                    <h1 className="text-6xl font-extrabold tracking-tight mb-4 leading-none">
+                        Scan &<br />pay now
+                    </h1>
+                    <p className="text-slate-400 text-lg mb-12">Complete within the time limit</p>
+
+                    <div className="space-y-4">
+                        {[
+                            "Open your e-wallet or banking app",
+                            "Tap scan QR & point at screen",
+                            "Confirm & done — enjoy your shoot"
+                        ].map((text, i) => (
+                            <div key={i} className="flex items-center gap-6 p-6 bg-white border border-slate-100 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
+                                <div className="w-10 h-10 rounded-full bg-yellow-50 text-yellow-600 flex items-center justify-center font-bold text-lg">
+                                    {i + 1}
+                                </div>
+                                <p className="font-semibold text-slate-700 leading-snug">{text}</p>
                             </div>
-                        )}
+                        ))}
+                    </div>
+                </div>
 
-                        <p className="text-2xl font-medium text-foreground mb-1">
-                            {formatIDR(finalPrice)}
-                        </p>
+                <div className="mt-12">
+                    <Button
+                        variant="ghost"
+                        size="lg"
+                        onClick={handleBack}
+                        className="px-6 py-6 text-base font-normal rounded-full border border-slate-200 w-fit hover:bg-slate-50 mb-6"
+                    >
+                        <ArrowLeft className="w-5 h-5 mr-2" />
+                        Go Back
+                    </Button>
+                    <div className="flex items-center gap-2 text-slate-400">
+                        <Shield size={18} />
+                        <span className="text-sm font-medium">Secured by Bank Indonesia · QRIS Standard</span>
+                    </div>
+                </div>
+            </div>
 
-                        <p className="text-muted-foreground font-light mb-4">
-                            {selectedFrame?.name || 'Loading...'}
-                        </p>
+            {/* Middle Column: QR Code */}
+            <div className="flex-[1.2] bg-white p-8 md:p-12 flex flex-col items-center justify-center relative">
+                <div className="w-full max-w-md p-10 bg-white border border-slate-100 rounded-[3rem] shadow-xl flex flex-col items-center relative overflow-hidden">
+                    <span className="text-xs font-black tracking-[0.3em] text-slate-300 mb-8">QRIS</span>
 
-                        {/* Timer */}
-                        {paymentStatus === 'pending' && (
-                            <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                                <Clock className="w-4 h-4" strokeWidth={1.5} />
-                                <span className="text-sm font-mono">
-                                    Expires in {formatTime(timeLeft)}
+                    <div className="relative p-6 border-2 border-slate-50 rounded-2xl mb-10 bg-white">
+                        <div className="absolute -top-1 -left-1 w-10 h-10 border-t-4 border-l-4 border-yellow-400 rounded-tl-2xl z-10"></div>
+                        <div className="absolute -top-1 -right-1 w-10 h-10 border-t-4 border-r-4 border-yellow-400 rounded-tr-2xl z-10"></div>
+                        <div className="absolute -bottom-1 -left-1 w-10 h-10 border-b-4 border-l-4 border-yellow-400 rounded-bl-2xl z-10"></div>
+                        <div className="absolute -bottom-1 -right-1 w-10 h-10 border-b-4 border-r-4 border-yellow-400 rounded-br-2xl z-10"></div>
+
+                        <div className="w-56 h-56 relative flex items-center justify-center p-2 bg-white">
+                            <AnimatePresence mode="wait">
+                                {paymentStatus === 'pending' && qrCodeImage ? (
+                                    <motion.img
+                                        key="qr"
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.8 }}
+                                        src={qrCodeImage}
+                                        alt="Payment QR Code"
+                                        className="w-full h-full object-contain"
+                                    />
+                                ) : paymentStatus === 'pending' && !qrCodeImage ? (
+                                    <motion.div
+                                        key="loader"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="w-full h-full flex items-center justify-center"
+                                    >
+                                        <Loader2 className="w-12 h-12 animate-spin text-slate-300" />
+                                    </motion.div>
+                                ) : paymentStatus === 'paid' ? (
+                                    <motion.div
+                                        key="paid"
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ type: 'spring', stiffness: 200 }}
+                                        className="flex items-center justify-center w-full h-full"
+                                    >
+                                        <CheckCircle className="w-24 h-24 text-green-500" />
+                                    </motion.div>
+                                ) : (
+                                    <motion.div
+                                        key="failed"
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        className="flex flex-col items-center justify-center w-full h-full text-red-500"
+                                    >
+                                        <XCircle className="w-24 h-24 mb-4" />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {paymentStatus === 'pending' && qrCodeImage && (
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-1.5 bg-white rounded-lg shadow-md border border-slate-100 z-20">
+                                    <div
+                                        className="w-8 h-8 bg-yellow-400 flex items-center justify-center rounded"
+                                        style={{ clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)' }}
+                                    ></div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {(paymentStatus === 'failed' || paymentStatus === 'expired') ? (
+                        <Button
+                            onClick={handleRetry}
+                            className="bg-red-50 text-red-600 hover:bg-red-100 px-8 py-6 rounded-full font-bold text-lg"
+                        >
+                            Try Again
+                        </Button>
+                    ) : (
+                        <div className="flex flex-wrap justify-center gap-3">
+                            {["GoPay", "OVO", "Dana", "BCA", "BRI"].map(brand => (
+                                <span key={brand} className="px-4 py-2 bg-slate-50 rounded-full text-xs font-bold text-slate-500 border border-slate-100">
+                                    {brand}
                                 </span>
+                            ))}
+                            <span className="px-4 py-2 bg-slate-50 rounded-full text-xs font-bold text-slate-400 border border-slate-100">+more</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Right Column: Order Summary */}
+            <div className="flex-1 bg-slate-50 p-8 md:p-12 flex flex-col justify-between">
+                <div>
+                    <span className="text-xs font-black tracking-[0.3em] text-slate-400 block mb-12">ORDER SUMMARY</span>
+
+                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm mb-6 border border-slate-100">
+                        <span className="text-slate-400 font-semibold block mb-1">Total payment</span>
+                        <span className="text-sm font-bold text-slate-400">IDR</span>
+                        <div className="text-5xl font-black text-slate-900 mb-6">{formatIDR(finalPrice).replace('Rp', '').trim()}</div>
+                        {discountAmount > 0 && (
+                            <div className="text-sm text-green-600 font-semibold mb-4 border border-green-100 bg-green-50 px-3 py-1 rounded inline-block">
+                                -{formatIDR(discountAmount)} Discount
                             </div>
                         )}
+                        <div className="inline-block px-4 py-2 bg-green-50 text-green-700 text-xs font-bold rounded-full border border-green-100">
+                            {selectedFrame?.name || 'Photobooth Session'}
+                        </div>
+                    </div>
 
-                        {/* Status messages */}
-                        {paymentStatus === 'paid' && (
-                            <motion.p
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="text-lg text-primary font-medium"
-                            >
-                                Payment successful
-                            </motion.p>
-                        )}
-
-                        {paymentStatus === 'expired' && (
-                            <p className="text-lg text-destructive font-medium">
-                                Payment expired
-                            </p>
-                        )}
-
-                        {paymentStatus === 'failed' && (
-                            <p className="text-lg text-destructive font-medium">
-                                Payment failed
-                            </p>
-                        )}
+                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <span className="text-slate-400 font-semibold block mb-2">Time remaining</span>
+                            <div className="text-5xl font-black text-slate-900 tracking-tight">
+                                {formatTime(timeLeft)}
+                            </div>
+                        </div>
+                        <div className="relative w-16 h-16">
+                            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                <circle
+                                    cx="18" cy="18" r="16"
+                                    fill="none"
+                                    className="stroke-slate-100"
+                                    strokeWidth="3"
+                                />
+                                <circle
+                                    cx="18" cy="18" r="16"
+                                    fill="none"
+                                    className="stroke-yellow-500 transition-all duration-1000"
+                                    strokeWidth="3"
+                                    strokeDasharray={`${progress}, 100`}
+                                    strokeLinecap="round"
+                                />
+                            </svg>
+                        </div>
                     </div>
                 </div>
-            </motion.div>
 
-            {/* Action buttons */}
-            <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="flex gap-4 mt-8"
-            >
-                <Button
-                    variant="ghost"
-                    size="lg"
-                    onClick={handleBack}
-                    className="px-8 py-6 text-base font-normal rounded-full border border-border touch-target"
-                >
-                    <ArrowLeft className="w-4 h-4 mr-2" strokeWidth={1.5} />
-                    Back
-                </Button>
-
-                {/* Test button */}
-                {paymentStatus === 'pending' && session?.id && (
-                    <Button
-                        variant="secondary"
-                        size="lg"
-                        onClick={handleSimulatePaid}
-                        className="px-8 py-6 text-base font-normal rounded-full touch-target"
-                    >
-                        <CheckCircle className="w-4 h-4 mr-2" strokeWidth={1.5} />
-                        Test Payment
-                    </Button>
-                )}
-
-                {(paymentStatus === 'expired' || paymentStatus === 'failed') && (
-                    <Button
-                        size="lg"
-                        onClick={handleRetry}
-                        className="px-8 py-6 text-base font-medium rounded-full elegant-shadow touch-target"
-                    >
-                        Try Again
-                    </Button>
-                )}
-            </motion.div>
-
-            {/* Supported payment methods */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
-                className="mt-10 text-center"
-            >
-                <p className="text-xs text-muted-foreground/60 mb-2 font-light tracking-wide">
-                    Supported payments
-                </p>
-                <div className="flex items-center justify-center gap-4 text-muted-foreground/50 text-xs font-light">
-                    <span>QRIS</span>
-                    <span>·</span>
-                    <span>GoPay</span>
-                    <span>·</span>
-                    <span>OVO</span>
-                    <span>·</span>
-                    <span>DANA</span>
+                <div className="mt-12 flex items-center justify-end gap-2 text-slate-300">
+                    <Shield size={18} />
+                    <span className="text-sm font-medium">QRIS · Bank Indonesia</span>
                 </div>
-            </motion.div>
+            </div>
         </motion.div>
     );
 }
+

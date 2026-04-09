@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/Users/christinaindahsetiyorini/Documents/Eagleies Creative/chronoapp/src-tauri/sony-bridge/build",
+  "command": "/usr/bin/c++ -Dsony_bridge_EXPORTS -I\"/Users/christinaindahsetiyorini/Documents/Eagleies Creative/chronoapp/src-tauri/sony-bridge/../libs/CrSDK/include\" -std=gnu++17 -arch arm64 -fPIC -o CMakeFiles/sony_bridge.dir/sony_bridge.cpp.o -c \"/Users/christinaindahsetiyorini/Documents/Eagleies Creative/chronoapp/src-tauri/sony-bridge/sony_bridge.cpp\"",
+  "file": "/Users/christinaindahsetiyorini/Documents/Eagleies Creative/chronoapp/src-tauri/sony-bridge/sony_bridge.cpp",
+  "output": "CMakeFiles/sony_bridge.dir/sony_bridge.cpp.o"
+}
+]

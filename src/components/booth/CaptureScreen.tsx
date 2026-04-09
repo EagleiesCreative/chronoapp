@@ -22,7 +22,7 @@ export function CaptureScreen() {
     } = useBoothStore();
 
     const { selectedCameraId, isCameraMirrored } = useAdminStore();
-    const { stream, getScreenshot, isCameraReady: cameraReady, cameraError } = useCamera();
+    const { stream, getScreenshot, getSonyCapture, isCameraReady: cameraReady, cameraError, isSonyMode } = useCamera();
     const [cachedOverlayUrl, setCachedOverlayUrl] = useState<string | null>(null);
 
     useEffect(() => {
@@ -53,11 +53,9 @@ export function CaptureScreen() {
         lastCapturedPhoto,
         totalPhotos,
         retakingIndex,
-        handleRetake,
-        handleContinue,
         retakePhoto,
         startCountdown,
-    } = useCaptureFlow(getScreenshot, cameraReady, stream);
+    } = useCaptureFlow(getScreenshot, cameraReady, stream, getSonyCapture, isSonyMode);
 
     return (
         <BoothErrorBoundary fallbackMessage="Camera issue detected. Please return to the start screen.">
@@ -117,6 +115,17 @@ export function CaptureScreen() {
                                     alt="Captured preview"
                                     className="w-full h-full object-cover"
                                 />
+                            ) : isSonyMode ? (
+                                /* Sony: Show MJPEG live view from the backend stream server */
+                                <img
+                                    src="http://localhost:3030/stream"
+                                    alt="Sony Live View"
+                                    className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
+                                    onError={(e) => {
+                                        // Fallback: show a placeholder if MJPEG stream is not available
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                />
                             ) : (
                                 <video
                                     ref={setVideoRef}
@@ -156,8 +165,6 @@ export function CaptureScreen() {
                                 previewCountdown={previewCountdown}
                                 flashActive={flashActive}
                                 cameraReady={cameraReady}
-                                handleRetake={handleRetake}
-                                handleContinue={handleContinue}
                             />
                         </div>
                     </div>

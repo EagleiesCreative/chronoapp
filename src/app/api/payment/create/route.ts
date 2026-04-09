@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createInvoice } from '@/lib/xendit';
+import { createQRCodePayment, getQRCode } from '@/lib/xendit';
 import { supabase } from '@/lib/supabase';
 import { createPayment, createSession, updateSession, getBoothById, getActiveBoothSession } from '@/lib/supabase';
 import { getBoothFromRequest } from '@/lib/booth-auth';
@@ -155,18 +155,18 @@ export async function POST(request: NextRequest) {
         // Generate external ID for Xendit (includes booth_id for revenue tracking)
         const externalId = `chrono_${booth.id}_${session.id}_${Date.now()}`;
 
-        // Create invoice with Xendit
-        const invoice = await createInvoice(
+        // Create a native Dynamic QR Code with Xendit
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://chrono-snap.onrender.com';
+        const qrCode = await createQRCodePayment(
             externalId,
             amount,
-            `ChronoSnap - ${booth.name}`,
-            900 // 15 minutes
+            `${appUrl}/api/webhooks`
         );
 
         // Store payment in database with booth_id
         const payment = await createPayment(
             session.id,
-            invoice.id,
+            qrCode.id,
             null,
             amount,
             booth.id
@@ -179,9 +179,9 @@ export async function POST(request: NextRequest) {
             success: true,
             sessionId: session.id,
             paymentId: payment.id,
-            invoiceId: invoice.id,
-            invoiceUrl: invoice.invoice_url,
-            expiryDate: invoice.expiry_date,
+            invoiceId: qrCode.id,
+            invoiceUrl: qrCode.qr_string, // Render the raw QR string directly
+            expiryDate: qrCode.expires_at || null,
             amount: amount,
             originalAmount: effectivePrice,
             discountAmount: discountAmount,

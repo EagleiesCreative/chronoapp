@@ -2,6 +2,7 @@ mod printer;
 mod camera;
 mod filesystem;
 mod canon;
+mod sony;
 mod image_processor;
 mod stream_server;
 mod reliability;
@@ -65,6 +66,7 @@ pub fn run() {
       camera::get_camera_status,
       camera::capture_frame,
       camera::get_preview_frame,
+      camera::sony_capture_image,
       filesystem::save_file_to_disk,
       filesystem::pick_directory,
       filesystem::check_directory_writable,

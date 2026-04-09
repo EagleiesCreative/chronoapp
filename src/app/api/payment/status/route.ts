@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getInvoice } from '@/lib/xendit';
+import { getQRCode, getQRCodePayments } from '@/lib/xendit';
 import { getPaymentBySessionId, updatePaymentStatus, updateSession } from '@/lib/supabase';
 import { getBoothFromRequest } from '@/lib/booth-auth';
 
@@ -42,16 +42,30 @@ export async function GET(request: NextRequest) {
         }
 
         // Check status with Xendit
-        const invoice = await getInvoice(payment.xendit_invoice_id);
-
-        // Map Xendit status to our status
         let status: 'pending' | 'paid' | 'expired' | 'failed' = 'pending';
-        if (invoice.status === 'PAID' || invoice.status === 'SETTLED') {
-            status = 'paid';
-        } else if (invoice.status === 'EXPIRED') {
-            status = 'expired';
-        } else if (invoice.status === 'FAILED') {
-            status = 'failed';
+        
+        try {
+            const payments = await getQRCodePayments(payment.xendit_invoice_id);
+            if (payments && payments.length > 0) {
+                const isPaid = payments.some(p => p.status === 'COMPLETED' || p.status === 'SUCCEEDED' || p.status === 'PAID');
+                if (isPaid) {
+                    status = 'paid';
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to get QR payments, might not exist yet:', err);
+        }
+
+        if (status === 'pending') {
+            // Check if QR code is expired
+            try {
+                const qrCode = await getQRCode(payment.xendit_invoice_id);
+                if (qrCode.status === 'INACTIVE') {
+                    status = 'expired';
+                }
+            } catch (err) {
+                console.error('Failed to get QR code status:', err);
+            }
         }
 
         // Update payment status if changed

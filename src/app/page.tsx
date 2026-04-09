@@ -6,10 +6,11 @@ import { TenantLoginScreen } from '@/components/booth/TenantLoginScreen';
 import { useAdminStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { useSessionProfileStore } from '@/store/session-profile-store';
-import { Settings, X, Camera, LogOut, Lock, Loader2 } from 'lucide-react';
+import { Settings, X, Camera, LogOut, Lock, Loader2, FolderOpen, Image as ImageIcon, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FrameManager, PrinterSelector, CameraSelector, BackgroundSettings, PrintHistory, SessionManager, SessionSelector } from '@/components/admin';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FrameManager, PrinterSelector, CameraSelector, BackgroundSettings, PrintHistory, SessionManager, SessionSelector, LocalBackupSettings } from '@/components/admin';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatIDR } from '@/lib/xendit';
 import { Booth, getActiveBoothSession } from '@/lib/supabase';
@@ -20,6 +21,7 @@ import { setReliabilitySyncConfig } from '@/lib/reliability-sync';
 import { toast } from 'sonner';
 import { getApiUrl, apiJson, apiFetch } from '@/lib/api';
 import { getVersion } from '@tauri-apps/api/app';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function HomePage() {
   const { showAdminPanel, setShowAdminPanel } = useAdminStore();
@@ -240,7 +242,7 @@ export default function HomePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"
+            className="fixed inset-0 z-100 bg-black/50 flex items-center justify-center p-4"
             onClick={() => {
               setShowPinDialog(false);
               setPin('');
@@ -309,7 +311,7 @@ export default function HomePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-white"
+            className="fixed inset-0 z-100 bg-white"
           >
             {/* Header */}
             <header className="h-16 border-b flex items-center justify-between px-6 bg-white">
@@ -355,13 +357,96 @@ export default function HomePage() {
             </header>
 
             {/* Content */}
-            <div className="h-[calc(100vh-4rem)] w-full overflow-y-auto bg-gray-50 p-6 space-y-6">
-              <SessionManager />
-              <FrameManager />
-              <BackgroundSettings />
-              <CameraSelector />
-              <PrinterSelector />
-              <PrintHistory />
+            <div className="h-[calc(100vh-4rem)] w-full overflow-y-auto bg-linear-to-b from-gray-50 to-gray-100/80 p-6">
+              <Tabs defaultValue="sessions" className="space-y-6">
+                <TabsList className="sticky top-0 z-20 mx-auto flex w-fit justify-center border border-gray-200/80 bg-white/85 backdrop-blur px-1.5 py-1.5 shadow-sm">
+                  <TabsTrigger value="sessions" className="gap-2 rounded-full px-4 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 data-[state=active]:shadow-none">
+                    <FolderOpen className="w-4 h-4" />
+                    Sessions
+                  </TabsTrigger>
+                  <TabsTrigger value="frames" className="gap-2 rounded-full px-4 data-[state=active]:bg-sky-50 data-[state=active]:text-sky-700 data-[state=active]:shadow-none">
+                    <ImageIcon className="w-4 h-4" />
+                    Frames
+                  </TabsTrigger>
+                  <TabsTrigger value="booth-settings" className="gap-2 rounded-full px-4 data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 data-[state=active]:shadow-none">
+                    <Settings className="w-4 h-4" />
+                    Booth Settings
+                  </TabsTrigger>
+                  <TabsTrigger value="config" className="gap-2 rounded-full px-4 data-[state=active]:bg-violet-50 data-[state=active]:text-violet-700 data-[state=active]:shadow-none">
+                    <Wrench className="w-4 h-4" />
+                    Config
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="sessions">
+                  <SessionManager />
+                </TabsContent>
+
+                <TabsContent value="frames">
+                  <FrameManager />
+                </TabsContent>
+
+                <TabsContent value="booth-settings">
+                  <BackgroundSettings />
+                </TabsContent>
+
+                <TabsContent value="config" className="space-y-6">
+                  <LocalBackupSettings />
+                  <CameraSelector />
+                  <PrinterSelector />
+                  <PrintHistory />
+
+                  <Card className="border">
+                    <CardHeader>
+                      <CardTitle>Xendit Configuration</CardTitle>
+                      <CardDescription>
+                        Payment gateway settings
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Configure your Xendit API keys in environment variables:
+                      </p>
+                      <ul className="text-sm space-y-1 text-muted-foreground list-disc list-inside">
+                        <li><code className="bg-gray-100 px-1 rounded text-xs">XENDIT_SECRET_KEY</code></li>
+                        <li><code className="bg-gray-100 px-1 rounded text-xs">XENDIT_WEBHOOK_TOKEN</code></li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border">
+                    <CardHeader>
+                      <CardTitle>Supabase Configuration</CardTitle>
+                      <CardDescription>
+                        Database and storage settings
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Configure Supabase in environment variables:
+                      </p>
+                      <ul className="text-sm space-y-1 text-muted-foreground list-disc list-inside">
+                        <li><code className="bg-gray-100 px-1 rounded text-xs">NEXT_PUBLIC_SUPABASE_URL</code></li>
+                        <li><code className="bg-gray-100 px-1 rounded text-xs">NEXT_PUBLIC_SUPABASE_ANON_KEY</code></li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border">
+                    <CardHeader>
+                      <CardTitle>Admin PIN</CardTitle>
+                      <CardDescription>
+                        Security settings
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">
+                        Set <code className="bg-gray-100 px-1 rounded text-xs">ADMIN_PIN</code> in your environment variables to change the admin PIN.
+                      </p>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
             </div>
           </motion.div>
         )}

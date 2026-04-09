@@ -12,6 +12,7 @@ export type BoothStep =
     | 'countdown'
     | 'capturing'
     | 'filter'
+    | 'final-review'
     | 'review'
     | 'print'
     | 'complete';
@@ -60,6 +61,12 @@ interface BoothState {
     // Current photo being captured
     currentPhotoIndex: number;
     setCurrentPhotoIndex: (index: number) => void;
+
+    // Retake state for partial retake across screens
+    pendingRetakeIndex: number | null;
+    setPendingRetakeIndex: (index: number | null) => void;
+    retakeReturnStep: BoothStep | null;
+    setRetakeReturnStep: (step: BoothStep | null) => void;
 
     // Captured photos
     capturedPhotos: CapturedPhoto[];
@@ -136,6 +143,12 @@ export const useBoothStore = create<BoothState>((set) => ({
     currentPhotoIndex: 0,
     setCurrentPhotoIndex: (index) => set({ currentPhotoIndex: index }),
 
+    pendingRetakeIndex: null,
+    setPendingRetakeIndex: (index) => set({ pendingRetakeIndex: index }),
+
+    retakeReturnStep: null,
+    setRetakeReturnStep: (step) => set({ retakeReturnStep: step }),
+
     capturedPhotos: [],
     addCapturedPhoto: (photo) => set((state) => ({
         capturedPhotos: [...state.capturedPhotos, photo],
@@ -180,6 +193,8 @@ export const useBoothStore = create<BoothState>((set) => ({
         invoiceUrl: null,
         countdownValue: 3,
         currentPhotoIndex: 0,
+        pendingRetakeIndex: null,
+        retakeReturnStep: null,
         capturedPhotos: [],
         finalImage: null,
         finalVideoUrl: null,
@@ -224,15 +239,25 @@ interface AdminState {
     isCameraMirrored: boolean;
     setCameraMirrored: (mirrored: boolean) => void;
 
+    // Camera type detection (auto-set based on selected camera name)
+    cameraType: 'system' | 'canon' | 'sony';
+    setCameraType: (type: 'system' | 'canon' | 'sony') => void;
+
     // Live Video Feature Toggle
     isVideoMode: boolean;
     setIsVideoMode: (videoMode: boolean) => void;
+
+    // Idle live preview background toggle
+    isLivePreviewEnabled: boolean;
+    setIsLivePreviewEnabled: (enabled: boolean) => void;
 }
 
 const CAMERA_STORAGE_KEY = 'chronosnap_selected_camera';
 const BROWSER_CAMERA_STORAGE_KEY = 'chronosnap_browser_camera';
 const MIRROR_CAMERA_STORAGE_KEY = 'chronosnap_mirror_camera';
 const VIDEO_MODE_STORAGE_KEY = 'chronosnap_video_mode';
+const CAMERA_TYPE_STORAGE_KEY = 'chronosnap_camera_type';
+const LIVE_PREVIEW_STORAGE_KEY = 'chronosnap_live_preview_enabled';
 
 function getPersistedValue(key: string): string | null {
     if (typeof window === 'undefined') return null;
@@ -292,9 +317,21 @@ export const useAdminStore = create<AdminState>((set) => ({
         set({ isCameraMirrored: mirrored });
     },
 
+    cameraType: (getPersistedValue(CAMERA_TYPE_STORAGE_KEY) as 'system' | 'canon' | 'sony') || 'system',
+    setCameraType: (type) => {
+        setPersistedValue(CAMERA_TYPE_STORAGE_KEY, type);
+        set({ cameraType: type });
+    },
+
     isVideoMode: getPersistedValue(VIDEO_MODE_STORAGE_KEY) !== 'false', // Default to true!
     setIsVideoMode: (videoMode) => {
         setPersistedValue(VIDEO_MODE_STORAGE_KEY, videoMode ? 'true' : 'false');
         set({ isVideoMode: videoMode });
+    },
+
+    isLivePreviewEnabled: getPersistedValue(LIVE_PREVIEW_STORAGE_KEY) !== 'false',
+    setIsLivePreviewEnabled: (enabled) => {
+        setPersistedValue(LIVE_PREVIEW_STORAGE_KEY, enabled ? 'true' : 'false');
+        set({ isLivePreviewEnabled: enabled });
     },
 }));

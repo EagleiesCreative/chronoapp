@@ -5,7 +5,13 @@ import { useSessionProfileStore } from '@/store/session-profile-store';
 
 export type CapturePhase = 'waiting' | 'countdown' | 'capturing' | 'preview';
 
-export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: boolean, stream?: MediaStream | null) {
+export function useCaptureFlow(
+    getScreenshot: () => string | null,
+    cameraReady: boolean,
+    stream?: MediaStream | null,
+    getSonyCapture?: () => Promise<string | null>,
+    isSonyMode: boolean = false,
+) {
     const {
         selectedFrame,
         currentPhotoIndex,
@@ -13,6 +19,10 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
         addCapturedPhoto,
         replaceCapturedPhoto,
         capturedPhotos,
+        pendingRetakeIndex,
+        setPendingRetakeIndex,
+        retakeReturnStep,
+        setRetakeReturnStep,
         setStep,
     } = useBoothStore();
 
@@ -24,7 +34,7 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
     const countdownSec = activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3;
     const previewSec = activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5;
     const filterEnabled = activeSession?.filter_enabled ?? booth?.filter_enabled ?? true;
-    const nextStepAfterCapture = filterEnabled ? 'filter' : 'review';
+    const nextStepAfterCapture = filterEnabled ? 'filter' : 'final-review';
 
     const [flashActive, setFlashActive] = useState(false);
     const [phase, setPhase] = useState<CapturePhase>('waiting');
@@ -32,7 +42,7 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
     const [previewCountdown, setPreviewCountdown] = useState(previewSec);
     const [lastCapturedPhoto, setLastCapturedPhoto] = useState<string | null>(null);
     const [lastCapturedVideo, setLastCapturedVideo] = useState<Blob | null>(null);
-    const [retakingIndex, setRetakingIndex] = useState<number | null>(null);
+    const retakingIndex = pendingRetakeIndex;
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const videoChunksRef = useRef<Blob[]>([]);
@@ -48,7 +58,7 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
         }
     }, [cameraReady, phase, countdownSec]);
 
-    const capturePhoto = useCallback(() => {
+    const capturePhoto = useCallback(async () => {
         setPhase('capturing');
         setFlashActive(true);
 
@@ -56,21 +66,31 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
             setFlashActive(false);
         }, 150);
 
-        const imageSrc = getScreenshot();
+        let imageSrc: string | null = null;
+
+        if (isSonyMode && getSonyCapture) {
+            // Sony: trigger actual shutter release via CrSDK
+            imageSrc = await getSonyCapture();
+        } else {
+            // System/Canon: grab frame from webcam
+            imageSrc = getScreenshot();
+        }
 
         if (imageSrc) {
             setLastCapturedPhoto(imageSrc);
             setPhase('preview');
+            // Keep preview duration, but auto-continue without Keep/Retake dialog.
             setPreviewCountdown(previewSec);
         }
-    }, [getScreenshot, previewSec]);
+    }, [getScreenshot, getSonyCapture, isSonyMode, previewSec]);
 
     useEffect(() => {
         if (!cameraReady || phase !== 'countdown') return;
 
         if (countdown > 0) {
             // Start recording 3 seconds before capture, or handle cases where countdown is precisely 3, 2 or 1
-            if (isVideoMode && stream && countdown === Math.min(3, countdownSec)) {
+            // Video recording is disabled for Sony mode (still-image only)
+            if (isVideoMode && !isSonyMode && stream && countdown === Math.min(3, countdownSec)) {
                 try {
                     videoChunksRef.current = [];
                     // Prefer webm since mp4 via MediaRecorder can be very finicky in Safari/WebKit
@@ -110,7 +130,7 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
             }
             capturePhoto();
         }
-    }, [cameraReady, countdown, phase, capturePhoto, isVideoMode, stream, countdownSec]);
+    }, [cameraReady, countdown, phase, capturePhoto, isVideoMode, isSonyMode, stream, countdownSec]);
 
     const handleContinue = useCallback(() => {
         if (lastCapturedPhoto && phase === 'preview') {
@@ -129,11 +149,13 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
                     videoBlob: videoData || undefined,
                 });
                 const savedIndex = currentPhotoIndex;
-                setRetakingIndex(null);
+                setPendingRetakeIndex(null);
+                const stepAfterRetake = retakeReturnStep ?? nextStepAfterCapture;
+                setRetakeReturnStep(null);
 
                 // If all photos are captured, go to filter selection
                 if (capturedPhotos.length >= totalPhotos) {
-                    setStep(nextStepAfterCapture);
+                    setStep(stepAfterRetake);
                 } else {
                     // Resume normal flow at next uncaptured slot
                     setCurrentPhotoIndex(savedIndex);
@@ -158,7 +180,7 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
                 }
             }
         }
-    }, [lastCapturedPhoto, lastCapturedVideo, phase, currentPhotoIndex, totalPhotos, addCapturedPhoto, replaceCapturedPhoto, setStep, setCurrentPhotoIndex, countdownSec, retakingIndex, capturedPhotos.length, nextStepAfterCapture]);
+    }, [lastCapturedPhoto, lastCapturedVideo, phase, currentPhotoIndex, totalPhotos, addCapturedPhoto, replaceCapturedPhoto, setStep, setCurrentPhotoIndex, countdownSec, retakingIndex, capturedPhotos.length, nextStepAfterCapture, setPendingRetakeIndex, retakeReturnStep, setRetakeReturnStep]);
 
     // Preview auto-continue timer
     useEffect(() => {
@@ -184,7 +206,8 @@ export function useCaptureFlow(getScreenshot: () => string | null, cameraReady: 
     };
 
     const retakePhoto = (index: number) => {
-        setRetakingIndex(index);
+        setPendingRetakeIndex(index);
+        setRetakeReturnStep(null);
         setLastCapturedPhoto(null);
         setLastCapturedVideo(null);
         if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {

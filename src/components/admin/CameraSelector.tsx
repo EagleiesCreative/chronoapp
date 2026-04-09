@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Video, VideoOff, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { Video, VideoOff, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -58,6 +58,8 @@ export function CameraSelector() {
         setCameraMirrored,
         isVideoMode,
         setIsVideoMode,
+        cameraType,
+        setCameraType,
     } = useAdminStore();
 
     // Check if getUserMedia is available
@@ -71,8 +73,12 @@ export function CameraSelector() {
         try {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoDevices = devices.filter(d => d.kind === 'videoinput');
-            // Strip " (System)" / " (Canon SDK)" suffixes for matching
-            const cleanName = cameraName.replace(/ \(System\)$/, '').replace(/ \(Canon SDK\)$/, '').trim();
+            // Strip " (System)" / " (Canon SDK)" / " (Sony SDK)" suffixes for matching
+            const cleanName = cameraName
+                .replace(/ \(System\)$/, '')
+                .replace(/ \(Canon SDK\)$/, '')
+                .replace(/ \(Sony SDK\)$/, '')
+                .trim();
             const match = videoDevices.find(d =>
                 d.label.toLowerCase().includes(cleanName.toLowerCase()) ||
                 cleanName.toLowerCase().includes(d.label.toLowerCase())
@@ -173,8 +179,10 @@ export function CameraSelector() {
         try {
             const selectedCamera = cameras.find(c => c.id === selectedCameraId);
             const isCanon = selectedCamera?.name.includes('(Canon SDK)');
+            const isSony = selectedCamera?.name.includes('(Sony SDK)');
 
-            if (isTauri && isCanon) {
+            if (isTauri && (isCanon || isSony)) {
+                // Sony and Canon both use Tauri backend for preview
                 // Start the camera in the backend
                 const status = await invoke('start_camera', { device_id: selectedCameraId });
                 console.log('Camera started:', status);
@@ -226,9 +234,20 @@ export function CameraSelector() {
         // Stop any existing preview
         stopPreview();
         setSelectedCameraId(deviceId);
-        // Resolve and save the browser WebAPI deviceId for react-webcam
+
+        // Auto-detect camera type from name suffix
         const selected = cameras.find(c => c.id === deviceId);
         if (selected) {
+            if (selected.name.includes('(Sony SDK)')) {
+                setCameraType('sony');
+            } else if (selected.name.includes('(Canon SDK)')) {
+                setCameraType('canon');
+            } else {
+                setCameraType('system');
+            }
+
+            // Resolve and save the browser WebAPI deviceId for react-webcam
+            // (only needed for system cameras, but resolve anyway for compatibility)
             const browserId = await resolveBrowserDeviceId(selected.name);
             setBrowserCameraId(browserId);
         }
@@ -319,13 +338,27 @@ export function CameraSelector() {
                                 >
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="flex items-center gap-2 font-medium">
-                                            <Video className="w-4 h-4 text-primary shrink-0" />
+                                            {camera.name.includes('(Sony SDK)') ? (
+                                                <Camera className="w-4 h-4 text-amber-500 shrink-0" />
+                                            ) : camera.name.includes('(Canon SDK)') ? (
+                                                <Camera className="w-4 h-4 text-red-500 shrink-0" />
+                                            ) : (
+                                                <Video className="w-4 h-4 text-primary shrink-0" />
+                                            )}
                                             <span className="line-clamp-2" title={camera.name}>{camera.name}</span>
                                         </div>
+                                        {camera.name.includes('(Sony SDK)') && (
+                                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                                Direct Capture
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                                         <div className={`w-1.5 h-1.5 rounded-full ${selectedCameraId === camera.id ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
-                                        <span>{selectedCameraId === camera.id ? 'Selected' : 'Ready'}</span>
+                                        <span>
+                                            {selectedCameraId === camera.id ? 'Selected' : 'Ready'}
+                                            {camera.name.includes('(Sony SDK)') && selectedCameraId === camera.id && ' — Full-res shutter capture'}
+                                        </span>
                                     </div>
                                 </div>
                             ))}
@@ -347,17 +380,20 @@ export function CameraSelector() {
                     />
                 </div>
 
-                {/* Video Mode Settings */}
+                {/* Video Mode Settings — disabled for Sony (still-image only) */}
                 <div className="flex items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
                         <Label className="text-base font-medium">Live Video Mode</Label>
                         <p className="text-sm text-muted-foreground">
-                            Record 2-second video clips instead of static photos
+                            {cameraType === 'sony'
+                                ? 'Not available with Sony direct capture (still photos only)'
+                                : 'Record 2-second video clips instead of static photos'}
                         </p>
                     </div>
                     <Switch
-                        checked={isVideoMode}
+                        checked={cameraType === 'sony' ? false : isVideoMode}
                         onCheckedChange={setIsVideoMode}
+                        disabled={cameraType === 'sony'}
                     />
                 </div>
 
@@ -432,6 +468,25 @@ export function CameraSelector() {
                     The selected camera will be used for photo capture during booth sessions.
                     Make sure to test the camera before starting.
                 </p>
+
+                {/* Sony setup instructions */}
+                {cameraType === 'sony' && (
+                    <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                        <Camera className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-medium text-amber-500">Sony Direct Capture Mode</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Full-resolution photos will be captured directly via the camera&apos;s shutter.
+                                Ensure your camera is set to:
+                            </p>
+                            <ul className="text-sm text-muted-foreground list-disc list-inside mt-2 space-y-1">
+                                <li>USB mode → <strong>PC Remote</strong></li>
+                                <li>Mode dial → <strong>M, S, A, or P</strong></li>
+                                <li>Save destination → <strong>PC+Camera</strong> or <strong>PC Only</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+                )}
             </CardContent>
         </Card>
     );

@@ -10,19 +10,14 @@ import {
     Camera,
     Loader2,
     FolderOpen,
+    ChevronDown,
+    ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Dialog,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -33,7 +28,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
@@ -65,12 +59,17 @@ export function SessionManager() {
 
     const [sessions, setSessions] = useState<BoothSessionWithMeta[]>([]);
     const [loading, setLoading] = useState(true);
-    const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [editingSession, setEditingSession] = useState<Partial<BoothSession> | null>(null);
     const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [activating, setActivating] = useState<string | null>(null);
+    const [editorSections, setEditorSections] = useState({
+        event: true,
+        timing: true,
+        options: true,
+        branding: false,
+    });
 
     const fetchSessions = useCallback(async () => {
         if (!booth?.id) return;
@@ -92,12 +91,16 @@ export function SessionManager() {
 
     function openCreate() {
         setEditingSession({ ...DEFAULT_SESSION, name: '' });
-        setEditDialogOpen(true);
+        setEditorSections({ event: true, timing: true, options: true, branding: false });
     }
 
     function openEdit(session: BoothSessionWithMeta) {
         setEditingSession({ ...session });
-        setEditDialogOpen(true);
+        setEditorSections({ event: true, timing: true, options: true, branding: false });
+    }
+
+    function toggleEditorSection(section: keyof typeof editorSections) {
+        setEditorSections((prev) => ({ ...prev, [section]: !prev[section] }));
     }
 
     async function handleSave() {
@@ -141,7 +144,6 @@ export function SessionManager() {
             }
 
             toast.success(isNew ? 'Session created' : 'Session updated');
-            setEditDialogOpen(false);
             setEditingSession(null);
             fetchSessions();
         } catch (err: any) {
@@ -213,14 +215,18 @@ export function SessionManager() {
 
     return (
         <>
-            <Card className="border">
+            <Card className="border pb-4">
                 <CardHeader>
-                    <div>
+                    <div className="flex items-center justify-between gap-3">
                         <CardTitle>Sessions</CardTitle>
-                        <p className="text-sm text-muted-foreground mt-1">
-                            Manage booth configuration profiles
-                        </p>
+                        <Button onClick={openCreate} size="sm" className="gap-2">
+                            <Plus className="w-4 h-4" />
+                            New Session
+                        </Button>
                     </div>
+                    <p className="text-sm text-muted-foreground -mt-2">
+                        Manage booth configuration profiles
+                    </p>
                 </CardHeader>
                 <CardContent>
                     {loading ? (
@@ -330,95 +336,117 @@ export function SessionManager() {
                 </CardContent>
             </Card>
 
-            {/* Edit Dialog — full settings (only for existing sessions) */}
-            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-                <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {editingSession?.id ? 'Edit Session' : 'New Session'}
-                        </DialogTitle>
-                    </DialogHeader>
+            {/* Inline editor under Sessions card */}
+            {editingSession && (
+                <Card className="border shadow-sm bg-white/95 backdrop-blur-sm">
+                    <CardHeader>
+                        <div className="flex items-center justify-between gap-3">
+                            <CardTitle>
+                                {editingSession.id ? 'Edit Session' : 'New Session'}
+                            </CardTitle>
+                            <Button
+                                variant="outline"
+                                onClick={() => setEditingSession(null)}
+                                disabled={saving}
+                            >
+                                Cancel
+                            </Button>
+                        </div>
+                        <p className="text-sm text-muted-foreground -mt-2">
+                            Configure details without leaving the sessions page.
+                        </p>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
+                        <div className="rounded-xl border bg-muted/20 p-4 space-y-2">
+                            <Label>Session Name *</Label>
+                            <Input
+                                value={editingSession.name || ''}
+                                onChange={(e) =>
+                                    setEditingSession({ ...editingSession, name: e.target.value })
+                                }
+                                placeholder="e.g., Wedding Sarah & Tom"
+                            />
+                        </div>
 
-                    {editingSession && (
-                        <div className="space-y-6">
-                            {/* Name — always shown */}
-                            <div className="space-y-2">
-                                <Label>Session Name *</Label>
-                                <Input
-                                    value={editingSession.name || ''}
-                                    onChange={(e) =>
-                                        setEditingSession({ ...editingSession, name: e.target.value })
+                        <div className="rounded-xl border bg-muted/20 p-5">
+                            <div className="flex items-center justify-between gap-3 pb-4 border-b border-border/70">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleEditorSection('event')}
+                                    className="flex items-center gap-2 text-left"
+                                >
+                                    <h4 className="text-sm font-semibold">Event Mode</h4>
+                                    {editorSections.event ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                                </button>
+                                <Switch
+                                    checked={editingSession.event_mode || false}
+                                    onCheckedChange={(v) =>
+                                        setEditingSession({ ...editingSession, event_mode: v })
                                     }
-                                    placeholder="e.g., Wedding Sarah & Tom"
                                 />
                             </div>
-
-                            {/* Event Mode — always shown */}
-                            <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <h4 className="text-sm font-medium">Event Mode</h4>
-                                    <Switch
-                                        checked={editingSession.event_mode || false}
-                                        onCheckedChange={(v) =>
-                                            setEditingSession({ ...editingSession, event_mode: v })
-                                        }
-                                    />
-                                </div>
-                                {editingSession.event_mode && (
-                                    <div className="space-y-3 pl-1">
-                                        <div className="space-y-2">
-                                            <Label>Event name</Label>
-                                            <Input
-                                                value={editingSession.event_name || ''}
-                                                onChange={(e) =>
-                                                    setEditingSession({ ...editingSession, event_name: e.target.value })
-                                                }
-                                                placeholder="Sarah & Tom's Wedding"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Event date</Label>
-                                            <Input
-                                                type="date"
-                                                value={editingSession.event_date || ''}
-                                                onChange={(e) =>
-                                                    setEditingSession({ ...editingSession, event_date: e.target.value })
-                                                }
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Hashtag</Label>
-                                            <Input
-                                                value={editingSession.event_hashtag || ''}
-                                                onChange={(e) =>
-                                                    setEditingSession({ ...editingSession, event_hashtag: e.target.value })
-                                                }
-                                                placeholder="#SarahAndTom2026"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Message</Label>
-                                            <Input
-                                                value={editingSession.event_message || ''}
-                                                onChange={(e) =>
-                                                    setEditingSession({ ...editingSession, event_message: e.target.value })
-                                                }
-                                                placeholder="Thank you for celebrating with us!"
-                                            />
-                                        </div>
+                            {editorSections.event && editingSession.event_mode && (
+                                <div className="grid gap-3 pt-5 md:grid-cols-2">
+                                    <div className="space-y-2 md:col-span-2">
+                                        <Label>Event name</Label>
+                                        <Input
+                                            value={editingSession.event_name || ''}
+                                            onChange={(e) =>
+                                                setEditingSession({ ...editingSession, event_name: e.target.value })
+                                            }
+                                            placeholder="Sarah & Tom's Wedding"
+                                        />
                                     </div>
-                                )}
-                            </div>
+                                    <div className="space-y-2">
+                                        <Label>Event date</Label>
+                                        <Input
+                                            type="date"
+                                            value={editingSession.event_date || ''}
+                                            onChange={(e) =>
+                                                setEditingSession({ ...editingSession, event_date: e.target.value })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Hashtag</Label>
+                                        <Input
+                                            value={editingSession.event_hashtag || ''}
+                                            onChange={(e) =>
+                                                setEditingSession({ ...editingSession, event_hashtag: e.target.value })
+                                            }
+                                            placeholder="#SarahAndTom2026"
+                                        />
+                                    </div>
+                                    <div className="space-y-2 md:col-span-2">
+                                        <Label>Message</Label>
+                                        <Input
+                                            value={editingSession.event_message || ''}
+                                            onChange={(e) =>
+                                                setEditingSession({ ...editingSession, event_message: e.target.value })
+                                            }
+                                            placeholder="Thank you for celebrating with us!"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                            {editorSections.event && !editingSession.event_mode && (
+                                <p className="text-xs text-muted-foreground pt-5">Enable Event Mode to show event details fields.</p>
+                            )}
+                        </div>
 
-                            {/* Remaining fields only shown when editing an existing session */}
-                            {editingSession.id && (
-                                <>
-                                    <Separator />
-
-                                    {/* Pricing & Timing */}
-                                    <div>
-                                        <h4 className="text-sm font-medium mb-3">Pricing & Timing</h4>
-                                        <div className="grid grid-cols-2 gap-4">
+                        {editingSession.id && (
+                            <>
+                                <div className="rounded-xl border bg-muted/20 p-5">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleEditorSection('timing')}
+                                        className="flex items-center gap-2 text-left pb-4 border-b border-border/70 w-full"
+                                    >
+                                        <h4 className="text-sm font-semibold">Pricing & Timing</h4>
+                                        {editorSections.timing ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                                    </button>
+                                    {editorSections.timing && (
+                                        <div className="grid grid-cols-2 gap-4 pt-5">
                                             <div className="space-y-2">
                                                 <Label>Price (IDR)</Label>
                                                 <Input
@@ -493,12 +521,20 @@ export function SessionManager() {
                                                 />
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
+                                </div>
 
-                                    {/* Toggles */}
-                                    <div>
-                                        <h4 className="text-sm font-medium mb-3">Options</h4>
-                                        <div className="space-y-3">
+                                <div className="rounded-xl border bg-muted/20 p-5">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleEditorSection('options')}
+                                        className="flex items-center gap-2 text-left pb-4 border-b border-border/70 w-full"
+                                    >
+                                        <h4 className="text-sm font-semibold">Options</h4>
+                                        {editorSections.options ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                                    </button>
+                                    {editorSections.options && (
+                                        <div className="space-y-3 pt-5">
                                             <div className="flex items-center justify-between">
                                                 <Label>Payment bypass (free)</Label>
                                                 <Switch
@@ -527,14 +563,20 @@ export function SessionManager() {
                                                 />
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
+                                </div>
 
-                                    <Separator />
-
-                                    {/* Branding */}
-                                    <div>
-                                        <h4 className="text-sm font-medium mb-3">Branding</h4>
-                                        <div className="space-y-3">
+                                <div className="rounded-xl border bg-muted/20 p-5">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleEditorSection('branding')}
+                                        className="flex items-center gap-2 text-left pb-4 border-b border-border/70 w-full"
+                                    >
+                                        <h4 className="text-sm font-semibold">Branding</h4>
+                                        {editorSections.branding ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                                    </button>
+                                    {editorSections.branding && (
+                                        <div className="space-y-3 pt-5">
                                             <div className="space-y-2">
                                                 <Label>Title</Label>
                                                 <Input
@@ -639,16 +681,15 @@ export function SessionManager() {
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    )}
+                                    )}
+                                </div>
+                            </>
+                        )}
 
-                    <DialogFooter>
+                        <div className="flex items-center justify-end gap-2 pt-3 border-t">
                         <Button
                             variant="outline"
-                            onClick={() => setEditDialogOpen(false)}
+                            onClick={() => setEditingSession(null)}
                             disabled={saving}
                         >
                             Cancel
@@ -657,9 +698,10 @@ export function SessionManager() {
                             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                             {editingSession?.id ? 'Save Changes' : 'Create Session'}
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Delete Confirmation */}
             <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

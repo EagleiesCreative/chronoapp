@@ -29,6 +29,7 @@ interface UseRustCameraReturn {
     stopCamera: () => Promise<void>;
     captureFrame: (quality?: number) => Promise<string>;
     getStatus: () => Promise<CameraStatus>;
+    sonyCaptureImage: (quality?: number) => Promise<string>;
 
     // Preview control
     startPreview: (fps?: number) => void;
@@ -215,6 +216,20 @@ export function useRustCamera(): UseRustCameraReturn {
         setCurrentFrame(null);
     }, []);
 
+    /**
+     * Sony: trigger actual shutter release and return full-resolution image
+     */
+    const sonyCaptureImage = useCallback(async (quality?: number): Promise<string> => {
+        try {
+            const frame = await invoke<string>('sony_capture_image', { quality: quality ?? 95 });
+            return frame;
+        } catch (err: any) {
+            const msg = err?.message || String(err);
+            setError(msg);
+            throw new Error(msg);
+        }
+    }, []);
+
     return {
         isActive,
         isLoading,
@@ -227,6 +242,7 @@ export function useRustCamera(): UseRustCameraReturn {
         stopCamera,
         captureFrame,
         getStatus,
+        sonyCaptureImage,
         startPreview,
         stopPreview,
     };

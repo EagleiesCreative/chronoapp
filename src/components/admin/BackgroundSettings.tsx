@@ -1,18 +1,18 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Image, Palette, Upload, X, Check, Loader2, HardDrive, FolderOpen, CheckCircle2, XCircle } from 'lucide-react';
+import { Image, Palette, Upload, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FloatingSaveBar } from '@/components/ui/floating-save-bar';
 import { apiFetch } from '@/lib/api';
-import { isTauri, pickSaveDirectory, checkDirectoryWritable } from '@/lib/local-save';
 import { useTenantStore } from '@/store/tenant-store';
-import { useLocalSaveStore } from '@/store/local-save-store';
+import { useAdminStore } from '@/store/booth-store';
 import { useSessionProfileStore } from '@/store/session-profile-store';
 import { toast } from 'sonner';
 
@@ -30,6 +30,7 @@ const PRESET_COLORS = [
 export function BackgroundSettings() {
     const { booth, setBooth } = useTenantStore();
     const { activeSession, setActiveSession } = useSessionProfileStore();
+    const { isLivePreviewEnabled, setIsLivePreviewEnabled } = useAdminStore();
     const [isUploading, setIsUploading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -43,21 +44,7 @@ export function BackgroundSettings() {
     const [printCopies, setPrintCopies] = useState(activeSession?.print_copies ?? booth?.print_copies ?? 1);
     const [slideshowEnabled, setSlideshowEnabled] = useState(activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // Local save state (from persisted store)
-    const [showTauri, setShowTauri] = useState(false);
-    const { enabled: localSaveStoreEnabled, setEnabled: setLocalSaveStoreEnabled, savePath: localSaveStorePath, setSavePath: setLocalSaveStorePath } = useLocalSaveStore();
-
-    // Component local state for local save settings (to be saved via FloatingSaveBar)
-    const [tempLocalSaveEnabled, setTempLocalSaveEnabled] = useState(localSaveStoreEnabled);
-    const [tempSavePath, setTempSavePath] = useState<string | null>(localSaveStorePath);
-
-    const [pathStatus, setPathStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
-
-    // Check if running in Tauri (client-side only)
-    useEffect(() => {
-        setShowTauri(isTauri());
-    }, []);
+    const [tempLivePreviewEnabled, setTempLivePreviewEnabled] = useState(isLivePreviewEnabled);
 
     // Sync form state when active session changes
     useEffect(() => {
@@ -70,18 +57,6 @@ export function BackgroundSettings() {
         setPrintCopies(activeSession?.print_copies ?? booth?.print_copies ?? 1);
         setSlideshowEnabled(activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false);
     }, [activeSession?.id]);
-
-    // Validate directory when tempSavePath changes
-    useEffect(() => {
-        if (!tempSavePath || !showTauri) {
-            setPathStatus('idle');
-            return;
-        }
-        setPathStatus('checking');
-        checkDirectoryWritable(tempSavePath).then((writable) => {
-            setPathStatus(writable ? 'ok' : 'error');
-        });
-    }, [tempSavePath, showTauri]);
 
     const handleColorChange = (color: string) => {
         setSelectedColor(color);
@@ -153,8 +128,7 @@ export function BackgroundSettings() {
         reviewTimeoutSeconds !== effectiveReviewTimeout ||
         printCopies !== effectivePrintCopies ||
         slideshowEnabled !== effectiveSlideshow ||
-        tempLocalSaveEnabled !== localSaveStoreEnabled ||
-        tempSavePath !== localSaveStorePath;
+        tempLivePreviewEnabled !== isLivePreviewEnabled;
 
     const handleDiscard = () => {
         setSelectedColor(effectiveBgColor);
@@ -165,8 +139,7 @@ export function BackgroundSettings() {
         setReviewTimeoutSeconds(effectiveReviewTimeout);
         setPrintCopies(effectivePrintCopies);
         setSlideshowEnabled(effectiveSlideshow);
-        setTempLocalSaveEnabled(localSaveStoreEnabled);
-        setTempSavePath(localSaveStorePath);
+        setTempLivePreviewEnabled(isLivePreviewEnabled);
     };
 
     const settingsPayload = {
@@ -199,9 +172,7 @@ export function BackgroundSettings() {
                 }),
             });
 
-            // Save local save settings to persisted store
-            setLocalSaveStoreEnabled(tempLocalSaveEnabled);
-            setLocalSaveStorePath(tempSavePath);
+            setIsLivePreviewEnabled(tempLivePreviewEnabled);
 
             const data = await response.json();
             if (data.success) {
@@ -249,17 +220,24 @@ export function BackgroundSettings() {
 
     return (
         <>
-            <Card className="glass-card mb-20">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Image className="w-5 h-5" />
-                        Idle Screen Background
-                    </CardTitle>
-                    <CardDescription>
-                        Customize the background of your booth&apos;s idle screen
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
+            <Tabs defaultValue="idle" className="w-full mb-20">
+                <TabsList className="grid w-full max-w-xl grid-cols-2 mb-6 mx-auto">
+                    <TabsTrigger value="idle">Idle Screen</TabsTrigger>
+                    <TabsTrigger value="experience">Booth Experience</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="idle">
+                    <Card className="glass-card">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Image className="w-5 h-5" />
+                                Idle Screen Background
+                            </CardTitle>
+                            <CardDescription>
+                                Customize the background of your booth&apos;s idle screen
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
                     {/* Payment Bypass */}
                     <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-muted/20">
                         <div className="space-y-0.5">
@@ -285,6 +263,20 @@ export function BackgroundSettings() {
                         <Switch
                             checked={slideshowEnabled}
                             onCheckedChange={setSlideshowEnabled}
+                        />
+                    </div>
+
+                    {/* Idle Live Preview */}
+                    <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-muted/20">
+                        <div className="space-y-0.5">
+                            <Label className="text-base font-semibold">Idle Live Preview Background</Label>
+                            <p className="text-sm text-muted-foreground mr-8">
+                                Show full-screen live camera preview on the home screen before user starts session.
+                            </p>
+                        </div>
+                        <Switch
+                            checked={tempLivePreviewEnabled}
+                            onCheckedChange={setTempLivePreviewEnabled}
                         />
                     </div>
 
@@ -411,21 +403,21 @@ export function BackgroundSettings() {
                             </span>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
-            {/* Photo Experience Settings */}
-            <Card className="glass-card mb-20">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        {/* Use CheckCircle2 as a generic icon, or any available icon */}
-                        Booth Experience
-                    </CardTitle>
-                    <CardDescription>
-                        Configure wait times, auto-continue durations, and print copies
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
+                <TabsContent value="experience">
+                    <Card className="glass-card">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                Booth Experience
+                            </CardTitle>
+                            <CardDescription>
+                                Configure wait times, auto-continue durations, and print copies
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
                     {/* Capture Countdown */}
                     <div className="space-y-3">
                         <div className="flex justify-between">
@@ -492,85 +484,10 @@ export function BackgroundSettings() {
                         />
                         <p className="text-xs text-muted-foreground">How many copies to print automatically when the user clicks Print.</p>
                     </div>
-                </CardContent>
-            </Card>
-
-            {/* Local Photo Backup — only in Tauri */}
-            {showTauri && (
-                <Card className="glass-card">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <HardDrive className="w-5 h-5" />
-                            Local Photo Backup
-                        </CardTitle>
-                        <CardDescription>
-                            Save captured photos to a folder on this computer
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {/* Toggle */}
-                        <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-muted/20">
-                            <div className="space-y-0.5">
-                                <Label className="text-base font-semibold">Save Photos Locally</Label>
-                                <p className="text-sm text-muted-foreground">
-                                    Keep a local copy of every session&apos;s photos on this computer.
-                                </p>
-                            </div>
-                            <Switch
-                                checked={tempLocalSaveEnabled}
-                                onCheckedChange={setTempLocalSaveEnabled}
-                            />
-                        </div>
-
-                        {/* Directory Picker */}
-                        {tempLocalSaveEnabled && (
-                            <div className="space-y-3">
-                                <Label className="text-sm font-medium">Save Directory</Label>
-                                <div className="flex gap-2">
-                                    <div className="flex-1 relative">
-                                        <Input
-                                            value={tempSavePath || ''}
-                                            onChange={(e) => setTempSavePath(e.target.value || null)}
-                                            placeholder="/Users/.../ChronoSnap Photos"
-                                            className="pr-8 font-mono text-xs"
-                                        />
-                                        {pathStatus === 'ok' && (
-                                            <CheckCircle2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
-                                        )}
-                                        {pathStatus === 'error' && (
-                                            <XCircle className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-red-500" />
-                                        )}
-                                        {pathStatus === 'checking' && (
-                                            <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
-                                        )}
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        onClick={async () => {
-                                            const dir = await pickSaveDirectory();
-                                            if (dir) {
-                                                setTempSavePath(dir);
-                                            }
-                                        }}
-                                    >
-                                        <FolderOpen className="w-4 h-4 mr-2" />
-                                        Browse
-                                    </Button>
-                                </div>
-                                {pathStatus === 'error' && (
-                                    <p className="text-xs text-red-500">Directory is not writable. Please choose a different folder.</p>
-                                )}
-                                {pathStatus === 'ok' && (
-                                    <p className="text-xs text-green-600">✓ Directory is ready. Photos will be saved here.</p>
-                                )}
-                                {!tempSavePath && (
-                                    <p className="text-xs text-muted-foreground">Click Browse to choose where photos will be saved.</p>
-                                )}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
 
             <FloatingSaveBar
                 isVisible={isDirty}

@@ -23,7 +23,7 @@ export function FilterScreen() {
     const currentFilter = useMemo(() => getFilterByName(selectedFilter), [selectedFilter]);
 
     const handleApply = () => {
-        setStep('review');
+        setStep('final-review');
     };
 
     return (

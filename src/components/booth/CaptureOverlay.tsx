@@ -1,6 +1,4 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { RotateCcw, Check } from 'lucide-react';
 import { CapturePhase } from '@/hooks/useCaptureFlow';
 
 interface CaptureOverlayProps {
@@ -9,8 +7,6 @@ interface CaptureOverlayProps {
     previewCountdown: number;
     flashActive: boolean;
     cameraReady: boolean;
-    handleRetake: () => void;
-    handleContinue: () => void;
 }
 
 export function CaptureOverlay({
@@ -18,9 +14,7 @@ export function CaptureOverlay({
     countdown,
     previewCountdown,
     flashActive,
-    cameraReady,
-    handleRetake,
-    handleContinue
+    cameraReady
 }: CaptureOverlayProps) {
     return (
         <>
@@ -82,28 +76,6 @@ export function CaptureOverlay({
                 )}
             </motion.div>
 
-            {/* Preview action buttons */}
-            {phase === 'preview' && (
-                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex gap-4 z-30">
-                    <Button
-                        onClick={handleRetake}
-                        variant="outline"
-                        className="bg-white/95 hover:bg-white rounded-full px-6 min-h-[56px] text-base active:scale-[0.97] transition-transform"
-                        aria-label="Retake this photo"
-                    >
-                        <RotateCcw className="w-5 h-5 mr-2" strokeWidth={1.5} />
-                        Retake
-                    </Button>
-                    <Button
-                        onClick={handleContinue}
-                        className="rounded-full px-6 min-h-[56px] text-base elegant-shadow active:scale-[0.97] transition-transform"
-                        aria-label="Use this photo"
-                    >
-                        <Check className="w-5 h-5 mr-2" strokeWidth={2} />
-                        Use Photo
-                    </Button>
-                </div>
-            )}
         </>
     );
 }
