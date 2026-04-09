@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
         const qrCode = await createQRCodePayment(
             externalId,
             amount,
-            `${appUrl}/api/webhooks`
+            `${appUrl}/api/payment/webhook`
         );
 
         // Store payment in database with booth_id
