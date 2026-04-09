@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: http://localhost:3030 https://*.supabase.co https://chronosnap.eagleies.com https://*.r2.dev https://*.cloudflarestorage.com blob:; connect-src 'self' data: blob: http://localhost:3000 ws://localhost:3000 https://*.supabase.co https://api.xendit.co https://chronosnap.eagleies.com wss://*.supabase.co https://*.r2.dev https://*.cloudflarestorage.com; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob:;"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: http://localhost:3030 https://*.supabase.co https://chronosnap.eagleies.com https://chrono.eagleies.com https://*.r2.dev https://*.cloudflarestorage.com blob:; connect-src 'self' data: blob: http://localhost:3000 ws://localhost:3000 https://*.supabase.co https://api.xendit.co https://chronosnap.eagleies.com https://chrono.eagleies.com wss://*.supabase.co https://*.r2.dev https://*.cloudflarestorage.com; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob:;"
     }
   },
   "bundle": {
