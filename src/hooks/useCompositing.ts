@@ -279,6 +279,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
 
                 const img = new Image();
                 await new Promise<void>((resolve) => {
+                    img.crossOrigin = 'anonymous';
                     img.onload = () => {
                         // Pre-apply filter to the photo
                         const filteredCanvas = applyFilterToImage(img, filterDef);
@@ -340,8 +341,9 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                     const cachedUrl = await getCachedImageUrl(selectedFrame.image_url!);
                     const frameUrl = getProxiedImageUrl(cachedUrl || getAssetUrl(selectedFrame.image_url!));
                     const loadTimeout = setTimeout(resolve, 10000);
+                    frameImg!.crossOrigin = 'anonymous';
                     frameImg!.onload = () => { clearTimeout(loadTimeout); resolve(); };
-                    frameImg!.onerror = () => { clearTimeout(loadTimeout); frameImg = null; resolve(); };
+                    frameImg!.onerror = (e) => { console.error("Canvas fallback: Frame load error", e, frameUrl); clearTimeout(loadTimeout); frameImg = null; resolve(); };
                     frameImg!.src = frameUrl;
                 });
             }
