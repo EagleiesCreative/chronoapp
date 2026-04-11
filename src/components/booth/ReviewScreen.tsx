@@ -386,7 +386,6 @@ export function ReviewScreen() {
 
     const shouldShowLivePreview =
         isVideoMode &&
-        !isCompositing &&
         !!selectedFrame &&
         hasPotentialLiveClips &&
         previewSlots.length > 0;
@@ -404,8 +403,8 @@ export function ReviewScreen() {
         const resolveCompositePreview = async () => {
             if (isCompositing) {
                 setIsResolvingComposite(false);
-                setUsedFallbackPreview(false);
-                setEffectiveCompositeImage(null);
+                // Keep the previous resolved preview while recompositing runs,
+                // otherwise users can get stuck looking at a spinner even after QR is ready.
                 return;
             }
 
@@ -479,6 +478,7 @@ export function ReviewScreen() {
         if (isCompositing || isResolvingComposite) return;
         if (effectiveCompositeImage) return;
         if (!selectedFrame || capturedPhotos.length === 0) return;
+        if (hasPotentialLiveClips) return;
         if (autoRecoveryAttemptedRef.current) return;
 
         autoRecoveryAttemptedRef.current = true;
@@ -490,6 +490,7 @@ export function ReviewScreen() {
         effectiveCompositeImage,
         selectedFrame,
         capturedPhotos.length,
+        hasPotentialLiveClips,
     ]);
 
     const hasLoggedResultRef = useRef(false);
@@ -631,14 +632,7 @@ export function ReviewScreen() {
                         className="flex flex-col items-center justify-center"
                     >
                         <div className="elegant-card overflow-hidden">
-                            {isCompositing ? (
-                                <div className="w-48 aspect-3/5 flex items-center justify-center bg-muted">
-                                    <div className="text-center">
-                                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
-                                        <p className="text-sm text-muted-foreground font-light">Finalizing preview...</p>
-                                    </div>
-                                </div>
-                            ) : shouldShowLivePreview ? (
+                            {shouldShowLivePreview ? (
                                 <div
                                     className="relative bg-white"
                                     style={{ width: `${previewWidth}px`, height: `${previewHeight}px` }}
@@ -722,6 +716,13 @@ export function ReviewScreen() {
                                             </div>
                                         );
                                     })}
+                                </div>
+                            ) : isCompositing ? (
+                                <div className="w-48 aspect-3/5 flex items-center justify-center bg-muted">
+                                    <div className="text-center">
+                                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
+                                        <p className="text-sm text-muted-foreground font-light">Finalizing preview...</p>
+                                    </div>
                                 </div>
                             ) : isResolvingComposite ? (
                                 <div className="w-48 aspect-3/5 flex items-center justify-center bg-muted">
