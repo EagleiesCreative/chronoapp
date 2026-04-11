@@ -1,6 +1,6 @@
 use std::ffi::c_void;
 use std::path::Path;
-use std::sync::Arc;
+
 use libloading::{Library, Symbol};
 use serde::{Deserialize, Serialize};
 
@@ -8,16 +8,16 @@ pub type EdsError = u32;
 pub type EdsHandle = *mut c_void;
 pub type EdsCameraListRef = EdsHandle;
 pub type EdsCameraRef = EdsHandle;
-pub type EdsVolumeRef = EdsHandle;
-pub type EdsDirectoryItemRef = EdsHandle;
-pub type EdsStreamRef = EdsHandle;
-pub type EdsImageRef = EdsHandle;
-pub type EdsEvfImageRef = EdsHandle;
+pub type _EdsVolumeRef = EdsHandle;
+pub type _EdsDirectoryItemRef = EdsHandle;
+pub type _EdsStreamRef = EdsHandle;
+pub type _EdsImageRef = EdsHandle;
+pub type _EdsEvfImageRef = EdsHandle;
 
 pub const EDS_ERR_OK: EdsError = 0x00000000;
-pub const K_EDS_CAMERA_COMMAND_TAKE_PICTURE: u32 = 0x00000000;
-pub const K_EDS_PROPERTY_ID_EVF_OUTPUT_DEVICE: u32 = 0x00000500;
-pub const K_EDS_EVF_OUTPUT_DEVICE_PC: u32 = 0x00000001;
+pub const _K_EDS_CAMERA_COMMAND_TAKE_PICTURE: u32 = 0x00000000;
+pub const _K_EDS_PROPERTY_ID_EVF_OUTPUT_DEVICE: u32 = 0x00000500;
+pub const _K_EDS_EVF_OUTPUT_DEVICE_PC: u32 = 0x00000001;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanonCameraInfo {
@@ -65,7 +65,7 @@ impl CanonSdk {
             let get_count: Symbol<unsafe extern "C" fn(EdsCameraListRef, *mut u32) -> EdsError> = self.lib.get(b"EdsGetChildCount")
                 .map_err(|e| format!("Symbol not found: {}", e))?;
             
-            let get_child: Symbol<unsafe extern "C" fn(EdsCameraListRef, u32, *mut EdsCameraRef) -> EdsError> = self.lib.get(b"EdsGetChildAtIndex")
+            let _get_child: Symbol<unsafe extern "C" fn(EdsCameraListRef, u32, *mut EdsCameraRef) -> EdsError> = self.lib.get(b"EdsGetChildAtIndex")
                 .map_err(|e| format!("Symbol not found: {}", e))?;
 
             // Note: Normally we'd also get camera info like name, but for this skeleton 

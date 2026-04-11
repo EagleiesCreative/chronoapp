@@ -20,14 +20,14 @@ use std::ptr;
  * ---------------------------------------------------------------- */
 
 pub const SONY_OK: c_int = 0;
-pub const SONY_ERR_INIT: c_int = -1;
-pub const SONY_ERR_ENUM: c_int = -2;
-pub const SONY_ERR_CONNECT: c_int = -3;
-pub const SONY_ERR_CAPTURE: c_int = -4;
-pub const SONY_ERR_LIVEVIEW: c_int = -5;
-pub const SONY_ERR_PROPERTY: c_int = -6;
+pub const _SONY_ERR_INIT: c_int = -1;
+pub const _SONY_ERR_ENUM: c_int = -2;
+pub const _SONY_ERR_CONNECT: c_int = -3;
+pub const _SONY_ERR_CAPTURE: c_int = -4;
+pub const _SONY_ERR_LIVEVIEW: c_int = -5;
+pub const _SONY_ERR_PROPERTY: c_int = -6;
 pub const SONY_ERR_NOT_READY: c_int = -7;
-pub const SONY_ERR_TIMEOUT: c_int = -8;
+pub const _SONY_ERR_TIMEOUT: c_int = -8;
 
 pub const SONY_MAX_CAMERA_NAME: usize = 256;
 
@@ -172,7 +172,7 @@ impl SonySdk {
     }
 
     /// Connect to a Sony camera by its CrSDK index.
-    pub fn connect(&self, camera_index: u32) -> Result<SonySession, String> {
+    pub fn connect(&self, camera_index: u32) -> Result<SonySession<'_>, String> {
         unsafe {
             let connect_fn: Symbol<unsafe extern "C" fn(c_int) -> *mut c_void> = self
                 .lib

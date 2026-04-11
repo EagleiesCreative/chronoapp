@@ -22,7 +22,7 @@ enum CameraCommand {
     Capture { quality: u8, reply: Sender<Result<String, String>> },
     GetStatus { reply: Sender<Result<CameraStatus, String>> },
     /// Sony-specific: trigger actual shutter release and return full-res image
-    SonyCapture { quality: u8, reply: Sender<Result<String, String>> },
+    SonyCapture { _quality: u8, reply: Sender<Result<String, String>> },
 }
 
 
@@ -229,7 +229,7 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                     reply.send(result).ok();
                 }
                 
-                CameraCommand::SonyCapture { quality: _, reply } => {
+                CameraCommand::SonyCapture { _quality: _, reply } => {
                     let result = (|| -> Result<String, String> {
                         if let Some(ref session) = sony_session {
                             let image_data = session.capture_still()
@@ -431,7 +431,7 @@ pub fn sony_capture_image(state: State<'_, CameraState>, quality: Option<u8>) ->
     
     let quality = quality.unwrap_or(95);
     
-    sender.send(CameraCommand::SonyCapture { quality, reply: reply_tx })
+    sender.send(CameraCommand::SonyCapture { _quality: quality, reply: reply_tx })
         .map_err(|e| format!("Failed to send command: {}", e))?;
     
     // Sony capture can take up to 15 seconds (AF + exposure + transfer)

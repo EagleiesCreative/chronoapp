@@ -1,13 +1,13 @@
-use image::{DynamicImage, GenericImageView, ImageFormat, Rgba, RgbaImage};
-use imageproc::filter::gaussian_blur_f32;
+use image::{DynamicImage, Rgba, RgbaImage};
+
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
-use log::{info, error};
+use log::info;
 
 #[derive(Debug, Deserialize)]
 pub struct PhotoSlot {
-    pub id: String,
+    pub _id: String,
     pub x: f32,
     pub y: f32,
     pub width: f32,
