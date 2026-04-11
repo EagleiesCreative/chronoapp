@@ -111,6 +111,22 @@ function drawImageCover(
     ctx.drawImage(image, sx, sy, sw, sh, 0, 0, destWidth, destHeight);
 }
 
+function isTauriRuntimeEnvironment(): boolean {
+    if (typeof window === 'undefined') return false;
+
+    const ua = window.navigator?.userAgent || '';
+    const protocol = window.location?.protocol || '';
+    const host = window.location?.host || '';
+
+    return (
+        '__TAURI_INTERNALS__' in window ||
+        '__TAURI__' in window ||
+        ua.includes('Tauri') ||
+        protocol === 'tauri:' ||
+        host === 'tauri.localhost'
+    );
+}
+
 export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, retryNonce: number = 0) {
     const [compositeImage, setCompositeImage] = useState<string | null>(null);
     const [isCompositing, setIsCompositing] = useState(true);
@@ -215,7 +231,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             // In Tauri (WKWebView), canvas.toDataURL() throws SecurityError ("The operation is insecure")
             // when ANY image (even data URLs) is drawn to the canvas. 
             // Bypass this by using the photo's data URL directly as the composite image.
-            const isTauriEnv = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window || window.navigator.userAgent.includes('Tauri'));
+            const isTauriEnv = isTauriRuntimeEnvironment();
             
             if (isTauriEnv) {
                 console.log('[Compositing] Tauri environment — using photo data URL directly (bypassing canvas)');
@@ -368,17 +384,19 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             canvas.width = canvasWidth;
             canvas.height = canvasHeight;
 
-            // First, check if we are running in Tauri and can use the fast Rust backend
-            let isTauri = false;
+            // First, check if we are running in Tauri runtime before attempting Rust backend.
+            const isTauri = isTauriRuntimeEnvironment();
             let invoke: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null = null;
-            try {
-                const tauriApi = await import('@tauri-apps/api/core');
-                invoke = tauriApi.invoke;
-                isTauri = true;
-                console.log("Tauri detected, attempting Rust backend");
-            } catch {
-                // Not in Tauri
-                console.log("Not in Tauri, will use Canvas fallback");
+            if (isTauri) {
+                try {
+                    const tauriApi = await import('@tauri-apps/api/core');
+                    invoke = tauriApi.invoke;
+                    console.log('Tauri runtime detected, attempting Rust backend');
+                } catch (importErr) {
+                    console.warn('[Compositing] Tauri runtime detected but failed to import API core:', importErr);
+                }
+            } else {
+                console.log('Not in Tauri runtime, using Canvas fallback');
             }
 
             const resolveUrlToSafeDataUrl = async (rawUrl: string): Promise<string | null> => {
@@ -508,7 +526,12 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                     }
                 } catch (err) {
                     const msg = `Rust compositing failed: ${err instanceof Error ? err.message : String(err)}`;
-                    console.error(`[Compositing] ${msg}`);
+                    const isTimeout = /timed out/i.test(msg);
+                    if (isTimeout) {
+                        console.warn(`[Compositing] ${msg} — falling back to emergency composite`);
+                    } else {
+                        console.error(`[Compositing] ${msg}`);
+                    }
                     setCompositeWarning(msg);
                     // In Tauri, Canvas fallback will fail with SecurityError — go directly to emergency
                     await buildEmergencyComposite(msg, canvasWidth, canvasHeight, is2R);

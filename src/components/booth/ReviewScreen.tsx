@@ -159,6 +159,16 @@ async function resolveFrameToDataUrl(frameUrl: string): Promise<string | null> {
     if (!assetUrl) return null;
     if (assetUrl.startsWith('data:')) return assetUrl;
 
+    const fetchWithTimeout = async (url: string, timeoutMs: number): Promise<Response> => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            return await fetch(url, { signal: controller.signal });
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    };
+
     const candidates: string[] = [];
     if (assetUrl.startsWith('http://') || assetUrl.startsWith('https://')) {
         candidates.push(getApiUrl(`/api/frames/image?url=${encodeURIComponent(assetUrl)}`));
@@ -167,7 +177,7 @@ async function resolveFrameToDataUrl(frameUrl: string): Promise<string | null> {
 
     for (const candidate of candidates) {
         try {
-            const response = await fetch(candidate);
+            const response = await fetchWithTimeout(candidate, 4500);
             if (!response.ok) continue;
             const blob = await response.blob();
             if (blob.size === 0) continue;
@@ -377,7 +387,6 @@ export function ReviewScreen() {
     const shouldShowLivePreview =
         isVideoMode &&
         !isCompositing &&
-        !isResolvingComposite &&
         !!selectedFrame &&
         hasPotentialLiveClips &&
         previewSlots.length > 0;
@@ -403,7 +412,7 @@ export function ReviewScreen() {
             setIsResolvingComposite(true);
 
             const candidate = compositeImage;
-            let needsFallback = !candidate || Boolean(compositeWarning);
+            let needsFallback = !candidate;
 
             if (candidate && !needsFallback) {
                 const blank = await isLikelyBlankComposite(candidate);
@@ -426,6 +435,14 @@ export function ReviewScreen() {
                     setEffectiveCompositeImage(fallback);
                     setFinalImage(fallback);
                     setPrintImage(printDataUrl || fallback);
+                    setIsResolvingComposite(false);
+                    return;
+                }
+
+                // Keep showing the existing candidate (if any) when fallback generation fails.
+                if (candidate) {
+                    setUsedFallbackPreview(false);
+                    setEffectiveCompositeImage(candidate);
                     setIsResolvingComposite(false);
                     return;
                 }
@@ -614,7 +631,7 @@ export function ReviewScreen() {
                         className="flex flex-col items-center justify-center"
                     >
                         <div className="elegant-card overflow-hidden">
-                            {isCompositing || isResolvingComposite ? (
+                            {isCompositing ? (
                                 <div className="w-48 aspect-3/5 flex items-center justify-center bg-muted">
                                     <div className="text-center">
                                         <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
@@ -705,6 +722,13 @@ export function ReviewScreen() {
                                             </div>
                                         );
                                     })}
+                                </div>
+                            ) : isResolvingComposite ? (
+                                <div className="w-48 aspect-3/5 flex items-center justify-center bg-muted">
+                                    <div className="text-center">
+                                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
+                                        <p className="text-sm text-muted-foreground font-light">Finalizing preview...</p>
+                                    </div>
                                 </div>
                             ) : compositeFailed ? (
                                 <div className="w-48 aspect-3/5 flex items-center justify-center bg-muted/40 border border-dashed border-border rounded-xl p-4">
