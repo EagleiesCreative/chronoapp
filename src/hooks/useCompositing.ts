@@ -212,6 +212,17 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                 return;
             }
 
+            // In Tauri (WKWebView), canvas.toDataURL() throws SecurityError ("The operation is insecure")
+            // when ANY image (even data URLs) is drawn to the canvas. 
+            // Bypass this by using the photo's data URL directly as the composite image.
+            const isTauriEnv = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+            
+            if (isTauriEnv) {
+                console.log('[Compositing] Tauri environment — using photo data URL directly (bypassing canvas)');
+                safeFinish(fallbackPhoto, fallbackPhoto);
+                return;
+            }
+
             try {
                 const img = await loadImageFromSrc(fallbackPhoto);
                 const fallbackCanvas = document.createElement('canvas');
@@ -489,11 +500,17 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         const msg = `Rust compositing produced blank image (0 slots rendered). Errors: ${result?.errors?.join('; ') || 'none'}`;
                         console.error(`[Compositing] ${msg}`);
                         setCompositeWarning(msg);
+                        // In Tauri, Canvas fallback will fail with SecurityError — go directly to emergency
+                        await buildEmergencyComposite(msg, canvasWidth, canvasHeight, is2R);
+                        return;
                     }
                 } catch (err) {
                     const msg = `Rust compositing failed: ${err instanceof Error ? err.message : String(err)}`;
-                    console.error(`[Compositing] ${msg}, falling back to Canvas`);
+                    console.error(`[Compositing] ${msg}`);
                     setCompositeWarning(msg);
+                    // In Tauri, Canvas fallback will fail with SecurityError — go directly to emergency
+                    await buildEmergencyComposite(msg, canvasWidth, canvasHeight, is2R);
+                    return;
                 }
             }
 

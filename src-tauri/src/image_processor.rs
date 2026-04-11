@@ -150,7 +150,20 @@ fn apply_filter(img: &mut DynamicImage, filter_name: &str) {
 
 // Main compositing function
 pub fn composite_images(req: CompositeRequest) -> Result<CompositeResponse, String> {
-    info!("Starting image composite: {}x{} with {} slots", req.frame_width, req.frame_height, req.photo_slots.len());
+    info!("Starting image composite: {}x{} with {} slots, {} photos",
+        req.frame_width, req.frame_height, req.photo_slots.len(), req.photos_base64.len());
+    
+    // Log photo details for debugging
+    for (i, b64) in req.photos_base64.iter().enumerate() {
+        let prefix: String = b64.chars().take(60).collect();
+        info!("  Photo {}: {} chars, prefix: {}...", i, b64.len(), prefix);
+    }
+    
+    // Log slot details
+    for (i, slot) in req.photo_slots.iter().enumerate() {
+        info!("  Slot {}: x={}, y={}, w={}, h={}, layer={:?}, capture_index={:?}",
+            i, slot.x, slot.y, slot.width, slot.height, slot.layer, slot.capture_index);
+    }
     
     // Create base canvas
     let mut canvas = RgbaImage::from_pixel(req.frame_width, req.frame_height, Rgba([255, 255, 255, 255]));
@@ -163,6 +176,7 @@ pub fn composite_images(req: CompositeRequest) -> Result<CompositeResponse, Stri
         // Use capture_index to determine which photo to use for this slot
         let photo_idx = slot.capture_index.unwrap_or(i);
         if photo_idx >= req.photos_base64.len() {
+            eprintln!("[composite] Slot {} skipped: capture_index {} >= photo count {}", i, photo_idx, req.photos_base64.len());
             continue; // Skip if we don't have a photo for this capture index
         }
         
@@ -173,6 +187,8 @@ pub fn composite_images(req: CompositeRequest) -> Result<CompositeResponse, Stri
             below_slots.push((photo_idx, slot));
         }
     }
+    
+    info!("Slot distribution: {} below, {} above", below_slots.len(), above_slots.len());
 
     // Process a slot
     let draw_slot = |canvas: &mut RgbaImage, photo_idx: usize, slot: &PhotoSlot| -> Result<(), String> {
