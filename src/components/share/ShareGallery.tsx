@@ -233,12 +233,21 @@ export function ShareGallery({
                                 transition={{ duration: 0.2 }}
                                 className="relative bg-white rounded-xl overflow-hidden shadow-lg"
                             >
-                                <img
-                                    src={videoUrl}
-                                    alt="Animated photo sequence"
-                                    className="w-full"
-                                    style={{ maxHeight: '60vh', objectFit: 'contain' }}
-                                />
+                                {videoUrl.includes('.mp4') || videoUrl.includes('.webm') ? (
+                                    <video
+                                        src={videoUrl}
+                                        autoPlay loop muted playsInline
+                                        className="w-full"
+                                        style={{ maxHeight: '60vh', objectFit: 'contain' }}
+                                    />
+                                ) : (
+                                    <img
+                                        src={videoUrl}
+                                        alt="Animated video frame"
+                                        className="w-full"
+                                        style={{ maxHeight: '60vh', objectFit: 'contain' }}
+                                    />
+                                )}
                             </motion.div>
                         ) : (
                             <motion.div
@@ -381,8 +390,8 @@ export function ShareGallery({
                                         <Film className="w-4 h-4 text-purple-500" />
                                     </div>
                                     <div className="text-left">
-                                        <p className="text-sm font-medium text-gray-900">Live Video</p>
-                                        <p className="text-xs text-gray-500">Live Video</p>
+                                        <p className="text-sm font-medium text-gray-900">Live Video Frame</p>
+                                        <p className="text-xs text-gray-500">Live Video Frame</p>
                                     </div>
                                 </div>
                                 <Download className="w-4 h-4 text-gray-400 group-hover:text-gray-900 transition-colors" />

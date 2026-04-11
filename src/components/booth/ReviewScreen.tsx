@@ -344,6 +344,8 @@ export function ReviewScreen() {
 
     const hasPotentialLiveClips =
         isVideoMode && capturedPhotos.some((photo) => !!photo.videoBlob && photo.videoBlob.size > 0);
+    const hasPotentialLiveClipsRef = useRef(hasPotentialLiveClips);
+    hasPotentialLiveClipsRef.current = hasPotentialLiveClips;
 
     const compositeFailed =
         !isCompositing &&
@@ -478,7 +480,7 @@ export function ReviewScreen() {
         if (isCompositing || isResolvingComposite) return;
         if (effectiveCompositeImage) return;
         if (!selectedFrame || capturedPhotos.length === 0) return;
-        if (hasPotentialLiveClips) return;
+        if (hasPotentialLiveClipsRef.current) return;
         if (autoRecoveryAttemptedRef.current) return;
 
         autoRecoveryAttemptedRef.current = true;
@@ -490,7 +492,6 @@ export function ReviewScreen() {
         effectiveCompositeImage,
         selectedFrame,
         capturedPhotos.length,
-        hasPotentialLiveClips,
     ]);
 
     const hasLoggedResultRef = useRef(false);
