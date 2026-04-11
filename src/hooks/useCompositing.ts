@@ -339,10 +339,13 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                 frameImg = new Image();
                 await new Promise<void>(async (resolve) => {
                     const cachedUrl = await getCachedImageUrl(selectedFrame.image_url!);
-                    const frameUrl = getProxiedImageUrl(cachedUrl || getAssetUrl(selectedFrame.image_url!));
-                    const loadTimeout = setTimeout(resolve, 10000);
+                    const proxied = getProxiedImageUrl(cachedUrl || getAssetUrl(selectedFrame.image_url!));
+                    // CRITICAL: Convert relative proxy URL to absolute for Tauri production
+                    const frameUrl = proxied.startsWith('/') ? getApiUrl(proxied) : proxied;
+                    console.log("Canvas fallback: loading frame from", frameUrl);
+                    const loadTimeout = setTimeout(() => { console.warn("Canvas fallback: Frame load timed out after 10s"); resolve(); }, 10000);
                     frameImg!.crossOrigin = 'anonymous';
-                    frameImg!.onload = () => { clearTimeout(loadTimeout); resolve(); };
+                    frameImg!.onload = () => { clearTimeout(loadTimeout); console.log("Canvas fallback: Frame loaded successfully"); resolve(); };
                     frameImg!.onerror = (e) => { console.error("Canvas fallback: Frame load error", e, frameUrl); clearTimeout(loadTimeout); frameImg = null; resolve(); };
                     frameImg!.src = frameUrl;
                 });
@@ -477,7 +480,20 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
             }
         }
 
-        compositeImages();
+        // Safety timeout: if compositing hangs for any reason, force-clear after 30s
+        const safetyTimeout = setTimeout(() => {
+            console.error("SAFETY: Compositing timed out after 30s, force-clearing isCompositing");
+            setIsCompositing(false);
+        }, 30000);
+
+        compositeImages()
+            .catch((err) => {
+                console.error("Compositing unhandled error — clearing isCompositing:", err);
+                setIsCompositing(false);
+            })
+            .finally(() => {
+                clearTimeout(safetyTimeout);
+            });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedFrame, capturedPhotos, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl, selectedFilter, booth, isVideoMode]);
 
