@@ -194,3 +194,221 @@ export async function generateCompressedGif(
         return null;
     }
 }
+export interface FramedVideoGifOptions {
+    videoBlobs: (Blob | undefined)[];
+    photoDataUrls: string[];
+    frameImageUrl: string;
+    photoSlots: Array<{
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        rotation?: number;
+        layer?: string;
+        capture_index?: number;
+    }>;
+    canvasWidth: number;
+    canvasHeight: number;
+    quality?: number;
+}
+
+export async function generateFramedVideoGif(
+    options: FramedVideoGifOptions
+): Promise<GifResult | null> {
+    const {
+        videoBlobs,
+        photoDataUrls,
+        frameImageUrl,
+        photoSlots,
+        canvasWidth,
+        canvasHeight,
+        quality = 10,
+    } = options;
+
+    try {
+        // Downscale output to keep GIF size manageable
+        let scale = 1;
+        if (canvasWidth > 600) {
+            scale = 600 / canvasWidth;
+        }
+        const outWidth = Math.round(canvasWidth * scale);
+        const outHeight = Math.round(canvasHeight * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = outWidth;
+        canvas.height = outHeight;
+        const ctx = canvas.getContext('2d')!;
+
+        // 1. Load the frame image securely
+        const frameImg = new Image();
+        frameImg.crossOrigin = 'anonymous';
+        await new Promise((resolve, reject) => {
+            frameImg.onload = resolve;
+            frameImg.onerror = reject;
+            frameImg.src = frameImageUrl;
+        });
+
+        // 2. Load Fallback Images
+        const fallbackImages = await Promise.all(
+            photoDataUrls.map(src => {
+                if (!src) return Promise.resolve(null);
+                return new Promise<HTMLImageElement | null>((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => resolve(img);
+                    img.onerror = () => resolve(null);
+                    img.src = src;
+                });
+            })
+        );
+
+        // 3. Load Video Elements
+        const videoElements = await Promise.all(videoBlobs.map(async (blob, i) => {
+            if (!blob) return null;
+            const v = document.createElement('video');
+            const url = URL.createObjectURL(blob);
+            v.src = url;
+            v.muted = true;
+            v.playsInline = true;
+            
+            return new Promise<HTMLVideoElement | null>((resolve) => {
+                const timeout = setTimeout(() => resolve(null), 2000);
+                v.onloadeddata = () => {
+                    clearTimeout(timeout);
+                    resolve(v);
+                };
+                v.onerror = () => {
+                    clearTimeout(timeout);
+                    resolve(null);
+                };
+            });
+        }));
+
+        const gif = new GIF({
+            workers: 2,
+            quality: quality,
+            width: outWidth,
+            height: outHeight,
+            workerScript: '/gif.worker.js',
+        });
+
+        // Framerate logic
+        const fps = 10;
+        const durationSec = 3.0; // 3 seconds total
+        const totalFrames = Math.floor(durationSec * fps);
+        const frameDelay = 1000 / fps;
+
+        videoElements.forEach(v => {
+            if (v) {
+                v.currentTime = 0;
+            }
+        });
+
+        for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+            // Seek all videos to current time
+            const t = frameIndex / fps;
+            await Promise.all(videoElements.map(v => {
+                if (!v) return Promise.resolve();
+                return new Promise<void>((resolve) => {
+                    const seekHandler = () => {
+                        v.removeEventListener('seeked', seekHandler);
+                        resolve();
+                    };
+                    v.addEventListener('seeked', seekHandler);
+                    v.currentTime = t;
+                    // Provide a timeout just in case seek fails
+                    setTimeout(() => {
+                        v.removeEventListener('seeked', seekHandler);
+                        resolve();
+                    }, 500);
+                });
+            }));
+
+            // Clear
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, outWidth, outHeight);
+
+            // Draw below slots
+            const drawSlot = (slot: any) => {
+                const captureIdx = slot.capture_index ?? 0;
+                const destX = slot.x * scale;
+                const destY = slot.y * scale;
+                const destW = slot.width * scale;
+                const destH = slot.height * scale;
+                const slotAspect = destW / destH;
+
+                ctx.save();
+                if (slot.rotation) {
+                    ctx.translate(destX + destW / 2, destY + destH / 2);
+                    ctx.rotate((slot.rotation * Math.PI) / 180);
+                    ctx.translate(-(destX + destW / 2), -(destY + destH / 2));
+                }
+
+                const v = videoElements[captureIdx];
+                const fb = fallbackImages[captureIdx];
+
+                if (v && v.videoWidth > 0) {
+                    const vAspect = v.videoWidth / v.videoHeight;
+                    let sW = v.videoWidth, sH = v.videoHeight, sX = 0, sY = 0;
+                    if (vAspect > slotAspect) {
+                        sW = v.videoHeight * slotAspect;
+                        sX = (v.videoWidth - sW) / 2;
+                    } else {
+                        sH = v.videoWidth / slotAspect;
+                        sY = (v.videoHeight - sH) / 2;
+                    }
+                    ctx.drawImage(v, sX, sY, sW, sH, destX, destY, destW, destH);
+                } else if (fb) {
+                    const fbAspect = fb.naturalWidth / fb.naturalHeight;
+                    let sW = fb.naturalWidth, sH = fb.naturalHeight, sX = 0, sY = 0;
+                    if (fbAspect > slotAspect) {
+                        sW = fb.naturalHeight * slotAspect;
+                        sX = (fb.naturalWidth - sW) / 2;
+                    } else {
+                        sH = fb.naturalWidth / slotAspect;
+                        sY = (fb.naturalHeight - sH) / 2;
+                    }
+                    ctx.drawImage(fb, sX, sY, sW, sH, destX, destY, destW, destH);
+                }
+                ctx.restore();
+            };
+
+            photoSlots.filter(s => s.layer !== 'above').forEach(drawSlot);
+            
+            // Draw Frame
+            ctx.drawImage(frameImg, 0, 0, outWidth, outHeight);
+
+            // Draw above slots
+            photoSlots.filter(s => s.layer === 'above').forEach(drawSlot);
+
+            gif.addFrame(ctx, { copy: true, delay: frameDelay });
+        }
+
+        // Cleanup object URLs
+        videoElements.forEach(v => {
+            if (v && v.src) URL.revokeObjectURL(v.src);
+        });
+
+        return new Promise((resolve, reject) => {
+            gif.on('finished', (blob: Blob) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    resolve({
+                        blob,
+                        dataUrl: reader.result as string,
+                        duration: durationSec,
+                        size: blob.size,
+                    });
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+            gif.on('error', reject);
+            gif.render();
+        });
+
+    } catch (err) {
+        console.error('Framed video GIF encoding failed:', err);
+        return null;
+    }
+}

@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { apiFetch } from '@/lib/api';
 import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient, uploadVideoClient } from '@/lib/upload-client';
 import { saveToLocalDisk } from '@/lib/local-save';
-import { generateCompressedGif } from '@/lib/video-generator';
+import { generateCompressedGif, generateFramedVideoGif } from '@/lib/video-generator';
 import { useBoothStore, useAdminStore } from '@/store/booth-store';
 import { useLocalSaveStore } from '@/store/local-save-store';
 import { useTenantStore } from '@/store/tenant-store';
@@ -11,7 +11,7 @@ import { enqueueUpload } from '@/lib/upload-queue';
 import { queueSessionSync } from '@/lib/reliability-sync';
 
 export function useUploadSession() {
-    const { session, capturedPhotos, finalVideoBlob } = useBoothStore();
+    const { session, capturedPhotos, finalVideoBlob, selectedFrame } = useBoothStore();
     const { isVideoMode } = useAdminStore();
     const { booth } = useTenantStore();
 
@@ -149,13 +149,35 @@ export function useUploadSession() {
                 const photoDataUrls = capturedPhotos
                     .map(photo => photo.dataUrl)
                     .filter((dataUrl): dataUrl is string => Boolean(dataUrl));
+                
+                const videoBlobs = capturedPhotos.map(photo => photo.videoBlob);
+                const hasVideoBlobs = videoBlobs.some(b => !!b);
                     
                 if (photoDataUrls.length >= 2) {
-                    setUploadStatus('Creating stop-motion GIF...');
+                    setUploadStatus('Generating animation...');
                     try {
-                        const gifResult = await generateCompressedGif(photoDataUrls, 1000);
+                        let gifResult = null;
+                        
+                        // If it's video mode and we have video blobs and a frame, compile the framed gif!
+                        if (isVideoMode && hasVideoBlobs && selectedFrame?.image_url) {
+                            gifResult = await generateFramedVideoGif({
+                                videoBlobs,
+                                photoDataUrls,
+                                frameImageUrl: selectedFrame.image_url,
+                                photoSlots: (selectedFrame.photo_slots as any[]) || [],
+                                canvasWidth: selectedFrame.canvas_width || 1200,
+                                canvasHeight: selectedFrame.canvas_height || 1800,
+                                quality: 15,
+                            });
+                        }
+                        
+                        // Fallback to stock compression if previous failed or wasn't applicable
+                        if (!gifResult) {
+                            gifResult = await generateCompressedGif(photoDataUrls, 1000);
+                        }
+
                         if (gifResult) {
-                            setUploadStatus('Uploading GIF...');
+                            setUploadStatus('Uploading animation...');
                             gifUrl = await uploadGifClient(sessionId, gifResult.blob);
                             setVideoGenerated(true);
                             setGifDownloadUrl(gifUrl);
