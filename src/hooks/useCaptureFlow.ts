@@ -98,7 +98,8 @@ export function useCaptureFlow(
                     mr.ondataavailable = (e) => {
                         if (e.data.size > 0) videoChunksRef.current.push(e.data);
                     };
-                    mr.start();
+                    // Use a small timeslice to improve chunk delivery reliability across browsers.
+                    mr.start(250);
                     mediaRecorderRef.current = mr;
                 } catch (err) {
                     console.error("Failed to start MediaRecorder", err);
@@ -107,7 +108,7 @@ export function useCaptureFlow(
                         mr.ondataavailable = (e) => {
                             if (e.data.size > 0) videoChunksRef.current.push(e.data);
                         };
-                        mr.start();
+                        mr.start(250);
                         mediaRecorderRef.current = mr;
                     } catch (e2) {
                         console.error("Fallback MediaRecorder failed", e2);
@@ -123,7 +124,12 @@ export function useCaptureFlow(
                 const mrSettings = mediaRecorderRef.current.mimeType;
                 mediaRecorderRef.current.onstop = () => {
                     const blob = new Blob(videoChunksRef.current, { type: mrSettings || 'video/webm' });
-                    setLastCapturedVideo(blob);
+                    if (blob.size > 0) {
+                        setLastCapturedVideo(blob);
+                    } else {
+                        console.warn('[CaptureFlow] Recorded video blob is empty; skipping video clip for this shot.');
+                        setLastCapturedVideo(null);
+                    }
                     mediaRecorderRef.current = null;
                 };
                 mediaRecorderRef.current.stop();

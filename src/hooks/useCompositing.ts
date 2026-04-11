@@ -462,38 +462,54 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
 
                 if (!photo) return;
                 
-                // If we are doing video, use the video element directly (filters not yet implemented for video performance reasons)
+                // If we are doing video, use the video element directly when it is actually drawable.
+                // If not drawable, fall back to the captured still image for this slot.
                 if (videoElements && videoElements[captureIdx]) {
                     const videoNode = videoElements[captureIdx]!;
-                    const destX = slot.x;
-                    const destY = slot.y;
-                    const destW = slot.width;
-                    const destH = slot.height;
-                    const imgAspect = videoNode.videoWidth / videoNode.videoHeight;
-                    const slotAspect = destW / destH;
+                    const isVideoDrawable =
+                        videoNode.videoWidth > 0 &&
+                        videoNode.videoHeight > 0 &&
+                        videoNode.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
 
-                    let srcX = 0;
-                    let srcY = 0;
-                    let srcW = videoNode.videoWidth;
-                    let srcH = videoNode.videoHeight;
-
-                    if (imgAspect > slotAspect) {
-                        srcW = videoNode.videoHeight * slotAspect;
-                        srcX = (videoNode.videoWidth - srcW) / 2;
+                    if (!isVideoDrawable) {
+                        console.warn('[Compositing] Video slot is not drawable yet, falling back to still image', {
+                            slotIndex,
+                            captureIdx,
+                            readyState: videoNode.readyState,
+                            videoWidth: videoNode.videoWidth,
+                            videoHeight: videoNode.videoHeight,
+                        });
                     } else {
-                        srcH = videoNode.videoWidth / slotAspect;
-                        srcY = (videoNode.videoHeight - srcH) / 2;
-                    }
+                        const destX = slot.x;
+                        const destY = slot.y;
+                        const destW = slot.width;
+                        const destH = slot.height;
+                        const imgAspect = videoNode.videoWidth / videoNode.videoHeight;
+                        const slotAspect = destW / destH;
 
-                    ctx.save();
-                    if (slot.rotation) {
-                        ctx.translate(destX + destW / 2, destY + destH / 2);
-                        ctx.rotate((slot.rotation * Math.PI) / 180);
-                        ctx.translate(-(destX + destW / 2), -(destY + destH / 2));
+                        let srcX = 0;
+                        let srcY = 0;
+                        let srcW = videoNode.videoWidth;
+                        let srcH = videoNode.videoHeight;
+
+                        if (imgAspect > slotAspect) {
+                            srcW = videoNode.videoHeight * slotAspect;
+                            srcX = (videoNode.videoWidth - srcW) / 2;
+                        } else {
+                            srcH = videoNode.videoWidth / slotAspect;
+                            srcY = (videoNode.videoHeight - srcH) / 2;
+                        }
+
+                        ctx.save();
+                        if (slot.rotation) {
+                            ctx.translate(destX + destW / 2, destY + destH / 2);
+                            ctx.rotate((slot.rotation * Math.PI) / 180);
+                            ctx.translate(-(destX + destW / 2), -(destY + destH / 2));
+                        }
+                        ctx.drawImage(videoNode, srcX, srcY, srcW, srcH, destX, destY, destW, destH);
+                        ctx.restore();
+                        return;
                     }
-                    ctx.drawImage(videoNode, srcX, srcY, srcW, srcH, destX, destY, destW, destH);
-                    ctx.restore();
-                    return;
                 }
 
                 if (!photo.dataUrl) return;
@@ -658,15 +674,76 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         return;
                     }
 
-                    const videoElements = await Promise.all(capturedPhotos.map(async p => {
-                        if (!p.videoBlob) return null;
+                    const videoElements = await Promise.all(capturedPhotos.map(async (p, index) => {
+                        if (!p.videoBlob || p.videoBlob.size === 0) {
+                            if (p.videoBlob && p.videoBlob.size === 0) {
+                                console.warn('[Compositing] Empty video blob for capture, will use still image fallback', { index });
+                            }
+                            return null;
+                        }
+
                         const v = document.createElement('video');
-                        v.src = URL.createObjectURL(p.videoBlob);
+                        const objectUrl = URL.createObjectURL(p.videoBlob);
+                        v.src = objectUrl;
                         v.muted = true;
                         v.playsInline = true;
-                        await new Promise(r => { v.onloadedmetadata = r; v.onerror = r; });
+                        v.preload = 'auto';
+
+                        const loaded = await new Promise<boolean>((resolve) => {
+                            const timeout = setTimeout(() => {
+                                cleanup();
+                                resolve(false);
+                            }, 2500);
+
+                            const cleanup = () => {
+                                clearTimeout(timeout);
+                                v.onloadeddata = null;
+                                v.onloadedmetadata = null;
+                                v.onerror = null;
+                            };
+
+                            v.onloadeddata = () => {
+                                cleanup();
+                                resolve(true);
+                            };
+
+                            // Some browsers only fire metadata event early; accept it if dimensions are valid.
+                            v.onloadedmetadata = () => {
+                                if (v.videoWidth > 0 && v.videoHeight > 0) {
+                                    cleanup();
+                                    resolve(true);
+                                }
+                            };
+
+                            v.onerror = () => {
+                                cleanup();
+                                resolve(false);
+                            };
+                        });
+
+                        if (!loaded || v.videoWidth <= 0 || v.videoHeight <= 0) {
+                            URL.revokeObjectURL(objectUrl);
+                            console.warn('[Compositing] Failed to initialize capture video, will use still image fallback', {
+                                index,
+                                loaded,
+                                videoWidth: v.videoWidth,
+                                videoHeight: v.videoHeight,
+                                readyState: v.readyState,
+                            });
+                            return null;
+                        }
+
                         return v;
                     }));
+
+                    const hasRenderableVideos = videoElements.some(
+                        (v) => !!v && v.videoWidth > 0 && v.videoHeight > 0
+                    );
+                    if (!hasRenderableVideos) {
+                        console.warn('[Compositing] No renderable capture videos; using static composite fallback.');
+                        await doStaticComposite();
+                        return;
+                    }
 
                     const stream = canvas.captureStream(30);
                     const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
