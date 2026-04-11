@@ -25,7 +25,7 @@ export function ReviewScreen() {
     const [autoResetCountdown, setAutoResetCountdown] = useState(timeoutSeconds);
     const [compositeRetryNonce, setCompositeRetryNonce] = useState(0);
 
-    const { compositeImage, isCompositing } = useCompositing(canvasRef, compositeRetryNonce);
+    const { compositeImage, isCompositing, compositeWarning } = useCompositing(canvasRef, compositeRetryNonce);
     const {
         downloadQR, isUploading, uploadStatus,
         uploadError, uploadAndGenerateQR
@@ -41,16 +41,15 @@ export function ReviewScreen() {
         hasLoggedResultRef.current = true;
 
         if (compositeFailed) {
-            console.error('[ReviewScreen] ⚠️ Compositing finished but produced NO image (compositeImage is null).');
+            console.error('[ReviewScreen] ⚠️ Compositing finished but produced NO image.');
         } else if (compositeImage) {
             const sizeKB = Math.round((compositeImage.length * 3) / 4 / 1024);
-            const looksBlank = sizeKB < 5; // A valid photo composite is typically 100KB+
-            console.log(`[ReviewScreen] Compositing done — image size ≈ ${sizeKB} KB${looksBlank ? ' ⚠️ SUSPICIOUSLY SMALL (likely blank)' : ''}`);
-            if (looksBlank) {
-                console.warn('[ReviewScreen] The composite image is extremely small and likely blank. Check the compositing logs above for errors.');
-            }
+            console.log(`[ReviewScreen] Compositing done — image ≈ ${sizeKB} KB`);
         }
-    }, [isCompositing, compositeFailed, compositeImage]);
+        if (compositeWarning) {
+            console.warn(`[ReviewScreen] ⚠️ Warning: ${compositeWarning}`);
+        }
+    }, [isCompositing, compositeFailed, compositeImage, compositeWarning]);
 
     // Trigger upload when compositing completes
     const hasUploadedRef = useRef(false);
@@ -194,10 +193,10 @@ export function ReviewScreen() {
                                         alt="Final composite"
                                         className="max-h-[calc(100vh-220px)] w-auto object-contain"
                                     />
-                                    {/* Warn operator if the image looks blank (< 5KB base64 ≈ empty canvas) */}
-                                    {compositeImage && Math.round((compositeImage.length * 3) / 4 / 1024) < 5 && (
-                                        <div className="absolute bottom-2 left-2 right-2 bg-amber-500/90 text-white text-[11px] px-3 py-2 rounded-lg text-center backdrop-blur-sm">
-                                            ⚠ Image may be blank — tap <button type="button" onClick={handleRetryComposite} className="underline font-semibold">Retry</button>
+                                    {/* Warn operator if compositing had issues (frame missing, fallback triggered, etc.) */}
+                                    {compositeWarning && (
+                                        <div className="absolute bottom-2 left-2 right-2 bg-amber-500/90 text-white text-[11px] px-3 py-2 rounded-lg text-center backdrop-blur-sm z-10">
+                                            ⚠ {compositeWarning} — <button type="button" onClick={handleRetryComposite} className="underline font-semibold">Retry</button>
                                         </div>
                                     )}
                                 </>

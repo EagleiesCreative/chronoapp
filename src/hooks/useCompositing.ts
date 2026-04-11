@@ -114,6 +114,7 @@ function drawImageCover(
 export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, retryNonce: number = 0) {
     const [compositeImage, setCompositeImage] = useState<string | null>(null);
     const [isCompositing, setIsCompositing] = useState(true);
+    const [compositeWarning, setCompositeWarning] = useState<string | null>(null);
 
     const { selectedFrame, capturedPhotos, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl, selectedFilter } = useBoothStore();
     const { isVideoMode } = useAdminStore();
@@ -168,6 +169,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
 
         setIsCompositing(true);
         setCompositeImage(null);
+        setCompositeWarning(null);
 
         let compositingDone = false;
         let cancelled = false;
@@ -201,7 +203,8 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
         ) => {
             if (cancelled || compositingDone) return;
 
-            console.warn(`[Compositing] Using emergency fallback: ${reason}`);
+            console.warn(`[Compositing] ⚠️ Using emergency fallback: ${reason}`);
+            setCompositeWarning(`Emergency fallback: ${reason}`);
             const fallbackPhoto = photos.find((p) => !!p?.dataUrl)?.dataUrl;
 
             if (!fallbackPhoto) {
@@ -417,7 +420,9 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                                 }
                             }
                         } catch (err) {
-                            console.warn("Failed to load frame image for Rust backend (compositing without overlay):", err);
+                            const msg = `Frame fetch failed: ${err instanceof Error ? err.message : String(err)}`;
+                            console.warn(`[Compositing] ${msg}`);
+                            setCompositeWarning(msg);
                         }
                     }
 
@@ -475,6 +480,9 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
 
                     if (result && result.final_base64 && result.slots_rendered > 0) {
                         console.log("Rust compositing successful —", result.slots_rendered, "slots rendered");
+                        if (result.errors?.length > 0) {
+                            setCompositeWarning(`Rust compositing had warnings: ${result.errors.join('; ')}`);
+                        }
                         safeFinish(result.final_base64, result.print_base64 || result.final_base64);
                         return;
                     } else {
@@ -699,7 +707,9 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         console.log('Canvas fallback: frame loaded safely via data URL');
                     }
                 } catch (frameErr) {
-                    console.warn('Canvas fallback: frame load error, continuing without frame overlay', frameErr);
+                    const msg = `Canvas fallback: frame load error — ${frameErr instanceof Error ? frameErr.message : String(frameErr)}`;
+                    console.warn(msg);
+                    setCompositeWarning(msg);
                     frameImg = null;
                 }
             }
@@ -968,5 +978,5 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [retryNonce, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl]);
 
-    return { compositeImage, isCompositing };
+    return { compositeImage, isCompositing, compositeWarning };
 }
