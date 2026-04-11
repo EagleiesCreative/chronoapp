@@ -182,7 +182,7 @@ export function useUploadSession() {
             // 4. Update session with results (mark as completed)
             let completedRemotely = false;
             if (finalUrl) {
-                const activeMediaUrl = isVideoMode ? videoUrl : gifUrl;
+                const activeMediaUrl = videoUrl || gifUrl || null;
                 setUploadStatus(`Saving ${photoUrls.length} photos and ${activeMediaUrl ? '1 media' : '0 media'}...`);
                 const completionPayload = {
                     sessionId,
