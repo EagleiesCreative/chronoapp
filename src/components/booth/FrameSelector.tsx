@@ -2,22 +2,73 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Check, ImageIcon } from 'lucide-react';
+import { Check, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { useSessionProfileStore } from '@/store/session-profile-store';
-import { formatIDR } from '@/lib/xendit';
 import { Frame } from '@/lib/supabase';
 import { apiFetch, getAssetUrl } from '@/lib/api';
 import { getCachedFrames, setCachedFrames, getCachedImageUrl, cacheFrameImages } from '@/lib/frame-cache';
+
+function toFiniteNumber(value: unknown, fallback: number): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null;
+}
+
+function normalizeFrame(raw: unknown): Frame {
+    const frame = asRecord(raw) || {};
+
+    const rawSlots = (() => {
+        const value = frame.photo_slots;
+
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch {
+                return [];
+            }
+        }
+
+        return Array.isArray(value) ? value : [];
+    })();
+
+    const photo_slots = rawSlots
+        .map((slot, index: number) => {
+            const s = asRecord(slot) || {};
+            const captureIndex = Number(s.capture_index);
+
+            return {
+                id: s.id ? String(s.id) : `slot-${index}`,
+                x: toFiniteNumber(s.x, 0),
+                y: toFiniteNumber(s.y, 0),
+                width: toFiniteNumber(s.width, 0),
+                height: toFiniteNumber(s.height, 0),
+                rotation: toFiniteNumber(s.rotation, 0),
+                layer: s.layer === 'above' ? 'above' : 'below',
+                capture_index: Number.isInteger(captureIndex) ? captureIndex : index,
+            };
+        })
+        .filter((slot) => slot.width > 0 && slot.height > 0);
+
+    return {
+        ...(frame as Partial<Frame>),
+        canvas_width: toFiniteNumber(frame.canvas_width, 600),
+        canvas_height: toFiniteNumber(frame.canvas_height, 1050),
+        photo_slots,
+    } as Frame;
+}
 
 export function FrameSelector() {
     const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, isLoading, setError, setSession } = useBoothStore();
     const { booth } = useTenantStore();
     const activeSession = useSessionProfileStore((s) => s.activeSession);
     const effectivePaymentBypass = activeSession?.payment_bypass ?? booth?.payment_bypass;
-    const effectivePrice = activeSession?.price ?? booth?.price ?? 0;
     const [cachedOverlayUrls, setCachedOverlayUrls] = useState<Record<string, string>>({});
 
     // Load indexedDB cached images for frames
@@ -45,10 +96,20 @@ export function FrameSelector() {
             setIsLoading(true);
 
             // Try cache first
-            const cached = getCachedFrames();
+            const cached = getCachedFrames().map(normalizeFrame);
+            let preferredFrameId: string | null = selectedFrame?.id || null;
             if (cached.length > 0) {
                 setFrames(cached);
-                setSelectedFrame(cached[0]);
+
+                const cachedSelection = preferredFrameId
+                    ? cached.find((f) => f.id === preferredFrameId) || cached[0]
+                    : cached[0];
+
+                if (cachedSelection) {
+                    setSelectedFrame(cachedSelection);
+                    preferredFrameId = cachedSelection.id;
+                }
+
                 setIsLoading(false); // Don't block UI while refreshing in background
             }
 
@@ -56,20 +117,28 @@ export function FrameSelector() {
                 // If active booth session exists, fetch session-specific frames
                 if (activeSession?.id) {
                     const sessionFramesRes = await apiFetch(`/api/booth-sessions/${activeSession.id}/frames`);
-                    const sessionFramesData = await sessionFramesRes.json();
+                    const sessionFramesData = await sessionFramesRes.json() as {
+                        data?: Array<{ is_active?: boolean; frames?: unknown }>;
+                    };
 
-                    if (sessionFramesData.data && sessionFramesData.data.length > 0) {
+                    if (Array.isArray(sessionFramesData.data) && sessionFramesData.data.length > 0) {
                         const sessionFrames = sessionFramesData.data
-                            .filter((sf: any) => sf.is_active && sf.frames)
-                            .map((sf: any) => sf.frames);
+                            .filter((sf) => sf.is_active && sf.frames)
+                            .map((sf) => normalizeFrame(sf.frames));
 
                         if (sessionFrames.length > 0) {
                             setFrames(sessionFrames);
-                            if (cached.length === 0 || !selectedFrame) {
-                                setSelectedFrame(sessionFrames[0]);
+
+                            const selected = preferredFrameId
+                                ? sessionFrames.find((f) => f.id === preferredFrameId) || sessionFrames[0]
+                                : sessionFrames[0];
+
+                            if (selected) {
+                                setSelectedFrame(selected);
                             }
+
                             setCachedFrames(sessionFrames);
-                            cacheFrameImages(sessionFrames);
+                            void cacheFrameImages(sessionFrames);
                             return;
                         }
                     }
@@ -77,21 +146,31 @@ export function FrameSelector() {
 
                 // Fallback: fetch all active frames from global API
                 const response = await apiFetch('/api/frames');
-                const data = await response.json();
+                const data = await response.json() as {
+                    success?: boolean;
+                    frames?: unknown[];
+                };
 
-                if (data.success && data.frames) {
-                    const activeFrames = data.frames.filter((f: Frame) => f.is_active);
+                if (data.success && Array.isArray(data.frames)) {
+                    const activeFrames = data.frames
+                        .map((f) => normalizeFrame(f))
+                        .filter((f: Frame) => f.is_active);
 
                     setFrames(activeFrames);
 
-                    // Only set selected frame if we didn't have one from cache
-                    if (cached.length === 0 && activeFrames.length > 0) {
-                        setSelectedFrame(activeFrames[0]);
+                    if (activeFrames.length > 0) {
+                        const selected = preferredFrameId
+                            ? activeFrames.find((f) => f.id === preferredFrameId) || activeFrames[0]
+                            : activeFrames[0];
+
+                        if (selected) {
+                            setSelectedFrame(selected);
+                        }
                     }
 
                     // Cache new metadata and queue image caching
                     setCachedFrames(activeFrames);
-                    cacheFrameImages(activeFrames);
+                    void cacheFrameImages(activeFrames);
                 }
             } catch (err) {
                 if (cached.length === 0) {
@@ -104,7 +183,7 @@ export function FrameSelector() {
         }
 
         fetchFrames();
-    }, [setFrames, setSelectedFrame, setIsLoading, setError, activeSession?.id]);
+    }, [setFrames, setSelectedFrame, setIsLoading, setError, activeSession?.id, selectedFrame?.id]);
 
     const handleConfirm = async () => {
         if (!selectedFrame) return;
@@ -188,7 +267,7 @@ export function FrameSelector() {
                                 <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col items-start justify-end h-1/2">
                                     <h4 className="text-white font-medium truncate w-full text-left">{frame.name}</h4>
                                     <p className="text-white/80 text-xs text-left">
-                                        {new Set(frame.photo_slots?.map((s: any, i: number) => s.capture_index ?? i)).size || 0} photos
+                                        {new Set((frame.photo_slots || []).map((s, i) => s.capture_index ?? i)).size || 0} photos
                                     </p>
                                 </div>
                                 {selectedFrame?.id === frame.id && (

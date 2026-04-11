@@ -250,6 +250,45 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             const hasVideoBlobs = capturedPhotos.some(p => !!p.videoBlob);
             const is2R = canvasWidth <= 600;
 
+            const asRecord = (value: unknown): Record<string, unknown> | null => (
+                typeof value === 'object' && value !== null ? value as Record<string, unknown> : null
+            );
+
+            const normalizeSlots = (rawSlots: unknown): SlotLike[] => {
+                if (!Array.isArray(rawSlots)) return [];
+
+                return rawSlots
+                    .map((slot, index: number) => {
+                        const s = asRecord(slot) || {};
+                        const captureIndex = Number(s.capture_index);
+
+                        return {
+                            x: Number(s.x),
+                            y: Number(s.y),
+                            width: Number(s.width),
+                            height: Number(s.height),
+                            rotation: Number.isFinite(Number(s.rotation)) ? Number(s.rotation) : 0,
+                            layer: s.layer === 'above' ? 'above' : 'below',
+                            capture_index: Number.isInteger(captureIndex) ? captureIndex : index,
+                        };
+                    })
+                    .filter((slot) =>
+                        Number.isFinite(slot.x) &&
+                        Number.isFinite(slot.y) &&
+                        Number.isFinite(slot.width) &&
+                        Number.isFinite(slot.height) &&
+                        slot.width > 0 &&
+                        slot.height > 0
+                    );
+            };
+
+            const slots = normalizeSlots(selectedFrame.photo_slots);
+
+            if (slots.length === 0) {
+                await buildEmergencyComposite('No valid photo slots in selected frame', canvasWidth, canvasHeight, is2R);
+                return;
+            }
+
             if (!canvasRef.current) {
                 // Use setTimeout instead of requestAnimationFrame so it resolves even in background tabs
                 await new Promise<void>((resolve) => setTimeout(resolve, 50));
@@ -342,13 +381,13 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         frame_width: canvasWidth,
                         frame_height: canvasHeight,
                         photos_base64: capturedPhotos.map(p => p.dataUrl),
-                        photo_slots: selectedFrame.photo_slots || [],
+                        photo_slots: slots,
                         filter: selectedFilter || 'none',
                         event_hashtag: booth?.event_mode && booth?.event_hashtag ? booth.event_hashtag : undefined
                     };
 
                     console.log("Calling Rust composite_image_rust with frame:", frameBase64 ? "present" : "missing",
-                        "photos:", capturedPhotos.length, "slots:", (selectedFrame.photo_slots || []).length);
+                        "photos:", capturedPhotos.length, "slots:", slots.length);
                     const result = await withTimeout(
                         invoke('composite_image_rust', {
                             req: {
@@ -581,8 +620,6 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             };
 
             const filter = getFilterByName(selectedFilter);
-
-            const slots = selectedFrame.photo_slots || [];
             const doingVideo = isVideoMode && hasVideoBlobs;
 
             let frameImg: HTMLImageElement | null = null;
