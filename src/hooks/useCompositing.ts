@@ -25,9 +25,18 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
     };
 
     useEffect(() => {
+        // Track whether compositing completed (for safety timeout)
+        let compositingDone = false;
+
         async function compositeImages() {
             if (!selectedFrame || capturedPhotos.length === 0 || !canvasRef.current) {
-                console.log("Skipping compositing: missing frame, photos, or canvas ref");
+                console.log("Skipping compositing: missing frame, photos, or canvas ref", {
+                    hasFrame: !!selectedFrame,
+                    photoCount: capturedPhotos.length,
+                    hasCanvas: !!canvasRef.current
+                });
+                setIsCompositing(false);
+                compositingDone = true;
                 return;
             }
 
@@ -132,9 +141,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                         // Print image: use duplicated version if 2R, otherwise same as final
                         setPrintImage(result.print_base64 || result.final_base64);
                         setIsCompositing(false);
+                        compositingDone = true;
                         return; // Successfully composited in Rust!
                     } else {
-                        console.error("Rust returned empty result");
+                        console.error("Rust returned empty result, falling back to Canvas");
                     }
                 } catch (err) {
                     console.error("Rust compositing failed, falling back to Canvas:", err);
@@ -148,10 +158,17 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
 
             console.log("Using Canvas fallback method");
             const canvas = canvasRef.current;
+            if (!canvas) {
+                console.error("Canvas element disappeared during compositing");
+                setIsCompositing(false);
+                compositingDone = true;
+                return;
+            }
             const ctx = canvas.getContext('2d');
             if (!ctx) {
                 console.error("Failed to get canvas 2D context");
                 setIsCompositing(false);
+                compositingDone = true;
                 return;
             }
 
@@ -388,69 +405,11 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                 }
             };
 
-            if (doingVideo) {
-                console.log("Starting Canvas Video Compositing...");
-                // Preload all video blobs as playing video elements
-                const videoElements = await Promise.all(capturedPhotos.map(async p => {
-                    if (!p.videoBlob) return null;
-                    const v = document.createElement('video');
-                    v.src = URL.createObjectURL(p.videoBlob);
-                    v.muted = true;
-                    v.playsInline = true;
-                    // Preload metadata
-                    await new Promise(r => { v.onloadedmetadata = r; v.onerror = r; });
-                    return v;
-                }));
-
-                const stream = canvas.captureStream(30);
-                const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-                const mr = new MediaRecorder(stream, { mimeType });
-                const chunks: Blob[] = [];
-                mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-                
-                mr.onstop = () => {
-                    const finalBlob = new Blob(chunks, { type: mimeType });
-                    const finalUrl = URL.createObjectURL(finalBlob);
-                    setFinalVideoBlob(finalBlob);
-                    setFinalVideoUrl(finalUrl);
-                    console.log("Video compositing complete:", finalUrl);
-
-                    // Grab a static thumbnail of the end state
-                    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-                    setCompositeImage(imageDataUrl);
-                    setFinalImage(imageDataUrl);
-
-                    videoElements.forEach(v => {
-                        if (v) URL.revokeObjectURL(v.src);
-                    });
-                    setIsCompositing(false);
-                };
-
-                mr.start();
-                videoElements.forEach(v => v?.play());
-
-                const duration = 3000; // Recode roughly a 3-second clip
-                const startTime = performance.now();
-
-                const drawFrameLoop = async () => {
-                    const now = performance.now();
-                    if (now - startTime > duration) {
-                        mr.stop();
-                        return;
-                    }
-                    await drawFullComposite(videoElements);
-                    requestAnimationFrame(drawFrameLoop);
-                };
-                
-                requestAnimationFrame(drawFrameLoop);
-                return; // Early return, the onstop handler finishes the state
-            } else {
-                // Static compositing
+            // Helper: perform static compositing (shared by both paths)
+            const doStaticComposite = async () => {
+                console.log("Performing static compositing...");
                 await drawFullComposite();
 
-                // (The rest of static processing continues if not in video mode)
-
-                // Share image (original frame size)
                 const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
                 console.log("Canvas compositing complete, final image:", imageDataUrl.substring(0, 50) + "...");
                 setCompositeImage(imageDataUrl);
@@ -458,16 +417,13 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
 
                 // Print image: always 4R size
                 if (is2R) {
-                    // Duplicate 2R side-by-side to fill 4R
                     const printCanvas = document.createElement('canvas');
                     printCanvas.width = PRINT_4R_WIDTH;
                     printCanvas.height = PRINT_4R_HEIGHT;
                     const printCtx = printCanvas.getContext('2d')!;
                     printCtx.fillStyle = '#ffffff';
                     printCtx.fillRect(0, 0, PRINT_4R_WIDTH, PRINT_4R_HEIGHT);
-                    // Left half
                     printCtx.drawImage(canvas, 0, 0, canvasWidth, canvasHeight);
-                    // Right half
                     printCtx.drawImage(canvas, canvasWidth, 0, canvasWidth, canvasHeight);
                     const printDataUrl = printCanvas.toDataURL('image/jpeg', 0.95);
                     setPrintImage(printDataUrl);
@@ -477,22 +433,131 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
 
                 console.log("Image compositing finished successfully");
                 setIsCompositing(false);
+                compositingDone = true;
+            };
+
+            if (doingVideo) {
+                console.log("Starting Canvas Video Compositing...");
+                try {
+                    // Check if MediaRecorder is available
+                    if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
+                        console.warn("MediaRecorder or captureStream not available, falling back to static compositing");
+                        await doStaticComposite();
+                        return;
+                    }
+
+                    // Preload all video blobs as playing video elements
+                    const videoElements = await Promise.all(capturedPhotos.map(async p => {
+                        if (!p.videoBlob) return null;
+                        const v = document.createElement('video');
+                        v.src = URL.createObjectURL(p.videoBlob);
+                        v.muted = true;
+                        v.playsInline = true;
+                        await new Promise(r => { v.onloadedmetadata = r; v.onerror = r; });
+                        return v;
+                    }));
+
+                    const stream = canvas.captureStream(30);
+                    const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+                    const mr = new MediaRecorder(stream, { mimeType });
+                    const chunks: Blob[] = [];
+                    mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+                    // Wrap onstop in a promise so we can await completion
+                    const videoComplete = new Promise<void>((resolve, reject) => {
+                        const videoTimeout = setTimeout(() => {
+                            console.error("Video compositing timed out after 15s, falling back to static");
+                            try { mr.stop(); } catch { /* ignore */ }
+                            reject(new Error('Video compositing timeout'));
+                        }, 15000);
+
+                        mr.onstop = () => {
+                            clearTimeout(videoTimeout);
+                            try {
+                                const finalBlob = new Blob(chunks, { type: mimeType });
+                                const finalUrl = URL.createObjectURL(finalBlob);
+                                setFinalVideoBlob(finalBlob);
+                                setFinalVideoUrl(finalUrl);
+                                console.log("Video compositing complete:", finalUrl);
+
+                                const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                                setCompositeImage(imageDataUrl);
+                                setFinalImage(imageDataUrl);
+
+                                videoElements.forEach(v => {
+                                    if (v) URL.revokeObjectURL(v.src);
+                                });
+                                setIsCompositing(false);
+                                compositingDone = true;
+                                resolve();
+                            } catch (e) {
+                                reject(e);
+                            }
+                        };
+
+                        mr.onerror = (e) => {
+                            clearTimeout(videoTimeout);
+                            console.error("MediaRecorder error:", e);
+                            reject(new Error('MediaRecorder error'));
+                        };
+                    });
+
+                    mr.start();
+                    videoElements.forEach(v => v?.play());
+
+                    const duration = 3000;
+                    const startTime = performance.now();
+
+                    const drawFrameLoop = async () => {
+                        const now = performance.now();
+                        if (now - startTime > duration) {
+                            mr.stop();
+                            return;
+                        }
+                        await drawFullComposite(videoElements);
+                        requestAnimationFrame(drawFrameLoop);
+                    };
+
+                    requestAnimationFrame(drawFrameLoop);
+
+                    // Wait for video to complete or fail
+                    await videoComplete;
+                    return;
+                } catch (videoErr) {
+                    console.error("Video compositing failed, falling back to static:", videoErr);
+                    // Fall through to static compositing
+                    await doStaticComposite();
+                    return;
+                }
+            } else {
+                // Static compositing
+                await doStaticComposite();
             }
         }
 
         // Safety timeout: if compositing hangs for any reason, force-clear after 30s
+        // This timeout is NOT cleared by .finally() — it checks the compositingDone flag instead
         const safetyTimeout = setTimeout(() => {
-            console.error("SAFETY: Compositing timed out after 30s, force-clearing isCompositing");
-            setIsCompositing(false);
+            if (!compositingDone) {
+                console.error("SAFETY: Compositing timed out after 30s, force-clearing isCompositing");
+                setIsCompositing(false);
+                compositingDone = true;
+            }
         }, 30000);
 
         compositeImages()
             .catch((err) => {
                 console.error("Compositing unhandled error — clearing isCompositing:", err);
-                setIsCompositing(false);
+                if (!compositingDone) {
+                    setIsCompositing(false);
+                    compositingDone = true;
+                }
             })
             .finally(() => {
-                clearTimeout(safetyTimeout);
+                // Only clear timeout if compositing actually completed
+                if (compositingDone) {
+                    clearTimeout(safetyTimeout);
+                }
             });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedFrame, capturedPhotos, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl, selectedFilter, booth, isVideoMode]);
