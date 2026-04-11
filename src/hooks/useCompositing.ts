@@ -276,12 +276,24 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                 return;
             }
 
-            console.log("Starting compositing process...");
             const canvasWidth = frame.canvas_width || 1200;
             const canvasHeight = frame.canvas_height || 1800;
 
             const hasVideoBlobs = photos.some(p => !!p.videoBlob);
             const is2R = canvasWidth <= 600;
+
+            console.log("[Compositing] Starting...", {
+                frameId: frame.id,
+                frameName: frame.name,
+                canvasWidth,
+                canvasHeight,
+                photoCount: photos.length,
+                photoDataUrlLengths: photos.map((p, i) => `photo[${i}]: ${p.dataUrl?.length ?? 0} chars`),
+                slotCount: frame.photo_slots?.length ?? 0,
+                hasVideoBlobs,
+                is2R,
+                filter,
+            });
 
             const asRecord = (value: unknown): Record<string, unknown> | null => (
                 typeof value === 'object' && value !== null ? value as Record<string, unknown> : null
@@ -414,7 +426,21 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         frame_width: canvasWidth,
                         frame_height: canvasHeight,
                         photos_base64: photos.map(p => p.dataUrl),
-                        photo_slots: slots,
+                        // Send raw photo_slots from the frame (not normalized) so Rust gets the full object including `id`
+                        photo_slots: (frame.photo_slots as unknown[]).map((raw, i) => {
+                            const s = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {};
+                            const ci = Number(s.capture_index);
+                            return {
+                                id: String(s.id ?? `slot_${i}`),
+                                x: Number(s.x) || 0,
+                                y: Number(s.y) || 0,
+                                width: Number(s.width) || 0,
+                                height: Number(s.height) || 0,
+                                rotation: Number.isFinite(Number(s.rotation)) ? Number(s.rotation) : 0,
+                                layer: s.layer === 'above' ? 'above' : 'below',
+                                capture_index: Number.isInteger(ci) ? ci : i,
+                            };
+                        }),
                         filter: filter || 'none',
                         event_hashtag: boothData?.event_mode && boothData?.event_hashtag ? boothData.event_hashtag : undefined
                     };
@@ -539,7 +565,14 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                 const captureIdx = slot.capture_index ?? slotIndex;
                 const photo = photos[captureIdx];
 
-                if (!photo) return;
+                if (!photo) {
+                    console.warn(`[Canvas] Slot ${slotIndex}: no photo at captureIdx=${captureIdx} (photos.length=${photos.length})`);
+                    return;
+                }
+                if (!photo.dataUrl) {
+                    console.warn(`[Canvas] Slot ${slotIndex}: photo exists but dataUrl is empty`);
+                    return;
+                }
                 
                 // If we are doing video, use the video element directly when it is actually drawable.
                 // If not drawable, fall back to the captured still image for this slot.

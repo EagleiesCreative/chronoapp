@@ -7,7 +7,9 @@ use log::info;
 
 #[derive(Debug, Deserialize)]
 pub struct PhotoSlot {
-    pub _id: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub id: String,
     pub x: f32,
     pub y: f32,
     pub width: f32,

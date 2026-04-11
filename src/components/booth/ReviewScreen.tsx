@@ -34,6 +34,24 @@ export function ReviewScreen() {
     const compositeFailed = !isCompositing && !compositeImage;
     const effectiveUploadError = uploadError || (compositeFailed ? 'Final preview generation failed. Please retry.' : null);
 
+    // Log & alert when compositing finishes — helps operators spot blank-frame issues immediately
+    const hasLoggedResultRef = useRef(false);
+    useEffect(() => {
+        if (isCompositing || hasLoggedResultRef.current) return;
+        hasLoggedResultRef.current = true;
+
+        if (compositeFailed) {
+            console.error('[ReviewScreen] ⚠️ Compositing finished but produced NO image (compositeImage is null).');
+        } else if (compositeImage) {
+            const sizeKB = Math.round((compositeImage.length * 3) / 4 / 1024);
+            const looksBlank = sizeKB < 5; // A valid photo composite is typically 100KB+
+            console.log(`[ReviewScreen] Compositing done — image size ≈ ${sizeKB} KB${looksBlank ? ' ⚠️ SUSPICIOUSLY SMALL (likely blank)' : ''}`);
+            if (looksBlank) {
+                console.warn('[ReviewScreen] The composite image is extremely small and likely blank. Check the compositing logs above for errors.');
+            }
+        }
+    }, [isCompositing, compositeFailed, compositeImage]);
+
     // Trigger upload when compositing completes
     const hasUploadedRef = useRef(false);
     useEffect(() => {
@@ -170,11 +188,19 @@ export function ReviewScreen() {
                                     className="max-h-[calc(100vh-220px)] w-auto object-contain"
                                 />
                             ) : (
-                                <img
-                                    src={compositeImage || ''}
-                                    alt="Final composite"
-                                    className="max-h-[calc(100vh-220px)] w-auto object-contain"
-                                />
+                                <>
+                                    <img
+                                        src={compositeImage || ''}
+                                        alt="Final composite"
+                                        className="max-h-[calc(100vh-220px)] w-auto object-contain"
+                                    />
+                                    {/* Warn operator if the image looks blank (< 5KB base64 ≈ empty canvas) */}
+                                    {compositeImage && Math.round((compositeImage.length * 3) / 4 / 1024) < 5 && (
+                                        <div className="absolute bottom-2 left-2 right-2 bg-amber-500/90 text-white text-[11px] px-3 py-2 rounded-lg text-center backdrop-blur-sm">
+                                            ⚠ Image may be blank — tap <button type="button" onClick={handleRetryComposite} className="underline font-semibold">Retry</button>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
                     </motion.div>
