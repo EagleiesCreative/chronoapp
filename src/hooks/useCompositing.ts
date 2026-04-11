@@ -1,4 +1,4 @@
-import { useEffect, useState, RefObject } from 'react';
+import { useEffect, useState, useRef, RefObject } from 'react';
 import { getAssetUrl, getApiUrl } from '@/lib/api';
 import { getCachedImageUrl } from '@/lib/frame-cache';
 import { useBoothStore, useAdminStore } from '@/store/booth-store';
@@ -119,6 +119,22 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
     const { isVideoMode } = useAdminStore();
     const { booth } = useTenantStore();
 
+    // Keep refs so the effect closure always reads the latest values
+    // without needing them in the dependency array (which would retrigger
+    // the effect when resetSession() clears the store).
+    const selectedFrameRef = useRef(selectedFrame);
+    const capturedPhotosRef = useRef(capturedPhotos);
+    const selectedFilterRef = useRef(selectedFilter);
+    const boothRef = useRef(booth);
+    const isVideoModeRef = useRef(isVideoMode);
+
+    // Synchronise refs on every render so the effect closure is never stale.
+    selectedFrameRef.current = selectedFrame;
+    capturedPhotosRef.current = capturedPhotos;
+    selectedFilterRef.current = selectedFilter;
+    boothRef.current = booth;
+    isVideoModeRef.current = isVideoMode;
+
     // Helper: proxy external URLs through our API to avoid CORS issues in Tauri
     const getProxiedImageUrl = (url: string): string => {
         if (!url) return '';
@@ -134,7 +150,22 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
         return url;
     };
 
+    // The effect intentionally does NOT depend on selectedFrame, capturedPhotos,
+    // selectedFilter, booth, or isVideoMode. Those are read through refs so that
+    // resetSession() clearing the store does not re-trigger the expensive
+    // compositing work (or fire a spurious "Missing frame" error).
+    //
+    // Compositing re-runs ONLY when:
+    //   1. The component mounts (initial render)
+    //   2. retryNonce changes (user explicitly retrying)
     useEffect(() => {
+        // Snapshot current values from refs
+        const frame = selectedFrameRef.current;
+        const photos = capturedPhotosRef.current;
+        const filter = selectedFilterRef.current;
+        const boothData = boothRef.current;
+        const videoMode = isVideoModeRef.current;
+
         setIsCompositing(true);
         setCompositeImage(null);
 
@@ -171,7 +202,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             if (cancelled || compositingDone) return;
 
             console.warn(`[Compositing] Using emergency fallback: ${reason}`);
-            const fallbackPhoto = capturedPhotos.find((p) => !!p?.dataUrl)?.dataUrl;
+            const fallbackPhoto = photos.find((p) => !!p?.dataUrl)?.dataUrl;
 
             if (!fallbackPhoto) {
                 safeFail(`${reason} (no fallback photo available)`);
@@ -232,22 +263,24 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
         };
 
         async function compositeImages() {
-            if (!selectedFrame || capturedPhotos.length === 0) {
-                if (retryNonce === 0) {
-                    console.log("Skipping compositing (possibly session reset): missing frame, photos, or canvas ref", {
-                        hasFrame: !!selectedFrame,
-                        photoCount: capturedPhotos.length,
-                    });
-                }
-                safeFail('Missing frame or captured photos');
+            if (!frame || photos.length === 0) {
+                console.warn("[Compositing] Skipping — no frame or photos available at mount time.", {
+                    hasFrame: !!frame,
+                    photoCount: photos.length,
+                    retryNonce,
+                });
+                // Don't call safeFail here — this is expected during session reset / teardown.
+                // Just silently stop compositing so the UI doesn't show a scary red error.
+                setIsCompositing(false);
+                compositingDone = true;
                 return;
             }
 
             console.log("Starting compositing process...");
-            const canvasWidth = selectedFrame.canvas_width || 1200;
-            const canvasHeight = selectedFrame.canvas_height || 1800;
+            const canvasWidth = frame.canvas_width || 1200;
+            const canvasHeight = frame.canvas_height || 1800;
 
-            const hasVideoBlobs = capturedPhotos.some(p => !!p.videoBlob);
+            const hasVideoBlobs = photos.some(p => !!p.videoBlob);
             const is2R = canvasWidth <= 600;
 
             const asRecord = (value: unknown): Record<string, unknown> | null => (
@@ -282,7 +315,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                     );
             };
 
-            const slots = normalizeSlots(selectedFrame.photo_slots);
+            const slots = normalizeSlots(frame.photo_slots);
 
             if (slots.length === 0) {
                 await buildEmergencyComposite('No valid photo slots in selected frame', canvasWidth, canvasHeight, is2R);
@@ -346,16 +379,16 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             };
 
             // Skip Rust backend if we are doing live video compositing
-            if (isTauri && invoke && (!isVideoMode || !hasVideoBlobs)) {
+            if (isTauri && invoke && (!videoMode || !hasVideoBlobs)) {
                 try {
                     let frameBase64: string | undefined = undefined;
-                    if (selectedFrame.image_url) {
+                    if (frame.image_url) {
                         try {
-                            const cachedUrl = await getCachedImageUrl(selectedFrame.image_url);
+                            const cachedUrl = await getCachedImageUrl(frame.image_url);
                             if (cachedUrl && cachedUrl.startsWith('data:')) {
                                 frameBase64 = cachedUrl;
                             } else {
-                                const sourceUrl = cachedUrl || getAssetUrl(selectedFrame.image_url);
+                                const sourceUrl = cachedUrl || getAssetUrl(frame.image_url);
                                 const urlToUse = getProxiedImageUrl(sourceUrl);
                                 const finalFetchUrl = urlToUse.startsWith('/') ? getApiUrl(urlToUse) : urlToUse;
 
@@ -380,14 +413,14 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         frame_base64: frameBase64,
                         frame_width: canvasWidth,
                         frame_height: canvasHeight,
-                        photos_base64: capturedPhotos.map(p => p.dataUrl),
+                        photos_base64: photos.map(p => p.dataUrl),
                         photo_slots: slots,
-                        filter: selectedFilter || 'none',
-                        event_hashtag: booth?.event_mode && booth?.event_hashtag ? booth.event_hashtag : undefined
+                        filter: filter || 'none',
+                        event_hashtag: boothData?.event_mode && boothData?.event_hashtag ? boothData.event_hashtag : undefined
                     };
 
                     console.log("Calling Rust composite_image_rust with frame:", frameBase64 ? "present" : "missing",
-                        "photos:", capturedPhotos.length, "slots:", slots.length);
+                        "photos:", photos.length, "slots:", slots.length);
                     const result = await withTimeout(
                         invoke('composite_image_rust', {
                             req: {
@@ -504,7 +537,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
 
             const drawContentInSlot = async (slot: SlotLike, slotIndex: number, filterDef: ReturnType<typeof getFilterByName>, videoElements?: (HTMLVideoElement | null)[]) => {
                 const captureIdx = slot.capture_index ?? slotIndex;
-                const photo = capturedPhotos[captureIdx];
+                const photo = photos[captureIdx];
 
                 if (!photo) return;
                 
@@ -619,14 +652,14 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                 });
             };
 
-            const filter = getFilterByName(selectedFilter);
-            const doingVideo = isVideoMode && hasVideoBlobs;
+            const filterDef = getFilterByName(filter);
+            const doingVideo = videoMode && hasVideoBlobs;
 
             let frameImg: HTMLImageElement | null = null;
-            if (selectedFrame.image_url) {
+            if (frame.image_url) {
                 try {
-                    const cachedUrl = await getCachedImageUrl(selectedFrame.image_url!);
-                    const frameSource = cachedUrl || getAssetUrl(selectedFrame.image_url!);
+                    const cachedUrl = await getCachedImageUrl(frame.image_url!);
+                    const frameSource = cachedUrl || getAssetUrl(frame.image_url!);
                     const frameDataUrl = await resolveUrlToSafeDataUrl(frameSource);
                     if (frameDataUrl) {
                         frameImg = await loadImageFromSrc(frameDataUrl);
@@ -646,7 +679,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                     const slot = slots[i];
                     if (slot.layer === 'above') continue;
                     try {
-                        await drawContentInSlot(slot, i, filter, videoElements);
+                        await drawContentInSlot(slot, i, filterDef, videoElements);
                     } catch {
                         // Keep compositing even if one slot fails
                     }
@@ -660,20 +693,20 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                     const slot = slots[i];
                     if (slot.layer !== 'above') continue;
                     try {
-                        await drawContentInSlot(slot, i, filter, videoElements);
+                        await drawContentInSlot(slot, i, filterDef, videoElements);
                     } catch {
                         // Keep compositing even if one slot fails
                     }
                 }
 
-                if (booth?.event_mode && booth?.event_hashtag) {
+                if (boothData?.event_mode && boothData?.event_hashtag) {
                     ctx.save();
                     ctx.font = 'bold 28px Inter, sans-serif';
                     ctx.fillStyle = 'rgba(255,255,255,0.85)';
                     ctx.textAlign = 'center';
                     ctx.shadowColor = 'rgba(0,0,0,0.5)';
                     ctx.shadowBlur = 4;
-                    ctx.fillText(booth.event_hashtag, canvas.width / 2, canvas.height - 30);
+                    ctx.fillText(boothData.event_hashtag, canvas.width / 2, canvas.height - 30);
                     ctx.restore();
                 }
             };
@@ -718,7 +751,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         return;
                     }
 
-                    const videoElements = await Promise.all(capturedPhotos.map(async (p, index) => {
+                    const videoElements = await Promise.all(photos.map(async (p, index) => {
                         if (!p.videoBlob || p.videoBlob.size === 0) {
                             if (p.videoBlob && p.videoBlob.size === 0) {
                                 console.warn('[Compositing] Empty video blob for capture, will use still image fallback', { index });
@@ -875,8 +908,8 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             }
         }
 
-        const fallbackWidth = selectedFrame?.canvas_width || 1200;
-        const fallbackHeight = selectedFrame?.canvas_height || 1800;
+        const fallbackWidth = frame?.canvas_width || 1200;
+        const fallbackHeight = frame?.canvas_height || 1800;
         const fallbackIs2R = fallbackWidth <= 600;
 
         const safetyTimeout = setTimeout(() => {
@@ -900,7 +933,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             clearTimeout(safetyTimeout);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedFrame, capturedPhotos, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl, selectedFilter, booth, isVideoMode, retryNonce]);
+    }, [retryNonce, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl]);
 
     return { compositeImage, isCompositing };
 }
