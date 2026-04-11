@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import QRCode from 'qrcode';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getAssetUrl } from '@/lib/api';
 import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient, uploadVideoClient } from '@/lib/upload-client';
 import { saveToLocalDisk } from '@/lib/local-save';
 import { generateCompressedGif, generateFramedVideoGif } from '@/lib/video-generator';
@@ -160,15 +160,34 @@ export function useUploadSession() {
                         
                         // If it's video mode and we have video blobs and a frame, compile the framed gif!
                         if (isVideoMode && hasVideoBlobs && selectedFrame?.image_url) {
-                            gifResult = await generateFramedVideoGif({
-                                videoBlobs,
-                                photoDataUrls,
-                                frameImageUrl: selectedFrame.image_url,
-                                photoSlots: (selectedFrame.photo_slots as any[]) || [],
-                                canvasWidth: selectedFrame.canvas_width || 1200,
-                                canvasHeight: selectedFrame.canvas_height || 1800,
-                                quality: 15,
-                            });
+                            try {
+                                const sourceUrl = getAssetUrl(selectedFrame.image_url);
+                                const proxyUrl = `/api/frames/image?url=${encodeURIComponent(sourceUrl)}`;
+                                
+                                // Securely fetch into Blob to prevent Canvas Tainting
+                                const frameRes = await fetch(proxyUrl);
+                                if (!frameRes.ok) throw new Error('Proxied frame fetch failed');
+                                
+                                const frameBlob = await frameRes.blob();
+                                const safeDataUrl = await new Promise<string>((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => resolve(reader.result as string);
+                                    reader.onerror = reject;
+                                    reader.readAsDataURL(frameBlob);
+                                });
+
+                                gifResult = await generateFramedVideoGif({
+                                    videoBlobs,
+                                    photoDataUrls,
+                                    frameImageUrl: safeDataUrl,
+                                    photoSlots: (selectedFrame.photo_slots as any[]) || [],
+                                    canvasWidth: selectedFrame.canvas_width || 1200,
+                                    canvasHeight: selectedFrame.canvas_height || 1800,
+                                    quality: 15,
+                                });
+                            } catch (err) {
+                                console.warn('Failed to construct framed video GIF, falling back:', err);
+                            }
                         }
                         
                         // Fallback to stock compression if previous failed or wasn't applicable
