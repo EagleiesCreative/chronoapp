@@ -215,7 +215,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             // In Tauri (WKWebView), canvas.toDataURL() throws SecurityError ("The operation is insecure")
             // when ANY image (even data URLs) is drawn to the canvas. 
             // Bypass this by using the photo's data URL directly as the composite image.
-            const isTauriEnv = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+            const isTauriEnv = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window || window.navigator.userAgent.includes('Tauri'));
             
             if (isTauriEnv) {
                 console.log('[Compositing] Tauri environment — using photo data URL directly (bypassing canvas)');
@@ -404,8 +404,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                 }
             };
 
-            // Skip Rust backend if we are doing live video compositing
-            if (isTauri && invoke && (!videoMode || !hasVideoBlobs)) {
+            // In Tauri, Canvas fallback and video captureStream ALWAYS fail due to WKWebView security.
+            // Always run the Rust backend to generate at least a framed static composite image ('ticket') 
+            // for the QR code upload, even if operating in video mode.
+            if (isTauri && invoke) {
                 try {
                     let frameBase64: string | undefined = undefined;
                     if (frame.image_url) {
