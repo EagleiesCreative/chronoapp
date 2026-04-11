@@ -126,16 +126,31 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                     };
 
                     // 3. Call Rust
-                    console.log("Calling Rust composite_image_rust with frame:", frameBase64 ? "present" : "missing");
-                    const result: { final_base64: string; print_base64?: string } = await invoke('composite_image_rust', { req: {
+                    console.log("Calling Rust composite_image_rust with frame:", frameBase64 ? "present" : "missing",
+                        "photos:", capturedPhotos.length, "slots:", (selectedFrame.photo_slots || []).length);
+                    const result: {
+                        final_base64: string;
+                        print_base64?: string;
+                        slots_rendered: number;
+                        slots_failed: number;
+                        errors: string[];
+                    } = await invoke('composite_image_rust', { req: {
                         ...req,
                         duplicate_for_print: is2R,
                         print_width: PRINT_4R_WIDTH,
                         print_height: PRINT_4R_HEIGHT,
                     } });
 
-                    if (result && result.final_base64) {
-                        console.log("Rust compositing successful");
+                    console.log("Rust result:", {
+                        hasImage: !!result?.final_base64,
+                        slotsRendered: result?.slots_rendered,
+                        slotsFailed: result?.slots_failed,
+                        errors: result?.errors,
+                    });
+
+                    // Only accept Rust result if at least one photo slot was rendered
+                    if (result && result.final_base64 && result.slots_rendered > 0) {
+                        console.log("Rust compositing successful —", result.slots_rendered, "slots rendered");
                         setCompositeImage(result.final_base64);
                         setFinalImage(result.final_base64);
                         // Print image: use duplicated version if 2R, otherwise same as final
@@ -144,7 +159,8 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                         compositingDone = true;
                         return; // Successfully composited in Rust!
                     } else {
-                        console.error("Rust returned empty result, falling back to Canvas");
+                        console.error("Rust compositing produced blank image (0 slots rendered), falling back to Canvas.",
+                            "Errors:", result?.errors);
                     }
                 } catch (err) {
                     console.error("Rust compositing failed, falling back to Canvas:", err);

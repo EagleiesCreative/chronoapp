@@ -35,6 +35,9 @@ pub struct CompositeRequest {
 pub struct CompositeResponse {
     pub final_base64: String,
     pub print_base64: Option<String>,
+    pub slots_rendered: usize,
+    pub slots_failed: usize,
+    pub errors: Vec<String>,
 }
 
 // Extract base64 payload from data URL
@@ -222,10 +225,20 @@ pub fn composite_images(req: CompositeRequest) -> Result<CompositeResponse, Stri
         Ok(())
     };
 
+    let mut slots_rendered: usize = 0;
+    let mut slots_failed: usize = 0;
+    let mut errors: Vec<String> = Vec::new();
+
     // Draw 'below' photos
     for (i, slot) in below_slots {
-        if let Err(e) = draw_slot(&mut canvas, i, slot) {
-            error!("Error drawing photo slot {}: {}", i, e);
+        match draw_slot(&mut canvas, i, slot) {
+            Ok(()) => slots_rendered += 1,
+            Err(e) => {
+                let msg = format!("Slot {} (photo {}): {}", i, i, e);
+                eprintln!("[composite] {}", msg);
+                errors.push(msg);
+                slots_failed += 1;
+            }
         }
     }
 
@@ -236,14 +249,24 @@ pub fn composite_images(req: CompositeRequest) -> Result<CompositeResponse, Stri
                 let resized_frame = frame_img.resize_exact(req.frame_width, req.frame_height, image::imageops::FilterType::Lanczos3);
                 image::imageops::overlay(&mut canvas, &resized_frame.to_rgba8(), 0, 0);
             },
-            Err(e) => error!("Error loading frame image: {}", e)
+            Err(e) => {
+                let msg = format!("Frame overlay: {}", e);
+                eprintln!("[composite] {}", msg);
+                errors.push(msg);
+            }
         }
     }
 
     // Draw 'above' photos
     for (i, slot) in above_slots {
-        if let Err(e) = draw_slot(&mut canvas, i, slot) {
-            error!("Error drawing photo slot {}: {}", i, e);
+        match draw_slot(&mut canvas, i, slot) {
+            Ok(()) => slots_rendered += 1,
+            Err(e) => {
+                let msg = format!("Slot {} (photo {}, above): {}", i, i, e);
+                eprintln!("[composite] {}", msg);
+                errors.push(msg);
+                slots_failed += 1;
+            }
         }
     }
 
@@ -276,6 +299,6 @@ pub fn composite_images(req: CompositeRequest) -> Result<CompositeResponse, Stri
         None
     };
 
-    info!("Composite successful");
-    Ok(CompositeResponse { final_base64, print_base64 })
+    eprintln!("[composite] Done: {} rendered, {} failed", slots_rendered, slots_failed);
+    Ok(CompositeResponse { final_base64, print_base64, slots_rendered, slots_failed, errors })
 }
