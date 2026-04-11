@@ -89,7 +89,13 @@ export function ShareGallery({
             const blobUrl = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = blobUrl;
-            link.download = `${eventName.replace(/\s+/g, '_')}_animation.gif`;
+            
+            // Determine correct extension
+            let extension = 'gif';
+            if (videoUrl.includes('.mp4') || blob.type === 'video/mp4') extension = 'mp4';
+            else if (videoUrl.includes('.webm') || blob.type === 'video/webm') extension = 'webm';
+            
+            link.download = `${eventName.replace(/\s+/g, '_')}_live_video_frame.${extension}`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -150,7 +156,12 @@ export function ShareGallery({
                 const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = `${eventName.replace(/\s+/g, '_')}_animation.gif`;
+                
+                let extension = 'gif';
+                if (videoUrl.includes('.mp4') || blob.type === 'video/mp4') extension = 'mp4';
+                else if (videoUrl.includes('.webm') || blob.type === 'video/webm') extension = 'webm';
+                
+                link.download = `${eventName.replace(/\s+/g, '_')}_live_video_frame.${extension}`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
