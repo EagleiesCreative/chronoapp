@@ -23,13 +23,16 @@ export function ReviewScreen() {
     const timeoutSeconds = booth?.review_timeout_seconds ?? 60;
 
     const [autoResetCountdown, setAutoResetCountdown] = useState(timeoutSeconds);
+    const [compositeRetryNonce, setCompositeRetryNonce] = useState(0);
 
-    const { compositeImage, isCompositing } = useCompositing(canvasRef);
+    const { compositeImage, isCompositing } = useCompositing(canvasRef, compositeRetryNonce);
     const {
         downloadQR, isUploading, uploadStatus,
         uploadError, uploadAndGenerateQR
     } = useUploadSession();
     const { isPrinting, handlePrint, printCopiesCount } = usePrintHandler(compositeImage);
+    const compositeFailed = !isCompositing && !compositeImage;
+    const effectiveUploadError = uploadError || (compositeFailed ? 'Final preview generation failed. Please retry.' : null);
 
     // Trigger upload when compositing completes
     const hasUploadedRef = useRef(false);
@@ -40,6 +43,10 @@ export function ReviewScreen() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [compositeImage]);
+
+    const handleRetryComposite = () => {
+        setCompositeRetryNonce((prev) => prev + 1);
+    };
 
     // Auto-reset timer
     useEffect(() => {
@@ -133,10 +140,24 @@ export function ReviewScreen() {
                     >
                         <div className="elegant-card overflow-hidden">
                             {isCompositing ? (
-                                <div className="w-48 aspect-[3/5] flex items-center justify-center bg-muted">
+                                <div className="w-48 aspect-3/5 flex items-center justify-center bg-muted">
                                     <div className="text-center">
                                         <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
                                         <p className="text-sm text-muted-foreground font-light">Creating photo...</p>
+                                    </div>
+                                </div>
+                            ) : compositeFailed ? (
+                                <div className="w-48 aspect-3/5 flex items-center justify-center bg-muted/40 border border-dashed border-border rounded-xl p-4">
+                                    <div className="text-center">
+                                        <p className="text-sm text-foreground mb-2">Couldn&apos;t render final preview</p>
+                                        <p className="text-[11px] text-muted-foreground mb-4">Retry compositing to continue</p>
+                                        <button
+                                            type="button"
+                                            onClick={handleRetryComposite}
+                                            className="px-4 py-2 rounded-full border border-border text-xs hover:bg-muted transition-colors"
+                                        >
+                                            Retry Preview
+                                        </button>
                                     </div>
                                 </div>
                             ) : isVideoMode && finalVideoUrl ? (
@@ -169,10 +190,18 @@ export function ReviewScreen() {
                     >
                         <ReviewQRCode
                             downloadQR={downloadQR}
-                            uploadError={uploadError}
+                            uploadError={effectiveUploadError}
                             isCompositing={isCompositing}
                             uploadStatus={uploadStatus}
-                            handleRetryUpload={() => compositeImage && uploadAndGenerateQR(compositeImage)}
+                            handleRetryUpload={() => {
+                                if (compositeFailed) {
+                                    handleRetryComposite();
+                                    return;
+                                }
+                                if (compositeImage) {
+                                    uploadAndGenerateQR(compositeImage);
+                                }
+                            }}
                         />
                     </ReviewActions>
                 </div>
@@ -200,7 +229,7 @@ export function ReviewScreen() {
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
-                            className="bg-white rounded-2xl p-10 shadow-2xl flex flex-col items-center gap-6 min-w-[280px]"
+                            className="bg-white rounded-2xl p-10 shadow-2xl flex flex-col items-center gap-6 min-w-70"
                         >
                             <div className="relative">
                                 <Printer className="w-12 h-12 text-primary" strokeWidth={1.5} />

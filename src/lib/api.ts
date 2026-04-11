@@ -14,6 +14,9 @@ const PRODUCTION_API_URL = 'https://chronosnap.eagleies.com';
 function isTauriEnvironment(): boolean {
     if (typeof window === 'undefined') return false;
 
+    // Tauri injects runtime markers in packaged apps.
+    if (window.navigator.userAgent.includes('Tauri')) return true;
+
     // Check for Tauri-specific properties
     if ('__TAURI__' in window) return true;
     if ('__TAURI_INTERNALS__' in window) return true;
@@ -24,6 +27,11 @@ function isTauriEnvironment(): boolean {
 
     if (protocol === 'tauri:') return true;
     if (host === 'tauri.localhost') return true;
+
+    // Some packaged Tauri builds can report plain localhost without a port.
+    if ((host === 'localhost' || host === '127.0.0.1') && window.navigator.userAgent.includes('AppleWebKit')) {
+        return true;
+    }
 
     // Check if NOT running on a standard web server
     // In Tauri, the origin will be tauri://localhost or similar
