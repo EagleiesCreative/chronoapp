@@ -65,9 +65,9 @@ export function ReviewScreen() {
         setCompositeRetryNonce((prev) => prev + 1);
     };
 
-    // Auto-reset timer
+    // Auto-reset timer — pause when compositing, printing, or a compositing warning is active
     useEffect(() => {
-        if (isCompositing || isPrinting) return;
+        if (isCompositing || isPrinting || compositeWarning) return;
         if (autoResetCountdown <= 0) return;
 
         const timer = setInterval(() => {
@@ -75,15 +75,22 @@ export function ReviewScreen() {
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [isCompositing, isPrinting, autoResetCountdown]);
+    }, [isCompositing, isPrinting, autoResetCountdown, compositeWarning]);
 
     // Navigate to idle when countdown reaches 0
     useEffect(() => {
-        if (autoResetCountdown === 0 && !isCompositing && !isPrinting) {
+        if (autoResetCountdown === 0 && !isCompositing && !isPrinting && !compositeWarning) {
             resetSession();
             setStep('idle');
         }
-    }, [autoResetCountdown, isCompositing, isPrinting, resetSession, setStep]);
+    }, [autoResetCountdown, isCompositing, isPrinting, compositeWarning, resetSession, setStep]);
+
+    // When a compositing warning appears, reset countdown so operator has full time
+    useEffect(() => {
+        if (compositeWarning) {
+            setAutoResetCountdown(timeoutSeconds);
+        }
+    }, [compositeWarning, timeoutSeconds]);
 
     const resetCountdown = () => setAutoResetCountdown(timeoutSeconds);
 
@@ -187,22 +194,29 @@ export function ReviewScreen() {
                                     className="max-h-[calc(100vh-220px)] w-auto object-contain"
                                 />
                             ) : (
-                                <>
                                     <img
                                         src={compositeImage || ''}
                                         alt="Final composite"
                                         className="max-h-[calc(100vh-220px)] w-auto object-contain"
                                     />
-                                    {/* Warn operator if compositing had issues (frame missing, fallback triggered, etc.) */}
-                                    {compositeWarning && (
-                                        <div className="absolute bottom-2 left-2 right-2 bg-amber-500/90 text-white text-[11px] px-3 py-2 rounded-lg text-center backdrop-blur-sm z-10">
-                                            ⚠ {compositeWarning} — <button type="button" onClick={handleRetryComposite} className="underline font-semibold">Retry</button>
-                                        </div>
-                                    )}
-                                </>
                             )}
                         </div>
                     </motion.div>
+
+                    {/* Compositing warning banner — placed OUTSIDE the card so it's always visible */}
+                    {compositeWarning && !isCompositing && (
+                        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-xl w-[90%] bg-amber-500 text-white text-sm px-5 py-3 rounded-xl text-center shadow-lg z-50">
+                            <p className="font-semibold mb-1">⚠ Compositing Issue Detected</p>
+                            <p className="text-xs opacity-90 mb-2">{compositeWarning}</p>
+                            <button
+                                type="button"
+                                onClick={handleRetryComposite}
+                                className="px-4 py-1.5 bg-white text-amber-700 rounded-full text-xs font-semibold hover:bg-amber-50 transition-colors"
+                            >
+                                Retry Compositing
+                            </button>
+                        </div>
+                    )}
 
                     {/* Actions panel */}
                     <ReviewActions
