@@ -123,6 +123,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
     const getProxiedImageUrl = (url: string): string => {
         if (!url) return '';
         if (url.startsWith('http://') || url.startsWith('https://')) {
+            // Bypass proxy in Tauri/Static environments where /api doesn't exist
+            if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || window.location.protocol === 'tauri:')) {
+                return url;
+            }
             // Avoid double proxying
             if (url.includes('/api/frames/image')) return url;
             return `/api/frames/image?url=${encodeURIComponent(url)}`;
@@ -229,10 +233,12 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
 
         async function compositeImages() {
             if (!selectedFrame || capturedPhotos.length === 0) {
-                console.log("Skipping compositing: missing frame, photos, or canvas ref", {
-                    hasFrame: !!selectedFrame,
-                    photoCount: capturedPhotos.length,
-                });
+                if (retryNonce === 0) {
+                    console.log("Skipping compositing (possibly session reset): missing frame, photos, or canvas ref", {
+                        hasFrame: !!selectedFrame,
+                        photoCount: capturedPhotos.length,
+                    });
+                }
                 safeFail('Missing frame or captured photos');
                 return;
             }
@@ -245,7 +251,8 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             const is2R = canvasWidth <= 600;
 
             if (!canvasRef.current) {
-                await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+                // Use setTimeout instead of requestAnimationFrame so it resolves even in background tabs
+                await new Promise<void>((resolve) => setTimeout(resolve, 50));
             }
 
             const canvas = canvasRef.current;
@@ -814,10 +821,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                             return;
                         }
                         await drawFullComposite(videoElements);
-                        requestAnimationFrame(drawFrameLoop);
+                        setTimeout(drawFrameLoop, 1000 / 30); // Use setTimeout to prevent hanging on background tab
                     };
 
-                    requestAnimationFrame(drawFrameLoop);
+                    setTimeout(drawFrameLoop, 0);
 
                     await videoComplete;
                     return;
