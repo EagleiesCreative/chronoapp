@@ -486,11 +486,14 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         safeFinish(result.final_base64, result.print_base64 || result.final_base64);
                         return;
                     } else {
-                        console.error("Rust compositing produced blank image (0 slots rendered), falling back to Canvas.",
-                            "Errors:", result?.errors);
+                        const msg = `Rust compositing produced blank image (0 slots rendered). Errors: ${result?.errors?.join('; ') || 'none'}`;
+                        console.error(`[Compositing] ${msg}`);
+                        setCompositeWarning(msg);
                     }
                 } catch (err) {
-                    console.error("Rust compositing failed, falling back to Canvas:", err);
+                    const msg = `Rust compositing failed: ${err instanceof Error ? err.message : String(err)}`;
+                    console.error(`[Compositing] ${msg}, falling back to Canvas`);
+                    setCompositeWarning(msg);
                 }
             }
 
@@ -686,8 +689,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         ctx.restore();
                         resolve();
                         })
-                        .catch(() => {
-                            console.error('Canvas drawContentInSlot: failed to load photo image');
+                        .catch((loadErr) => {
+                            const errMsg = loadErr instanceof Error ? loadErr.message : String(loadErr);
+                            console.error(`[Canvas] drawContentInSlot slot ${slotIndex} failed: ${errMsg}`);
+                            setCompositeWarning(`Canvas slot ${slotIndex} failed: ${errMsg}`);
                             resolve();
                         });
                 });
@@ -755,8 +760,26 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             };
 
             const doStaticComposite = async () => {
-                console.log("Performing static compositing...");
+                console.log("[Canvas] Performing static compositing...");
                 await drawFullComposite();
+
+                // Blank-canvas detection: Sample center + slot centers.
+                // If everything is white (255,255,255), the composite is likely blank.
+                const samplePoints = [
+                    { x: Math.floor(canvas.width / 2), y: Math.floor(canvas.height / 2) },
+                    ...slots.slice(0, 4).map(s => ({
+                        x: Math.floor(s.x + s.width / 2),
+                        y: Math.floor(s.y + s.height / 2),
+                    }))
+                ];
+                const allWhite = samplePoints.every(p => {
+                    const px = ctx.getImageData(p.x, p.y, 1, 1).data;
+                    return px[0] >= 250 && px[1] >= 250 && px[2] >= 250;
+                });
+                if (allWhite) {
+                    console.warn("[Canvas] ⚠️ All sampled pixels are white — composite appears BLANK");
+                    setCompositeWarning("Canvas produced a blank white image — photos may have failed to load in this environment");
+                }
 
                 let imageDataUrl: string;
                 try {
