@@ -13,11 +13,12 @@ import { usePrintHandler } from '@/hooks/usePrintHandler';
 import { ReviewActions } from './ReviewActions';
 import { ReviewQRCode } from './ReviewQRCode';
 import { BoothErrorBoundary } from './BoothErrorBoundary';
+import { getAssetUrl } from '@/lib/api';
 
 export function ReviewScreen() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    const { setStep, resetSession, finalVideoUrl } = useBoothStore();
+    const { setStep, resetSession, finalVideoUrl, selectedFrame, capturedPhotos } = useBoothStore();
     const { isVideoMode } = useAdminStore();
     const { booth } = useTenantStore();
     const timeoutSeconds = booth?.review_timeout_seconds ?? 60;
@@ -184,15 +185,104 @@ export function ReviewScreen() {
                                         </button>
                                     </div>
                                 </div>
-                            ) : isVideoMode && finalVideoUrl ? (
-                                <video
-                                    src={finalVideoUrl}
-                                    autoPlay
-                                    loop
-                                    muted
-                                    playsInline
-                                    className="max-h-[calc(100vh-220px)] w-auto object-contain"
-                                />
+                            ) : isVideoMode && selectedFrame ? (
+                                (() => {
+                                    const cw = selectedFrame.canvas_width || 600;
+                                    const ch = selectedFrame.canvas_height || 1050;
+                                    const maxH = 750;
+                                    const availableH = typeof window !== 'undefined' ? window.innerHeight - 220 : maxH;
+                                    const scale = Math.min(Math.min(maxH, availableH) / ch, 1);
+                                    const pw = Math.round(cw * scale);
+                                    const ph = Math.round(ch * scale);
+
+                                    return (
+                                        <div 
+                                            className="relative overflow-hidden bg-white" 
+                                            style={{ 
+                                                width: `${pw}px`, 
+                                                height: `${ph}px`,
+                                            }}
+                                        >
+                                            {selectedFrame.photo_slots?.filter((slot) => slot.layer !== 'above').map((slot, i) => {
+                                                const originalIndex = slot.capture_index ?? i;
+                                                const photo = capturedPhotos[originalIndex];
+                                                return (
+                                                    <div
+                                                        key={slot.id || `slot-${i}`}
+                                                        className="absolute overflow-hidden z-10"
+                                                        style={{
+                                                            left: `${(slot.x / cw) * 100}%`,
+                                                            top: `${(slot.y / ch) * 100}%`,
+                                                            width: `${(slot.width / cw) * 100}%`,
+                                                            height: `${(slot.height / ch) * 100}%`,
+                                                            transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
+                                                        }}
+                                                    >
+                                                        {photo?.videoUrl ? (
+                                                            <video
+                                                                src={photo.videoUrl}
+                                                                autoPlay
+                                                                loop
+                                                                muted
+                                                                playsInline
+                                                                className="w-full h-full object-cover"
+                                                                style={{ objectFit: 'cover' }}
+                                                            />
+                                                        ) : photo?.dataUrl ? (
+                                                            <img
+                                                                src={photo.dataUrl}
+                                                                alt={`Photo ${originalIndex + 1}`}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        ) : null}
+                                                    </div>
+                                                );
+                                            })}
+
+                                            <img
+                                                src={getAssetUrl(selectedFrame.image_url)}
+                                                alt="Frame"
+                                                className="absolute inset-0 w-full h-full object-contain z-20 pointer-events-none"
+                                            />
+
+                                            {selectedFrame.photo_slots?.filter((slot) => slot.layer === 'above').map((slot, i) => {
+                                                const originalIndex = slot.capture_index ?? i;
+                                                const photo = capturedPhotos[originalIndex];
+                                                return (
+                                                    <div
+                                                        key={`above-${slot.id || i}`}
+                                                        className="absolute overflow-hidden z-30"
+                                                        style={{
+                                                            left: `${(slot.x / cw) * 100}%`,
+                                                            top: `${(slot.y / ch) * 100}%`,
+                                                            width: `${(slot.width / cw) * 100}%`,
+                                                            height: `${(slot.height / ch) * 100}%`,
+                                                            transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
+                                                        }}
+                                                    >
+                                                        {photo?.videoUrl ? (
+                                                            <video
+                                                                src={photo.videoUrl}
+                                                                autoPlay
+                                                                loop
+                                                                muted
+                                                                playsInline
+                                                                className="w-full h-full object-cover"
+                                                                style={{ objectFit: 'cover' }}
+                                                            />
+                                                        ) : photo?.dataUrl ? (
+                                                            <img
+                                                                src={photo.dataUrl}
+                                                                alt={`Photo ${originalIndex + 1}`}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        ) : null}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })()
                             ) : (
                                     <img
                                         src={compositeImage || ''}
