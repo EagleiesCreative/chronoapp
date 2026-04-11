@@ -312,7 +312,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
 
                 const img = new Image();
                 await new Promise<void>((resolve) => {
-                    img.crossOrigin = 'anonymous';
+                    // Data URIs do not need (and should avoid) crossOrigin on Safari
+                    if (!photo.dataUrl.startsWith('data:')) {
+                        img.crossOrigin = 'anonymous';
+                    }
                     img.onload = () => {
                         // Pre-apply filter to the photo
                         const filteredCanvas = applyFilterToImage(img, filterDef);
@@ -353,6 +356,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>) {
                         );
                         ctx.restore();
                         resolve();
+                    };
+                    img.onerror = () => {
+                        console.error("Canvas drawContentInSlot: failed to load photo image", photo.dataUrl.substring(0, 30) + "...");
+                        resolve(); // Must resolve anyway to prevent permanent freeze!
                     };
                     img.src = photo.dataUrl;
                 });
