@@ -760,12 +760,6 @@ export function ReviewScreen() {
                                 Fallback renderer recovered this preview from captured photos.
                             </p>
                         )}
-
-                        {shouldShowLivePreview && (
-                            <p className="mt-2 text-[11px] text-primary text-center">
-                                Live mode preview playing inside frame
-                            </p>
-                        )}
                     </motion.div>
 
                     {compositeWarning && !isCompositing && !isResolvingComposite && (
