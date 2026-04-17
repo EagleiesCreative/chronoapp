@@ -46,6 +46,20 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Sync version from git tag → tauri.conf.json
+        shell: bash
+        run: |
+          # Strip the leading 'v' from the tag (e.g. v1.2.3 → 1.2.3)
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Setting tauri.conf.json version to $VERSION"
+          # Use node to patch the JSON safely (available on all runner platforms)
+          node -e "
+            const fs = require('fs');
+            const cfg = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+            cfg.version = '$VERSION';
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(cfg, null, 2) + '\n');
+          "
+
       - name: Move server-only folders (prebuild)
         shell: bash
         run: |
