@@ -21,7 +21,7 @@ tauri-build = { version = "2.5.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.9.5", features = [] }
+tauri = { version = "2.10.3", features = [] }
 tauri-plugin-log = "2"
 printers = "2.2"
 chrono = "0.4"
@@ -39,5 +39,5 @@ crossbeam-channel = "0.5.11"
 rusqlite = { version = "0.31", features = ["bundled"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 uuid = { version = "1", features = ["v4", "serde"] }
-tauri-plugin-updater = "2"
+tauri-plugin-updater = "2.10"
 tauri-plugin-process = "2"
