@@ -1,5 +1,6 @@
 use printers;
 use printers::common::base::job::PrinterJobOptions;
+use printers::common::converters::Converter;
 use serde::Serialize;
 use tauri::command;
 
@@ -92,6 +93,7 @@ ChronoSnap Photobooth System
             let options = PrinterJobOptions {
                 name: Some("ChronoSnap Test Page"),
                 raw_properties: &[],
+                converter: Converter::None,
             };
             
             // Print the test content
@@ -205,6 +207,7 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
                 let options = PrinterJobOptions {
                     name: Some("ChronoSnap Photo"),
                     raw_properties: &properties,
+                    converter: Converter::None,
                 };
 
                 match p.print(&image_bytes, options) {
