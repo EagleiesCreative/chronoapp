@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getBoothByCode } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
     signBoothToken,
@@ -59,10 +58,16 @@ export async function POST(request: NextRequest) {
 
         const { code } = validation.data;
 
-        // Look up booth by code
-        const booth = await getBoothByCode(code.toUpperCase());
+        // Look up booth by code using admin client (service role) to bypass any permission issues
+        const { data: booth, error: boothError } = await supabaseAdmin
+            .from('booths')
+            .select('*')
+            .eq('booth_code', code.toUpperCase())
+            .eq('status', 'active')
+            .maybeSingle();
 
-        if (!booth) {
+        if (boothError || !booth) {
+            console.error('[booth-login] Booth lookup failed:', boothError?.message ?? 'not found');
             return NextResponse.json(
                 {
                     error: 'Invalid booth code',

@@ -92,11 +92,26 @@ export function AppUpdater() {
                 toast.success('You\'re running the latest version');
             }
         } catch (err: any) {
-            console.error('Update check failed:', err);
             const msg = err?.message || err?.toString() || 'Failed to check for updates';
-            setErrorMessage(msg);
-            setState('error');
-            toast.error('Update check failed');
+
+            // Tauri throws this when the endpoint 404s or has no valid release yet.
+            // Treat it as "up to date / no release published" rather than an error.
+            const isNoRelease =
+                msg.includes('Could not fetch a valid release JSON') ||
+                msg.includes('release JSON') ||
+                msg.includes('status code: 404') ||
+                msg.includes('network error');
+
+            if (isNoRelease) {
+                console.warn('[AppUpdater] No release endpoint found — treating as up to date:', msg);
+                setState('up-to-date');
+                toast.success('You\'re running the latest version');
+            } else {
+                console.error('Update check failed:', err);
+                setErrorMessage(msg);
+                setState('error');
+                toast.error('Update check failed');
+            }
         }
     }, []);
 

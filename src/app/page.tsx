@@ -10,7 +10,7 @@ import { Settings, X, Camera, LogOut, Lock, Loader2, FolderOpen, Image as ImageI
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FrameManager, PrinterSelector, CameraSelector, BackgroundSettings, PrintHistory, SessionManager, SessionSelector, LocalBackupSettings } from '@/components/admin';
+import { FrameManager, PrinterSelector, CameraSelector, BackgroundSettings, PrintHistory, SessionManager, SessionSelector, LocalBackupSettings, AppUpdater } from '@/components/admin';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatIDR } from '@/lib/xendit';
 import { Booth, getActiveBoothSession } from '@/lib/supabase';
@@ -391,6 +391,7 @@ export default function HomePage() {
                 </TabsContent>
 
                 <TabsContent value="config" className="space-y-6">
+                  <AppUpdater />
                   <LocalBackupSettings />
                   <CameraSelector />
                   <PrinterSelector />
