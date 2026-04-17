@@ -31,6 +31,13 @@ pub fn run() {
   tauri::Builder::default()
     .manage(CameraState::new(frame_tx))
     .setup(|app| {
+      // Auto-updater (desktop only)
+      #[cfg(desktop)]
+      app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+
+      // Process plugin (for relaunch after update)
+      app.handle().plugin(tauri_plugin_process::init())?;
+
       let reliability_state = setup_reliability(app)
         .map_err(|e| format!("Failed to initialize reliability worker: {e}"))?;
       app.manage(reliability_state);

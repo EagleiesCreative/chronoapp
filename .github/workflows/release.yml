@@ -1,0 +1,84 @@
+name: Release Framr Studio
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Move server-only folders (prebuild)
+        shell: bash
+        run: |
+          mv src/app/api src/app/_api_backup 2>/dev/null || true
+          mv src/app/share src/app/_share_backup 2>/dev/null || true
+          mv src/app/event src/app/_event_backup 2>/dev/null || true
+
+      - name: Build and release Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          NEXT_PUBLIC_API_URL: https://chronosnap.eagleies.com
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          BUILD_TARGET: tauri
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Framr Studio ${{ github.ref_name }}'
+          releaseBody: |
+            ## Framr Studio ${{ github.ref_name }}
+
+            Download the installer for your platform below.
+            After installing, the app will check for future updates automatically via Admin → Settings → Config.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Restore server-only folders (postbuild)
+        if: always()
+        shell: bash
+        run: |
+          mv src/app/_api_backup src/app/api 2>/dev/null || true
+          mv src/app/_share_backup src/app/share 2>/dev/null || true
+          mv src/app/_event_backup src/app/event 2>/dev/null || true

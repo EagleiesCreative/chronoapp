@@ -39,3 +39,5 @@ crossbeam-channel = "0.5.11"
 rusqlite = { version = "0.31", features = ["bundled"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"

@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FrameManager, CameraSelector, PrinterSelector, SessionManager, SessionSelector, DeviceTelemetryDashboard, BackgroundSettings, LocalBackupSettings, PrintHistory } from '@/components/admin';
+import { FrameManager, CameraSelector, PrinterSelector, SessionManager, SessionSelector, DeviceTelemetryDashboard, BackgroundSettings, LocalBackupSettings, PrintHistory, AppUpdater } from '@/components/admin';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 
@@ -303,6 +303,7 @@ export default function AdminPage() {
                                 </TabsContent>
 
                                 <TabsContent value="config" className="space-y-6">
+                                    <AppUpdater />
                                     <LocalBackupSettings />
                                     <CameraSelector />
                                     <PrinterSelector />

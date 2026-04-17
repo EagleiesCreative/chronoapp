@@ -30,6 +30,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -45,6 +46,12 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkwOEVCMjBBMjZCMUQxODAKUldTQTBiRW1DcktPa0x4VlRTMldnWWFIcFd1b0ZYaGdmSXNzSE9ldXIyeklIYmszK0xXNGdNaVkK",
+      "endpoints": [
+        "https://github.com/EagleiesCreative/chronoapp/releases/latest/download/latest.json"
+      ]
     }
   }
 }

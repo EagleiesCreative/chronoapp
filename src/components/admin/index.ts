@@ -8,3 +8,5 @@ export { PrintHistory } from './PrintHistory';
 export { SessionManager } from './SessionManager';
 export { SessionSelector } from './SessionSelector';
 export { DeviceTelemetryDashboard } from './DeviceTelemetryDashboard';
+export { AppUpdater } from './AppUpdater';
+
