@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createQRCodePayment, getQRCode } from '@/lib/xendit';
 import { supabase } from '@/lib/supabase';
 import { createPayment, createSession, updateSession, getBoothById, getActiveBoothSession } from '@/lib/supabase';
 import { getBoothFromRequest } from '@/lib/booth-auth';
+import { resolvePaymentProvider, createQRISPayment } from '@/lib/payment-gateway';
 
 // Input validation schema
 const createPaymentSchema = z.object({
@@ -13,10 +13,11 @@ const createPaymentSchema = z.object({
 
 /**
  * POST /api/payment/create
- * Create a new payment invoice
- * 
- * SECURITY: Price is fetched server-side from booth settings
- * Client-sent prices are IGNORED for security
+ * Create a new payment invoice — provider is resolved dynamically from the
+ * booth organization's admin user `payment_integration` setting.
+ *
+ * SECURITY: Price is fetched server-side from booth settings.
+ * Client-sent prices are IGNORED.
  */
 export async function POST(request: NextRequest) {
     try {
@@ -45,17 +46,14 @@ export async function POST(request: NextRequest) {
         // SECURITY: Fetch price from booth settings (server-side authority)
         const booth = await getBoothById(boothSession.booth_id);
         if (!booth) {
-            return NextResponse.json(
-                { error: 'Booth not found' },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: 'Booth not found' }, { status: 404 });
         }
 
         // Fetch active booth session for settings
         const activeBoothSession = await getActiveBoothSession(booth.id);
-        const effectivePrice = activeBoothSession?.price ?? booth.price;
+        const effectivePrice         = activeBoothSession?.price ?? booth.price;
         const effectivePaymentBypass = activeBoothSession?.payment_bypass ?? booth.payment_bypass;
-        const boothSessionId = activeBoothSession?.id;
+        const boothSessionId         = activeBoothSession?.id;
 
         // Bypass payment if enabled
         if (effectivePaymentBypass) {
@@ -76,8 +74,8 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        let amount = effectivePrice;
-        let appliedVoucher = null;
+        let amount        = effectivePrice;
+        let appliedVoucher: null | object = null;
         let discountAmount = 0;
 
         // Validate and apply voucher if provided
@@ -92,13 +90,11 @@ export async function POST(request: NextRequest) {
                 .single();
 
             if (voucher && !voucherError) {
-                // Validate voucher
-                const isActive = voucher.is_active;
+                const isActive    = voucher.is_active;
                 const isNotExpired = !voucher.expires_at || new Date(voucher.expires_at) > new Date();
-                const hasUsesLeft = voucher.max_uses === null || voucher.used_count < voucher.max_uses;
+                const hasUsesLeft  = voucher.max_uses === null || voucher.used_count < voucher.max_uses;
 
                 if (isActive && isNotExpired && hasUsesLeft) {
-                    // Calculate discount
                     if (voucher.discount_type === 'fixed') {
                         discountAmount = Math.min(voucher.discount_amount, amount);
                     } else if (voucher.discount_type === 'percentage') {
@@ -107,13 +103,12 @@ export async function POST(request: NextRequest) {
 
                     amount = Math.max(0, amount - discountAmount);
                     appliedVoucher = {
-                        id: voucher.id,
-                        code: voucher.code,
+                        id:             voucher.id,
+                        code:           voucher.code,
                         discount_amount: discountAmount,
-                        discount_type: voucher.discount_type,
+                        discount_type:  voucher.discount_type,
                     };
 
-                    // Increment used_count
                     await supabase
                         .from('vouchers')
                         .update({ used_count: voucher.used_count + 1 })
@@ -122,11 +117,9 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Handle free session (amount = 0)
+        // Handle free session (full voucher discount)
         if (amount <= 0 && appliedVoucher) {
-            // Create session without payment for free vouchers
             const session = await createSession(frameId, booth.id, boothSessionId);
-
             return NextResponse.json({
                 success: true,
                 sessionId: session.id,
@@ -136,60 +129,67 @@ export async function POST(request: NextRequest) {
                 expiryDate: null,
                 amount: 0,
                 originalAmount: effectivePrice,
-                discountAmount: discountAmount,
-                appliedVoucher: appliedVoucher,
+                discountAmount,
+                appliedVoucher,
                 isFree: true,
             });
         }
 
         if (!amount || amount <= 0) {
-            return NextResponse.json(
-                { error: 'Booth price not configured' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: 'Booth price not configured' }, { status: 400 });
         }
 
-        // Create session in database with booth_id and booth_session_id
+        // ── Resolve payment provider ──────────────────────────────────────────
+        const provider = await resolvePaymentProvider(booth.organization_id);
+
+        // Create DB session first
         const session = await createSession(frameId, booth.id, boothSessionId);
 
-        // Generate external ID for Xendit (includes booth_id for revenue tracking)
-        const externalId = `chrono_${booth.id}_${session.id}_${Date.now()}`;
+        // External ID includes provider prefix for easy identification in webhooks
+        const externalId = `chrono_${provider}_${booth.id}_${session.id}_${Date.now()}`;
 
-        // Create a native Dynamic QR Code with Xendit
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://chrono-snap.onrender.com';
-        const qrCode = await createQRCodePayment(
-            externalId,
-            amount,
-            `${appUrl}/api/payment/webhook`
-        );
+        const appUrl     = process.env.NEXT_PUBLIC_APP_URL || 'https://chrono-snap.onrender.com';
+        const callbackUrl = provider === 'doku'
+            ? `${appUrl}/api/payment/webhook-doku`
+            : `${appUrl}/api/payment/webhook`;
 
-        // Store payment in database with booth_id
+        // Create QRIS via the resolved provider
+        const qris = await createQRISPayment(provider, externalId, amount, callbackUrl);
+
+        // Store payment in DB (xendit_invoice_id field is reused as generic invoice_id)
         const payment = await createPayment(
             session.id,
-            qrCode.id,
+            qris.id,
             null,
             amount,
-            booth.id
+            booth.id,
         );
 
-        // Update session with payment ID
+        // Persist provider alongside the payment record
+        await supabase
+            .from('payments')
+            .update({ provider })
+            .eq('id', payment.id);
+
+        // Link session ↔ payment
         await updateSession(session.id, { payment_id: payment.id });
 
         return NextResponse.json({
             success: true,
             sessionId: session.id,
             paymentId: payment.id,
-            invoiceId: qrCode.id,
-            invoiceUrl: qrCode.qr_string, // Render the raw QR string directly
-            expiryDate: qrCode.expires_at || null,
-            amount: amount,
+            invoiceId: qris.id,
+            invoiceUrl: qris.qrString,   // Raw QRIS string rendered into QR image client-side
+            expiryDate: qris.expiresAt ?? null,
+            amount,
             originalAmount: effectivePrice,
-            discountAmount: discountAmount,
-            appliedVoucher: appliedVoucher,
+            discountAmount,
+            appliedVoucher,
             isFree: false,
+            provider,
         });
     } catch (error) {
-        console.error('Payment creation error:', error);
+        console.error('/api/payment/create POST error:', error);
         return NextResponse.json(
             { error: error instanceof Error ? error.message : 'Failed to create payment' },
             { status: 500 }

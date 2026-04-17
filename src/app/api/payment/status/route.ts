@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getQRCode, getQRCodePayments } from '@/lib/xendit';
 import { getPaymentBySessionId, updatePaymentStatus, updateSession } from '@/lib/supabase';
 import { getBoothFromRequest } from '@/lib/booth-auth';
+import { checkQRISStatus, PaymentProvider } from '@/lib/payment-gateway';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
     try {
@@ -15,7 +16,6 @@ export async function GET(request: NextRequest) {
         }
 
         let sessionId: string | null = null;
-
         try {
             const { searchParams } = new URL(request.url);
             sessionId = searchParams.get('sessionId');
@@ -25,54 +25,32 @@ export async function GET(request: NextRequest) {
         }
 
         if (!sessionId) {
-            return NextResponse.json(
-                { error: 'sessionId is required' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
         }
 
         // Get payment from database
         const payment = await getPaymentBySessionId(sessionId);
-
         if (!payment) {
-            return NextResponse.json(
-                { error: 'Payment not found' },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
         }
 
-        // Check status with Xendit
-        let status: 'pending' | 'paid' | 'expired' | 'failed' = 'pending';
-        
-        try {
-            const payments = await getQRCodePayments(payment.xendit_invoice_id);
-            if (payments && payments.length > 0) {
-                const isPaid = payments.some(p => p.status === 'COMPLETED' || p.status === 'SUCCEEDED' || p.status === 'PAID');
-                if (isPaid) {
-                    status = 'paid';
-                }
-            }
-        } catch (err) {
-            console.warn('Failed to get QR payments, might not exist yet:', err);
-        }
+        // Read the payment provider stored at creation time
+        const { data: paymentRecord } = await supabase
+            .from('payments')
+            .select('provider, amount')
+            .eq('id', payment.id)
+            .single();
 
-        if (status === 'pending') {
-            // Check if QR code is expired
-            try {
-                const qrCode = await getQRCode(payment.xendit_invoice_id);
-                if (qrCode.status === 'INACTIVE') {
-                    status = 'expired';
-                }
-            } catch (err) {
-                console.error('Failed to get QR code status:', err);
-            }
-        }
+        const provider = (paymentRecord?.provider ?? 'xendit') as PaymentProvider;
+        const amount   = paymentRecord?.amount ?? payment.amount;
+
+        // Check status with the correct provider
+        const { status } = await checkQRISStatus(provider, payment.xendit_invoice_id, amount);
 
         // Update payment status if changed
         if (status !== payment.status) {
             await updatePaymentStatus(payment.xendit_invoice_id, status);
 
-            // Update session status if paid
             if (status === 'paid') {
                 await updateSession(sessionId, { status: 'paid' });
             }
@@ -84,9 +62,10 @@ export async function GET(request: NextRequest) {
             paymentId: payment.id,
             invoiceId: payment.xendit_invoice_id,
             amount: payment.amount,
+            provider,
         });
     } catch (error) {
-        console.error('Payment status check error:', error);
+        console.error('/api/payment/status GET error:', error);
         return NextResponse.json(
             { error: error instanceof Error ? error.message : 'Failed to check payment status' },
             { status: 500 }
