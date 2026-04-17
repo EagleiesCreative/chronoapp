@@ -7,15 +7,33 @@ let _supabaseClient: SupabaseClient | null = null;
 function getSupabaseClient(): SupabaseClient {
   if (!_supabaseClient) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    _supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    
+    // Server-side: Prefer service role key for all operations
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    // Only use anon key if we are in the browser or if service role key is missing
+    const isServer = typeof window === 'undefined';
+    const keyToUse = (isServer && serviceRoleKey) ? serviceRoleKey : anonKey;
+
+    if (!keyToUse) {
+      throw new Error('Supabase key missing: Need service role key on server or anon key on client.');
+    }
+    
+    _supabaseClient = createClient(supabaseUrl, keyToUse, {
+      auth: {
+        autoRefreshToken: isServer ? false : true,
+        persistSession: isServer ? false : true,
+      }
+    });
   }
   return _supabaseClient;
 }
 
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_target, prop) {
-    return (getSupabaseClient() as any)[prop];
+    const client = getSupabaseClient();
+    return (client as any)[prop];
   },
 });
 
