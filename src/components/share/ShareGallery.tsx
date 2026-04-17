@@ -56,18 +56,23 @@ export function ShareGallery({
     };
 
     const handleDownload = async (url?: string) => {
-        const downloadUrl = url || currentPhoto;
-        if (!downloadUrl || isDownloading) return;
+        const targetUrl = url || currentPhoto;
+        if (!targetUrl || isDownloading) return;
 
         setIsDownloading(true);
         try {
+            const suffix = viewMode === 'strip' ? 'strip' : `photo_${currentIndex + 1}`;
+            const filename = `${eventName.replace(/\s+/g, '_')}_${suffix}.jpg`;
+            
+            // Use our proxy to avoid CORS issues
+            const downloadUrl = `/api/download?url=${encodeURIComponent(targetUrl)}&filename=${encodeURIComponent(filename)}`;
+            
             const response = await fetch(downloadUrl);
             const blob = await response.blob();
             const blobUrl = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = blobUrl;
-            const suffix = viewMode === 'strip' ? 'strip' : `photo_${currentIndex + 1}`;
-            link.download = `${eventName.replace(/\s+/g, '_')}_${suffix}.jpg`;
+            link.download = filename;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -84,18 +89,22 @@ export function ShareGallery({
 
         setIsDownloading(true);
         try {
-            const response = await fetch(videoUrl);
+            // Determine correct extension
+            let extension = 'gif';
+            if (videoUrl.includes('.mp4')) extension = 'mp4';
+            else if (videoUrl.includes('.webm')) extension = 'webm';
+            
+            const filename = `${eventName.replace(/\s+/g, '_')}_live_video_frame.${extension}`;
+            
+            // Use our proxy to avoid CORS issues
+            const downloadUrl = `/api/download?url=${encodeURIComponent(videoUrl)}&filename=${encodeURIComponent(filename)}`;
+
+            const response = await fetch(downloadUrl);
             const blob = await response.blob();
             const blobUrl = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = blobUrl;
-            
-            // Determine correct extension
-            let extension = 'gif';
-            if (videoUrl.includes('.mp4') || blob.type === 'video/mp4') extension = 'mp4';
-            else if (videoUrl.includes('.webm') || blob.type === 'video/webm') extension = 'webm';
-            
-            link.download = `${eventName.replace(/\s+/g, '_')}_live_video_frame.${extension}`;
+            link.download = filename;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -136,13 +145,18 @@ export function ShareGallery({
         try {
             // Download photos
             for (let i = 0; i < photos.length; i++) {
-                const response = await fetch(photos[i]);
+                const targetUrl = photos[i];
+                const suffix = i === 0 ? 'strip' : `photo_${i}`;
+                const filename = `${eventName.replace(/\s+/g, '_')}_${suffix}.jpg`;
+                
+                const downloadUrl = `/api/download?url=${encodeURIComponent(targetUrl)}&filename=${encodeURIComponent(filename)}`;
+
+                const response = await fetch(downloadUrl);
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                const suffix = i === 0 ? 'strip' : `photo_${i}`;
-                link.download = `${eventName.replace(/\s+/g, '_')}_${suffix}.jpg`;
+                link.download = filename;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -151,17 +165,19 @@ export function ShareGallery({
             }
             // Also download video if available
             if (videoUrl) {
-                const response = await fetch(videoUrl);
+                let extension = 'gif';
+                if (videoUrl.includes('.mp4')) extension = 'mp4';
+                else if (videoUrl.includes('.webm')) extension = 'webm';
+                
+                const filename = `${eventName.replace(/\s+/g, '_')}_live_video_frame.${extension}`;
+                const downloadUrl = `/api/download?url=${encodeURIComponent(videoUrl)}&filename=${encodeURIComponent(filename)}`;
+
+                const response = await fetch(downloadUrl);
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                
-                let extension = 'gif';
-                if (videoUrl.includes('.mp4') || blob.type === 'video/mp4') extension = 'mp4';
-                else if (videoUrl.includes('.webm') || blob.type === 'video/webm') extension = 'webm';
-                
-                link.download = `${eventName.replace(/\s+/g, '_')}_live_video_frame.${extension}`;
+                link.download = filename;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);

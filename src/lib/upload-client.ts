@@ -1,38 +1,15 @@
 'use client';
 
 /**
- * Client-side upload utility for direct Supabase Storage uploads.
+ * Client-side upload utility for Cloudflare R2 via API Route.
  * 
- * This module ONLY uses the public anon key (NEXT_PUBLIC_ env vars),
- * making it safe to import from client components without bundling
- * server-only code.
- * 
- * Falls back to the /api/upload API route if direct upload fails,
- * ensuring uploads work even without Supabase Storage RLS policies.
+ * Routes all uploads through the /api/upload endpoint, ensuring 
+ * seamless integration with the server's cloud storage backend.
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
-// Lazy-initialize client-only Supabase instance to avoid build-time crashes
-let _supabaseClient: SupabaseClient | null = null;
-function getClient(): SupabaseClient {
-    if (!_supabaseClient) {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-        _supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-    }
-    return _supabaseClient;
-}
-
-const supabaseClient = new Proxy({} as SupabaseClient, {
-    get(_target, prop) {
-        return (getClient() as any)[prop];
-    },
-});
 
 /**
- * Upload directly to Supabase Storage with retry logic.
- * Falls back to the API route proxy if direct upload fails.
+ * Upload securely to Cloudflare R2 via API Route proxy with retries.
  */
 async function uploadToStorage(
     filePath: string,
@@ -42,60 +19,44 @@ async function uploadToStorage(
 ): Promise<string> {
     let lastError: Error | null = null;
 
-    // Attempt 1: Direct Supabase Storage upload (bypasses Vercel body limit)
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-            const { error } = await supabaseClient.storage
-                .from('photos')
-                .upload(filePath, blob, {
-                    contentType,
-                    upsert: true,
-                });
+            const formData = new FormData();
+            let extension = 'jpg';
+            if (contentType === 'image/gif') extension = 'gif';
+            else if (contentType.includes('mp4')) extension = 'mp4';
+            else if (contentType.includes('webm')) extension = 'webm';
+            
+            formData.append('file', blob, `upload.${extension}`);
+            
+            // Extract folder from filePath (e.g. "sessions/uuid" from "sessions/uuid/file.jpg")
+            // Wait, api/upload route only accepts ['frames', 'photos', 'sessions', 'backgrounds'].
+            // Since uploadFinalImageClient sends `sessions/uuid/...`, folder should just be `sessions`.
+            const folder = filePath.split('/')[0] || 'photos';
+            formData.append('folder', folder);
 
-            if (error) throw error;
+            const { getApiUrl } = await import('@/lib/api');
+            const url = getApiUrl('/api/upload');
 
-            const { data } = supabaseClient.storage.from('photos').getPublicUrl(filePath);
-            return data.publicUrl;
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData,
+                credentials: 'include',
+            });
+
+            const data = await response.json();
+            if (data.success && data.url) {
+                return data.url;
+            }
+            throw new Error(data.error || 'API upload failed');
         } catch (err) {
             lastError = err instanceof Error ? err : new Error(String(err));
-            console.warn(`[Upload] Direct attempt ${attempt + 1}/${maxRetries} failed:`, lastError.message);
+            console.warn(`[Upload] Attempt ${attempt + 1}/${maxRetries} failed:`, lastError.message);
 
             if (attempt < maxRetries - 1) {
                 await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
             }
         }
-    }
-
-    // Attempt 2: Fallback to API route proxy (smaller files may work within Vercel limits)
-    console.log('[Upload] Falling back to API route proxy...');
-    try {
-        const formData = new FormData();
-        let extension = 'jpg';
-        if (contentType === 'image/gif') extension = 'gif';
-        else if (contentType.includes('mp4')) extension = 'mp4';
-        else if (contentType.includes('webm')) extension = 'webm';
-        
-        formData.append('file', blob, `upload.${extension}`);
-        // Extract folder from filePath (e.g. "sessions/uuid" from "sessions/uuid/file.jpg")
-        const folder = filePath.split('/').slice(0, -1).join('/');
-        formData.append('folder', folder);
-
-        const { getApiUrl } = await import('@/lib/api');
-        const url = getApiUrl('/api/upload');
-
-        const response = await fetch(url, {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',
-        });
-
-        const data = await response.json();
-        if (data.success && data.url) {
-            return data.url;
-        }
-        throw new Error(data.error || 'API upload failed');
-    } catch (fallbackErr) {
-        console.error('[Upload] API fallback also failed:', fallbackErr);
     }
 
     throw lastError || new Error('Upload failed after all attempts');

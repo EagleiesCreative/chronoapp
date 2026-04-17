@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireAuth } from '@/lib/admin-auth';
 import { getBoothFromRequest } from '@/lib/booth-auth';
+import { uploadBufferToR2 } from '@/lib/r2';
 
 // Allowed file types (images and GIF)
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
@@ -69,26 +69,16 @@ export async function POST(request: NextRequest) {
         const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(originalExt) ? originalExt : 'png';
         const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${safeExt}`;
 
-        // Convert File to ArrayBuffer then to Buffer for Supabase
+        // Convert File to ArrayBuffer then to Buffer
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Upload to Supabase Storage (using admin client to bypass RLS)
-        const { error: uploadError } = await supabaseAdmin.storage
-            .from('photos')
-            .upload(fileName, buffer, {
-                contentType: file.type,
-                upsert: true,
-            });
-
-        if (uploadError) throw uploadError;
-
-        // Get public URL
-        const { data } = supabaseAdmin.storage.from('photos').getPublicUrl(fileName);
+        // Upload to Cloudflare R2
+        const r2Url = await uploadBufferToR2(fileName, buffer, file.type);
 
         return NextResponse.json({
             success: true,
-            url: data.publicUrl,
+            url: r2Url,
             fileName,
         });
     } catch (error) {
