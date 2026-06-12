@@ -23,7 +23,11 @@ export function CaptureOverlay({
                 className="absolute inset-0 bg-white z-50 pointer-events-none"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: flashActive ? 1 : 0 }}
-                transition={{ duration: 0.1 }}
+                transition={{ 
+                    type: 'tween', 
+                    duration: flashActive ? 0.05 : 0.45, 
+                    ease: flashActive ? 'easeOut' : 'easeIn' 
+                }}
             />
 
             {/* Countdown overlay */}

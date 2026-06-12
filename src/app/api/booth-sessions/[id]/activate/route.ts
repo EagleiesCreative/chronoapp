@@ -30,6 +30,11 @@ export async function PUT(
             return NextResponse.json({ error: 'Session not found' }, { status: 404 });
         }
 
+        // Verify booth session ownership
+        if (session.booth_id !== boothAuth.booth_id) {
+            return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+
         // Deactivate all sessions for this booth
         const { error: deactivateError } = await supabase
             .from('booth_sessions')

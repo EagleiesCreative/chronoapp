@@ -26,13 +26,13 @@ export function CountdownScreen() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen flex flex-col items-center justify-center bg-white kiosk relative overflow-hidden"
+            className="h-full w-full flex flex-col items-center justify-center bg-white kiosk relative overflow-hidden"
         >
             {/* Photo counter */}
             <motion.div
                 initial={{ y: -30, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                className="absolute top-12 text-center"
+                className="absolute top-[6%] text-center"
             >
                 <p className="text-lg font-light text-muted-foreground">
                     Photo {currentPhotoIndex + 1} of {totalPhotos}
@@ -73,16 +73,16 @@ export function CountdownScreen() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
-                className="absolute bottom-24 text-lg font-light text-muted-foreground"
+                className="absolute bottom-[8%] text-lg font-light text-muted-foreground"
             >
                 {count > 0 ? 'Get ready...' : 'Smile!'}
             </motion.p>
 
             {/* Minimal corner decorations */}
-            <div className="absolute top-8 left-8 w-12 h-12 border-l border-t border-border rounded-tl-xl" />
-            <div className="absolute top-8 right-8 w-12 h-12 border-r border-t border-border rounded-tr-xl" />
-            <div className="absolute bottom-8 left-8 w-12 h-12 border-l border-b border-border rounded-bl-xl" />
-            <div className="absolute bottom-8 right-8 w-12 h-12 border-r border-b border-border rounded-br-xl" />
+            <div className="absolute top-[3%] left-8 w-10 h-10 border-l border-t border-border rounded-tl-xl" />
+            <div className="absolute top-[3%] right-8 w-10 h-10 border-r border-t border-border rounded-tr-xl" />
+            <div className="absolute bottom-[3%] left-8 w-10 h-10 border-l border-b border-border rounded-bl-xl" />
+            <div className="absolute bottom-[3%] right-8 w-10 h-10 border-r border-b border-border rounded-br-xl" />
         </motion.div>
     );
 }

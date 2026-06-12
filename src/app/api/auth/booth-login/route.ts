@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
             'unknown';
 
         // Check rate limit
-        const rateLimit = checkRateLimit(ip);
+        const rateLimit = await checkRateLimit(ip);
         if (!rateLimit.allowed) {
             return NextResponse.json(
                 {
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Reset rate limit on success
-        resetRateLimit(ip);
+        await resetRateLimit(ip);
 
         // Generate unique device token for this login session
         const deviceToken = generateDeviceToken();

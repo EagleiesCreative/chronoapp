@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
+import { checkRateLimitRedis, resetRateLimitRedis } from '@/lib/redis';
 
 const BOOTH_COOKIE_NAME = 'chronosnap_booth_session';
 
@@ -149,7 +150,14 @@ const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 60 * 1000; // 1 minute
 
-export function checkRateLimit(identifier: string): { allowed: boolean; remainingAttempts: number } {
+export async function checkRateLimit(identifier: string): Promise<{ allowed: boolean; remainingAttempts: number }> {
+    try {
+        const result = await checkRateLimitRedis(identifier, MAX_ATTEMPTS, 60);
+        return { allowed: result.allowed, remainingAttempts: result.remaining };
+    } catch (err) {
+        console.warn('[booth-auth] Redis rate limit failed, falling back to local memory:', err);
+    }
+
     const now = Date.now();
     const record = loginAttempts.get(identifier);
 
@@ -167,7 +175,12 @@ export function checkRateLimit(identifier: string): { allowed: boolean; remainin
 }
 
 
-export function resetRateLimit(identifier: string): void {
+export async function resetRateLimit(identifier: string): Promise<void> {
+    try {
+        await resetRateLimitRedis(identifier);
+    } catch (err) {
+        console.warn('[booth-auth] Redis reset rate limit failed:', err);
+    }
     loginAttempts.delete(identifier);
 }
 

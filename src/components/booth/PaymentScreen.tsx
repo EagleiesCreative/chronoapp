@@ -169,7 +169,7 @@ export function PaymentScreen() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen bg-white font-sans text-slate-900 flex flex-col md:flex-row border-t-4 border-yellow-400"
+            className="h-full w-full bg-white font-sans text-slate-900 flex flex-col md:flex-row border-t-4 border-yellow-400 overflow-hidden"
         >
             {/* Left Column: Instructions */}
             <div className="flex-1 p-8 md:p-12 border-r border-slate-100 flex flex-col justify-between">

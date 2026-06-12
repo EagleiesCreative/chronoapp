@@ -117,7 +117,7 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="min-h-screen flex items-center justify-center bg-white p-8"
+            className="h-full w-full flex items-center justify-center bg-white p-8 overflow-hidden"
         >
             <motion.div
                 initial={{ y: 20, opacity: 0 }}

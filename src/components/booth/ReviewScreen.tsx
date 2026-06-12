@@ -588,7 +588,7 @@ export function ReviewScreen() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="h-screen flex flex-col items-center justify-center p-6 bg-white kiosk overflow-hidden"
+                className="h-full w-full flex flex-col items-center justify-center p-6 bg-white kiosk overflow-hidden"
             >
                 <canvas ref={canvasRef} className="hidden" />
 
@@ -625,7 +625,7 @@ export function ReviewScreen() {
                     )}
                 </motion.div>
 
-                <div className="flex-1 flex gap-8 items-center w-full max-w-4xl justify-center py-4">
+                <div className="flex-1 flex gap-8 items-center w-full max-w-4xl justify-center py-2 min-h-0">
                     <motion.div
                         initial={{ scale: 0.95, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
@@ -750,7 +750,7 @@ export function ReviewScreen() {
                                 <img
                                     src={effectiveCompositeImage || ''}
                                     alt="Final composite"
-                                    className="max-h-[calc(100vh-220px)] w-auto object-contain"
+                                    className="max-h-[calc(100vh-280px)] w-auto object-contain"
                                 />
                             )}
                         </div>

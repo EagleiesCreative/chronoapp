@@ -43,7 +43,7 @@ export function FinalReviewScreen() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen kiosk p-6 md:p-12 flex relative overflow-hidden"
+            className="h-full w-full kiosk flex relative overflow-hidden"
             style={backgroundStyle}
         >
             {/* Subtle overlay for readability if background is present */}
@@ -51,27 +51,27 @@ export function FinalReviewScreen() {
                 <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] z-0" />
             )}
 
-            <div className="mx-auto w-full max-w-6xl flex flex-col relative z-10">
+            <div className="mx-auto w-full max-w-6xl h-full flex flex-col relative z-10 p-4 md:p-8">
                 <motion.div
                     initial={{ y: -20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    className="text-center mb-10"
+                    className="text-center mb-4 shrink-0"
                 >
                     <h2 className={cn(
-                        "text-4xl md:text-5xl font-light tracking-tight mb-3",
+                        "text-3xl md:text-4xl font-light tracking-tight mb-2",
                         hasDarkBackground ? "text-white text-shadow-dark" : "text-foreground"
                     )}>
                         Final Review
                     </h2>
                     <p className={cn(
-                        "text-lg font-light max-w-md mx-auto",
+                        "text-base font-light max-w-md mx-auto",
                         hasDarkBackground ? "text-white/80 text-shadow-dark" : "text-muted-foreground"
                     )}>
                         Review your shots. Retake any that didn&apos;t turn out quite right.
                     </p>
                 </motion.div>
 
-                <div className="flex-1 flex flex-col items-center justify-center">
+                <div className="flex-1 flex flex-col items-center justify-center min-h-0 overflow-y-auto">
 
                 {capturedPhotos.length > 0 ? (
                     <div className="mb-8">
@@ -226,7 +226,7 @@ export function FinalReviewScreen() {
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.4 }}
-                    className="flex flex-col items-center gap-6 mt-4"
+                    className="flex flex-col items-center gap-4 mt-3 shrink-0 pb-2"
                 >
                     <Button
                         size="lg"

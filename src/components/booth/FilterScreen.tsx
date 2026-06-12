@@ -31,18 +31,18 @@ export function FilterScreen() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="h-screen flex flex-col items-center justify-center p-6 bg-white kiosk overflow-hidden"
+            className="h-full w-full flex flex-col items-center bg-white kiosk overflow-hidden py-4 px-6"
         >
             {/* Header */}
             <motion.div
                 initial={{ y: -20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                className="text-center shrink-0 mb-4"
+                className="text-center shrink-0 mb-3"
             >
-                <div className="inline-flex items-center justify-center w-10 h-10 rounded-full border border-border mb-2">
-                    <Sparkles className="w-5 h-5 text-primary" strokeWidth={1.5} />
+                <div className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border mb-1.5">
+                    <Sparkles className="w-4 h-4 text-primary" strokeWidth={1.5} />
                 </div>
-                <h2 className="text-xl font-light mb-1">Choose a Filter</h2>
+                <h2 className="text-xl font-light mb-0.5">Choose a Filter</h2>
                 <p className="text-muted-foreground font-light text-sm">
                     Add a creative touch to your photos
                 </p>
@@ -53,15 +53,15 @@ export function FilterScreen() {
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.1 }}
-                className="flex-1 flex items-center justify-center max-h-[50vh] mb-4"
+                className="flex-1 flex items-center justify-center min-h-0 mb-3 w-full"
             >
-                <div className="elegant-card overflow-hidden rounded-xl relative">
+                <div className="elegant-card overflow-hidden rounded-xl relative max-h-full">
                     {firstPhoto ? (
                         <>
                             <img
                                 src={firstPhoto}
                                 alt="Filtered preview"
-                                className="max-h-[45vh] w-auto object-contain transition-[filter] duration-200"
+                                className="max-h-[42vh] w-auto object-contain transition-[filter] duration-200"
                                 style={{ filter: currentFilter.cssFilter }}
                             />
                             {currentFilter.overlay && (
@@ -84,7 +84,7 @@ export function FilterScreen() {
                 initial={{ y: 30, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.2 }}
-                className="w-full max-w-2xl mb-4"
+                className="w-full max-w-2xl mb-3 shrink-0"
             >
                 <div className="flex gap-3 overflow-x-auto pb-2 justify-center hide-scrollbar">
                     {PHOTO_FILTERS.map((filter) => (
@@ -125,6 +125,7 @@ export function FilterScreen() {
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.3 }}
+                className="shrink-0 pb-2"
             >
                 <Button
                     size="lg"

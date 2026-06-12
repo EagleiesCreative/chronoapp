@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
         const { error } = await admin
             .from('sessions')
             .update(updates)
-            .eq('id', sessionId);
+            .eq('id', sessionId)
+            .eq('booth_id', boothSession.booth_id);
 
         if (error) throw error;
 

@@ -42,6 +42,14 @@ function hexToHSL(hex: string): string {
     return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
+const STEPS = [
+    { label: 'Frame', activeSteps: ['select-frame'] },
+    { label: 'Payment', activeSteps: ['voucher', 'payment'] },
+    { label: 'Capture', activeSteps: ['countdown', 'capturing'] },
+    { label: 'Filter', activeSteps: ['filter'] },
+    { label: 'Review', activeSteps: ['final-review', 'review'] }
+];
+
 export function BoothLayout() {
     const { step } = useBoothStore();
     const { booth } = useTenantStore();
@@ -64,25 +72,69 @@ export function BoothLayout() {
 
     const isNewspaper = booth?.booth_type === 'A3_NEWSPAPER';
 
+    const currentStepIndex = STEPS.findIndex((s) => s.activeSteps.includes(step));
+    const showProgress = step !== 'idle' && currentStepIndex !== -1;
+
     return (
         <BoothErrorBoundary fallbackMessage="The photo booth encountered an unexpected error. Don't worry, we'll get you back on track.">
             <div 
                 style={brandingStyle} 
-                className={isNewspaper ? 'newspaper-layout w-full min-h-screen' : 'w-full min-h-screen'}
+                className={isNewspaper ? 'newspaper-layout w-full h-screen flex flex-col overflow-hidden select-none' : 'w-full h-screen flex flex-col overflow-hidden select-none'}
             >
-                <CameraProvider>
-                    <AnimatePresence mode="wait">
-                        {step === 'idle' && <IdleScreen key="idle" />}
-                        {step === 'voucher' && <VoucherScreen key="voucher" />}
-                        {step === 'select-frame' && <FrameSelector key="select-frame" />}
-                        {step === 'payment' && <PaymentScreen key="payment" />}
-                        {step === 'countdown' && <CountdownScreen key="countdown" />}
-                        {step === 'capturing' && <CaptureScreen key="capturing" />}
-                        {step === 'filter' && <FilterScreen key="filter" />}
-                        {step === 'final-review' && <FinalReviewScreen key="final-review" />}
-                        {step === 'review' && <ReviewScreen key="review" />}
-                    </AnimatePresence>
-                </CameraProvider>
+                {showProgress && (
+                    <div className="w-full bg-white/80 backdrop-blur-md border-b border-border/50 py-2.5 px-6 flex justify-center items-center select-none z-40">
+                        <div className="flex items-center gap-1 max-w-lg w-full justify-between">
+                            {STEPS.map((s, idx) => {
+                                const isCompleted = idx < currentStepIndex;
+                                const isActive = idx === currentStepIndex;
+                                return (
+                                    <div key={idx} className="flex items-center flex-1 last:flex-none">
+                                        <div className="flex items-center gap-1.5">
+                                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all duration-300 ${
+                                                isActive 
+                                                    ? 'bg-primary text-primary-foreground font-bold scale-105 shadow-sm' 
+                                                    : isCompleted 
+                                                        ? 'bg-primary/20 text-primary font-medium' 
+                                                        : 'bg-muted text-muted-foreground'
+                                            }`}>
+                                                {isCompleted ? '✓' : idx + 1}
+                                            </div>
+                                            <span className={`text-[10px] font-medium hidden sm:inline transition-colors duration-300 ${
+                                                isActive ? 'text-foreground font-bold' : 'text-muted-foreground'
+                                            }`}>
+                                                {s.label}
+                                            </span>
+                                        </div>
+                                        {idx < STEPS.length - 1 && (
+                                            <div className="flex-1 h-0.5 mx-1.5 bg-muted relative overflow-hidden">
+                                                <div 
+                                                    className="absolute inset-y-0 left-0 right-0 bg-primary origin-left transition-transform duration-500 ease-out"
+                                                    style={{ transform: `scaleX(${isCompleted ? 1 : 0})` }}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex-1 w-full relative overflow-hidden">
+                    <CameraProvider>
+                        <AnimatePresence mode="wait">
+                            {step === 'idle' && <IdleScreen key="idle" />}
+                            {step === 'voucher' && <VoucherScreen key="voucher" />}
+                            {step === 'select-frame' && <FrameSelector key="select-frame" />}
+                            {step === 'payment' && <PaymentScreen key="payment" />}
+                            {step === 'countdown' && <CountdownScreen key="countdown" />}
+                            {step === 'capturing' && <CaptureScreen key="capturing" />}
+                            {step === 'filter' && <FilterScreen key="filter" />}
+                            {step === 'final-review' && <FinalReviewScreen key="final-review" />}
+                            {step === 'review' && <ReviewScreen key="review" />}
+                        </AnimatePresence>
+                    </CameraProvider>
+                </div>
             </div>
         </BoothErrorBoundary>
     );

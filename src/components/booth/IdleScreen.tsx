@@ -64,7 +64,7 @@ export function IdleScreen() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen flex flex-col items-center justify-center p-8 kiosk relative"
+            className="h-full w-full flex flex-col items-center justify-center p-8 kiosk relative overflow-hidden"
             style={hasLivePreviewBackground ? { backgroundColor: '#0a0a0a' } : backgroundStyle}
         >
             <BoothStatusIndicator />

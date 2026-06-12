@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSession, clearSession, checkSession } from '@/lib/admin-auth';
 import { getBoothFromRequest } from '@/lib/booth-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { timingSafeEqual } from 'crypto';
+import { checkRateLimitRedis } from '@/lib/redis';
 
 // POST - Login with PIN
 export async function POST(request: NextRequest) {
@@ -12,6 +14,20 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
                 { error: 'PIN is required' },
                 { status: 400 }
+            );
+        }
+
+        // Get client IP for rate limiting
+        const ip = request.headers.get('x-forwarded-for') ||
+            request.headers.get('x-real-ip') ||
+            'unknown';
+
+        // Check rate limit (Max 5 attempts per minute for Admin PIN)
+        const rateLimit = await checkRateLimitRedis(`admin_login:${ip}`, 5, 60);
+        if (!rateLimit.allowed) {
+            return NextResponse.json(
+                { error: 'Too many login attempts. Please try again in 1 minute.' },
+                { status: 429 }
             );
         }
 
@@ -39,8 +55,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Verify PIN against booth's app_pin
-        if (!booth.app_pin || pin !== booth.app_pin) {
+        // Verify PIN against booth's app_pin in constant time
+        const pinBuffer = Buffer.from(pin);
+        const storedPinBuffer = Buffer.from(booth.app_pin || '');
+        const isMatch = pinBuffer.length === storedPinBuffer.length && 
+                        timingSafeEqual(pinBuffer, storedPinBuffer);
+
+        if (!booth.app_pin || !isMatch) {
             return NextResponse.json(
                 { error: 'Invalid PIN' },
                 { status: 401 }

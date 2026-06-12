@@ -102,19 +102,21 @@ export function VoucherScreen() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen flex flex-col items-center justify-center p-6 bg-white kiosk"
+            className="h-full w-full flex flex-col bg-white kiosk overflow-hidden"
         >
+            {/* Scrollable content area */}
+            <div className="flex-1 overflow-y-auto flex flex-col items-center py-4 px-6 min-h-0">
             {/* Header */}
             <motion.div
                 initial={{ y: -20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                className="text-center mb-6"
+                className="text-center mb-4 shrink-0"
             >
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border border-border mb-4">
-                    <Tag className="w-7 h-7 text-primary" strokeWidth={1.5} />
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full border border-border mb-3">
+                    <Tag className="w-5 h-5 text-primary" strokeWidth={1.5} />
                 </div>
-                <h2 className="text-3xl font-light mb-2">Enter Voucher Code</h2>
-                <p className="text-muted-foreground font-light">
+                <h2 className="text-2xl font-light mb-1">Enter Voucher Code</h2>
+                <p className="text-muted-foreground font-light text-sm">
                     Use an on-screen keyboard to enter your voucher
                 </p>
             </motion.div>
@@ -124,7 +126,7 @@ export function VoucherScreen() {
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.1 }}
-                className="text-center mb-4"
+                className="text-center mb-3 shrink-0"
             >
                 {discountValue > 0 && (
                     <div className="mb-1">
@@ -146,7 +148,7 @@ export function VoucherScreen() {
                 <motion.div
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-full mb-4"
+                    className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-full mb-3 shrink-0"
                 >
                     <Check className="w-4 h-4 text-green-600" />
                     <span className="text-green-800 font-medium">{appliedVoucher.code}</span>
@@ -166,7 +168,7 @@ export function VoucherScreen() {
                 initial={{ y: 10, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.2 }}
-                className="w-full max-w-md mb-4"
+                className="w-full max-w-md mb-3 shrink-0"
             >
                 <div className="relative">
                     <div className="h-16 px-6 rounded-xl border-2 border-border bg-gray-50 flex items-center justify-center">
@@ -195,17 +197,17 @@ export function VoucherScreen() {
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.3 }}
-                className="w-full max-w-lg space-y-2 mb-6"
+                className="w-full max-w-lg space-y-1.5 mb-4 shrink-0"
             >
                 {keyboardRows.map((row, rowIndex) => (
-                    <div key={rowIndex} className="flex justify-center gap-1.5">
+                    <div key={rowIndex} className="flex justify-center gap-1">
                         {row.map((key) => (
                             <Button
                                 key={key}
                                 variant="outline"
                                 onClick={() => handleKeyPress(key)}
                                 disabled={isValidating}
-                                className="w-11 h-11 text-lg font-medium rounded-lg hover:bg-gray-100 active:bg-gray-200 touch-target"
+                                className="w-10 h-10 text-base font-medium rounded-lg hover:bg-gray-100 active:bg-gray-200 touch-target"
                             >
                                 {key}
                             </Button>
@@ -248,13 +250,13 @@ export function VoucherScreen() {
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.4 }}
-                className="flex gap-4"
+                className="flex gap-4 shrink-0 pb-3"
             >
                 <Button
                     variant="ghost"
                     size="lg"
                     onClick={handleBack}
-                    className="px-8 py-6 text-base font-normal rounded-full border border-border touch-target"
+                    className="px-8 py-5 text-base font-normal rounded-full border border-border touch-target"
                 >
                     <ArrowLeft className="w-4 h-4 mr-2" strokeWidth={1.5} />
                     Back
@@ -262,11 +264,12 @@ export function VoucherScreen() {
                 <Button
                     size="lg"
                     onClick={handleContinue}
-                    className="px-10 py-6 text-base font-medium rounded-full elegant-shadow touch-target"
+                    className="px-10 py-5 text-base font-medium rounded-full elegant-shadow touch-target"
                 >
                     Continue
                 </Button>
             </motion.div>
+            </div>{/* end scrollable area */}
         </motion.div>
     );
 }

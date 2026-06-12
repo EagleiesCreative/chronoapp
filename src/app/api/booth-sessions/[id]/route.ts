@@ -23,6 +23,7 @@ export async function GET(
             .from('booth_sessions')
             .select('*, booth_session_frames(*, frames(*))')
             .eq('id', id)
+            .eq('booth_id', boothAuth.booth_id)
             .single();
 
         if (error) throw error;
@@ -67,6 +68,7 @@ export async function PATCH(
             .from('booth_sessions')
             .update({ ...updates, updated_at: new Date().toISOString() })
             .eq('id', id)
+            .eq('booth_id', boothAuth.booth_id)
             .select()
             .single();
 
@@ -112,7 +114,8 @@ export async function DELETE(
         const { error } = await supabase
             .from('booth_sessions')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .eq('booth_id', boothAuth.booth_id);
 
         if (error) throw error;
 

@@ -39,9 +39,42 @@ export default function HomePage() {
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
 
+  // UX Improvement: Active Tab state persistence
+  const [activeTab, setActiveTab] = useState('sessions');
+
+  // UX Improvement: Live Diagnostics Network Status state
+  const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : true);
+
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTab = localStorage.getItem('admin_active_tab');
+      if (savedTab) {
+        setActiveTab(savedTab);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    localStorage.setItem('admin_active_tab', value);
+  };
 
   const successfulPrints = printHistory.filter((job) => job.status === 'success').length;
   const configuredPrintsRemaining = booth?.prints_remaining;
@@ -314,15 +347,47 @@ export default function HomePage() {
             className="fixed inset-0 z-100 bg-white"
           >
             {/* Header */}
-            <header className="h-16 border-b flex items-center justify-between px-6 bg-white">
+            <header className="h-20 border-b flex items-center justify-between px-6 bg-white select-none">
               <div className="flex items-center gap-3">
                 <Camera className="w-5 h-5 text-primary" />
                 <div>
-                  <h1 className="text-lg font-semibold">Admin Panel</h1>
+                  <h1 className="text-lg font-semibold leading-tight">Admin Panel</h1>
                   <p className="text-xs text-muted-foreground">
                     {booth.name} • {formatIDR(booth.price)}
                     {appVersion && ` • v${appVersion}`}
                   </p>
+                  
+                  {/* Live Diagnostics Bar */}
+                  <div className="flex items-center gap-2 mt-1">
+                    {/* Network Status indicator */}
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                      <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-destructive'}`} />
+                      <span>{isOnline ? 'Network Online' : 'Offline'}</span>
+                    </div>
+
+                    {/* Printer Status indicator */}
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        printerStatus === 'ready' 
+                          ? 'bg-emerald-500' 
+                          : printerStatus === 'warning' 
+                            ? 'bg-amber-500 animate-pulse' 
+                            : 'bg-destructive animate-pulse'
+                      }`} />
+                      <span>
+                        {printerStatus === 'ready' 
+                          ? 'Printer Ready' 
+                          : printerStatus === 'warning' 
+                            ? 'Print Queue High' 
+                            : 'Printer Error'}
+                      </span>
+                    </div>
+
+                    {/* Prints Remaining count */}
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                      <span>🖨️ {printsRemaining} Prints Left</span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -357,8 +422,8 @@ export default function HomePage() {
             </header>
 
             {/* Content */}
-            <div className="h-[calc(100vh-4rem)] w-full overflow-y-auto bg-linear-to-b from-gray-50 to-gray-100/80 p-6">
-              <Tabs defaultValue="sessions" className="space-y-6">
+            <div className="h-[calc(100vh-5rem)] w-full overflow-y-auto bg-linear-to-b from-gray-50 to-gray-100/80 p-6">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
                 <TabsList className="sticky top-0 z-20 mx-auto flex w-fit justify-center border border-gray-200/80 bg-white/85 backdrop-blur px-1.5 py-1.5 shadow-sm">
                   <TabsTrigger value="sessions" className="gap-2 rounded-full px-4 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 data-[state=active]:shadow-none">
                     <FolderOpen className="w-4 h-4" />

@@ -63,7 +63,7 @@ export function CaptureScreen() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="min-h-screen flex bg-white kiosk relative overflow-hidden"
+                className="h-full w-full flex bg-white kiosk relative overflow-hidden"
             >
                 {/* Photo counter - minimal */}
                 <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20">
@@ -75,7 +75,7 @@ export function CaptureScreen() {
                 </div>
 
                 {/* Main content - Split layout */}
-                <div className="flex w-full h-screen p-6 pt-20 gap-6">
+                <div className="flex w-full h-full p-6 pt-20 gap-6">
                     {/* LEFT SIDE - Camera Preview */}
                     <div className="flex-[2] flex items-center justify-center relative">
                         <div className="relative w-full h-full max-w-[850px] max-h-[650px] rounded-2xl overflow-hidden border border-border elegant-shadow">
