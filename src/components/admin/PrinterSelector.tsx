@@ -25,12 +25,22 @@ interface PrintJobInfo {
     date: string;
 }
 
+// Type for media capability info from Rust (2R/4R support check)
+interface PrinterMediaInfo {
+    available_media: string[];
+    resolved_4r_media: string;
+    supports_4r: boolean;
+    supports_media_type: boolean;
+}
+
 export function PrinterSelector() {
     const [printers, setPrinters] = useState<PrinterInfo[]>([]);
     const [selectedPrinter, setSelectedPrinter] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [isTesting, setIsTesting] = useState(false);
     const [lastTestResult, setLastTestResult] = useState<'idle' | 'success' | 'error'>('idle');
+    const [mediaInfo, setMediaInfo] = useState<PrinterMediaInfo | null>(null);
+    const [isCheckingMedia, setIsCheckingMedia] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isTauriAvailable, setIsTauriAvailable] = useState(false);
     
@@ -115,6 +125,30 @@ export function PrinterSelector() {
             toast.error(`Print failed: ${err}`);
         } finally {
             setIsTesting(false);
+        }
+    };
+
+    // Check 2R/4R media support for the selected printer
+    const handleCheckMedia = async () => {
+        if (!selectedPrinter || !isTauriAvailable) return;
+
+        setIsCheckingMedia(true);
+        setMediaInfo(null);
+
+        try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const info = await invoke<PrinterMediaInfo>('get_printer_media_options', { printerName: selectedPrinter });
+            setMediaInfo(info);
+            if (info.supports_4r) {
+                toast.success(`2R/4R ready — will print on "${info.resolved_4r_media}"`);
+            } else {
+                toast.warning('No 4x6 media detected for this printer. See details below.');
+            }
+        } catch (err) {
+            console.error('Media check failed:', err);
+            toast.error(`Media check failed: ${err}`);
+        } finally {
+            setIsCheckingMedia(false);
         }
     };
 
@@ -266,7 +300,7 @@ export function PrinterSelector() {
                             {printers.map((printer) => (
                                 <div
                                     key={printer.system_name}
-                                    onClick={() => setSelectedPrinter(printer.system_name)}
+                                    onClick={() => { setSelectedPrinter(printer.system_name); setMediaInfo(null); }}
                                     className={`relative p-4 rounded-xl border cursor-pointer transition-all ${
                                         selectedPrinter === printer.system_name 
                                             ? 'border-primary ring-1 ring-primary bg-primary/5' 
@@ -388,6 +422,62 @@ export function PrinterSelector() {
                             <p className="font-medium text-green-800">Test Print Successful</p>
                             <p className="text-sm text-green-700">Check your printer for the test page.</p>
                         </div>
+                    </div>
+                )}
+
+                {/* 2R / 4R media support check */}
+                {selectedPrinter && (
+                    <div className="space-y-3">
+                        <Button
+                            variant="outline"
+                            onClick={handleCheckMedia}
+                            disabled={isCheckingMedia || !selectedPrinter || isLoading}
+                            className="w-full"
+                        >
+                            {isCheckingMedia ? (
+                                <>
+                                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                    Checking 2R / 4R support...
+                                </>
+                            ) : (
+                                <>
+                                    <PrinterCheck className="w-4 h-4 mr-2" />
+                                    Check 2R / 4R Support
+                                </>
+                            )}
+                        </Button>
+
+                        {mediaInfo && (
+                            <div className={`p-4 rounded-lg border text-sm ${
+                                mediaInfo.supports_4r
+                                    ? 'bg-green-50 border-green-200'
+                                    : 'bg-amber-50 border-amber-200'
+                            }`}>
+                                <div className="flex items-center gap-2 font-medium">
+                                    {mediaInfo.supports_4r ? (
+                                        <>
+                                            <CheckCircle2 className="w-4 h-4 text-green-600" />
+                                            <span className="text-green-800">2R &amp; 4R printing ready</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                                            <span className="text-amber-800">No 4×6 media detected</span>
+                                        </>
+                                    )}
+                                </div>
+                                <div className="mt-2 space-y-1 text-muted-foreground">
+                                    <p><strong>4R/2R media name:</strong> <code className="bg-black/5 px-1 rounded">{mediaInfo.resolved_4r_media}</code></p>
+                                    <p><strong>Available sizes:</strong> {mediaInfo.available_media.length > 0 ? mediaInfo.available_media.join(', ') : 'none reported'}</p>
+                                    {!mediaInfo.supports_4r && (
+                                        <p className="text-amber-700 pt-1">
+                                            Tip: set the <code className="bg-black/5 px-1 rounded">FRAMR_MEDIA_4R</code> environment
+                                            variable to the correct 4×6 name from the list above, or install the DNP driver.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 

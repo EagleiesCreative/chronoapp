@@ -87,17 +87,28 @@ export async function POST(request: NextRequest) {
         const userAgent = request.headers.get('user-agent') || 'Unknown Device';
         const deviceName = parseDeviceName(userAgent);
 
-        // Update booth with new device token (invalidates any previous session)
+        // Update booth identity with new device token (invalidates any previous session)
+        const loginNowIso = new Date().toISOString();
         const { error: updateError } = await supabaseAdmin
             .from('booths')
             .update({
                 device_token: deviceToken,
-                last_login_at: new Date().toISOString(),
-                device_ip: ip,
-                device_name: deviceName,
-                last_heartbeat: new Date().toISOString(), // Optional: treat login as first heartbeat
+                last_login_at: loginNowIso,
             })
             .eq('id', booth.id);
+
+        // Seed device identity + first heartbeat into the split telemetry table
+        if (!updateError) {
+            await supabaseAdmin
+                .from('booth_telemetry')
+                .upsert({
+                    booth_id: booth.id,
+                    device_ip: ip,
+                    device_name: deviceName,
+                    last_heartbeat: loginNowIso,
+                    updated_at: loginNowIso,
+                }, { onConflict: 'booth_id' });
+        }
 
         if (updateError) {
             console.error('Failed to update device token:', updateError);

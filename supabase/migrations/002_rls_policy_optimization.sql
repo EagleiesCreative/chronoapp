@@ -27,9 +27,17 @@ DROP POLICY IF EXISTS "Allow public read for booth login" ON public.booths;
 -- Drop policies on vouchers table
 DROP POLICY IF EXISTS "Service role has full access to vouchers" ON public.vouchers;
 
--- Drop policies on transaction table
-DROP POLICY IF EXISTS "Service role has full access to payments" ON public.transaction;
-DROP POLICY IF EXISTS "Organization members can view payments" ON public.transaction;
+-- NOTE (reconciled 2026-07): there is no `transaction` table in this database;
+-- the payments table is `public.payments`. The original references below were
+-- guarded so re-running this migration does not error. The service-role model
+-- for payments is now defined authoritatively in migration 007.
+DO $$
+BEGIN
+  IF to_regclass('public.transaction') IS NOT NULL THEN
+    DROP POLICY IF EXISTS "Service role has full access to payments" ON public.transaction;
+    DROP POLICY IF EXISTS "Organization members can view payments" ON public.transaction;
+  END IF;
+END $$;
 
 -- Drop policies on frames table
 DROP POLICY IF EXISTS "Allow all for development" ON public.frames;
@@ -106,28 +114,33 @@ CREATE POLICY "vouchers_service_role_access" ON public.vouchers
     WITH CHECK (true);
 
 -- -----------------------------------------------------
--- TRANSACTION TABLE (optimized with select wrapper)
+-- TRANSACTION TABLE (obsolete — no such table; payments is `public.payments`)
 -- -----------------------------------------------------
-CREATE POLICY "transaction_service_role_access" ON public.transaction
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
-
--- Organization members can view their payments (optimized)
-CREATE POLICY "transaction_org_members_read" ON public.transaction
-    FOR SELECT
-    TO authenticated
-    USING (
-        booth_id IN (
+-- Guarded so re-running this migration is a no-op. Payments RLS is defined
+-- authoritatively in migration 007 (service-role-only model).
+DO $$
+BEGIN
+  IF to_regclass('public.transaction') IS NOT NULL THEN
+    EXECUTE $ddl$
+      CREATE POLICY "transaction_service_role_access" ON public.transaction
+        FOR ALL TO service_role USING (true) WITH CHECK (true);
+    $ddl$;
+    EXECUTE $ddl$
+      CREATE POLICY "transaction_org_members_read" ON public.transaction
+        FOR SELECT TO authenticated
+        USING (
+          booth_id IN (
             SELECT b.id FROM public.booths b
             WHERE b.organization_id IN (
-                SELECT om.organization_id 
-                FROM public.organization_memberships om
-                WHERE om.user_id = (select auth.uid())
+              SELECT om.organization_id
+              FROM public.organization_memberships om
+              WHERE om.user_id = (select auth.uid())
             )
-        )
-    );
+          )
+        );
+    $ddl$;
+  END IF;
+END $$;
 
 -- -----------------------------------------------------
 -- FRAMES TABLE (consolidated policies)

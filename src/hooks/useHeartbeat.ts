@@ -27,19 +27,21 @@ interface HeartbeatOptions {
     vitals?: HeartbeatVitals;
 }
 
-/**
- * Hook to send periodic heartbeat to server
- */
 export function useHeartbeat({ isAuthenticated, deviceName, vitals }: HeartbeatOptions) {
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const vitalsRef = useRef(vitals);
+    const deviceNameRef = useRef(deviceName);
+
+    // Keep refs up to date without triggering useEffect re-runs
+    useEffect(() => {
+        vitalsRef.current = vitals;
+    }, [vitals]);
+
+    useEffect(() => {
+        deviceNameRef.current = deviceName;
+    }, [deviceName]);
 
     useEffect(() => {
         if (!isAuthenticated) {
-            // Clear interval if not authenticated
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
             return;
         }
 
@@ -48,7 +50,10 @@ export function useHeartbeat({ isAuthenticated, deviceName, vitals }: HeartbeatO
             try {
                 await apiFetch('/api/booth/heartbeat', {
                     method: 'POST',
-                    body: JSON.stringify({ deviceName, vitals }),
+                    body: JSON.stringify({ 
+                        deviceName: deviceNameRef.current, 
+                        vitals: vitalsRef.current 
+                    }),
                 });
             } catch (error) {
                 console.error('Heartbeat failed:', error);
@@ -59,14 +64,11 @@ export function useHeartbeat({ isAuthenticated, deviceName, vitals }: HeartbeatO
         sendHeartbeat();
 
         // Set up interval
-        intervalRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+        const interval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
 
-        // Cleanup on unmount
+        // Cleanup on unmount/unauth
         return () => {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
+            clearInterval(interval);
         };
-    }, [isAuthenticated, deviceName, vitals]);
+    }, [isAuthenticated]);
 }

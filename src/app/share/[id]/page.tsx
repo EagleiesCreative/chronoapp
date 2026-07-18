@@ -33,14 +33,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
     if (!session) {
         return {
-            title: 'Photo Not Found | ChronoSnap',
+            title: 'Photo Not Found | Framr Studio',
         };
     }
 
-    const boothName = session.booths?.name || 'ChronoSnap';
+    const boothName = session.booths?.name || 'Framr Studio';
 
     return {
-        title: `${boothName} | ChronoSnap`,
+        title: `${boothName} | Framr Studio`,
         description: `View and download photos from ${boothName}`,
         openGraph: {
             title: `${boothName} Photos`,
@@ -69,7 +69,7 @@ export default async function SharePage({ params }: Props) {
         allPhotos.push(...session.photos_urls);
     }
 
-    const boothName = session.booths?.name || 'ChronoSnap';
+    const boothName = session.booths?.name || 'Framr Studio';
     const frameName = session.frames?.name || 'Photo';
     const videoUrl = session.video_url || null;
 

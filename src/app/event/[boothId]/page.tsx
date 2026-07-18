@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: { params: Promise<{ boothId: 
     const { boothId } = await params;
     const data = await getEventData(boothId);
     return {
-        title: data?.booth?.event_name || 'Event Gallery — ChronoSnap',
+        title: data?.booth?.event_name || 'Event Gallery — Framr Studio',
         description: data?.booth?.event_message || 'Browse all photos from this event',
     };
 }
@@ -136,7 +136,7 @@ export default async function EventGalleryPage({ params }: { params: Promise<{ b
 
             {/* Footer */}
             <footer className="border-t border-gray-200 py-6 text-center">
-                <p className="text-xs text-gray-400">Powered by ChronoSnap</p>
+                <p className="text-xs text-gray-400">Powered by Framr Studio</p>
             </footer>
         </div>
     );

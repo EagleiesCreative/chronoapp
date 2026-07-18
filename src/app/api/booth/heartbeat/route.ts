@@ -45,19 +45,23 @@ export async function POST(request: NextRequest) {
 
         // Update booth with heartbeat and device info
         // Use supabaseAdmin to bypass RLS restrictions since booth context might not have update permissions
+        // Write telemetry to the dedicated booth_telemetry table (1:1 with booths)
+        // instead of rewriting the wide booths row on every heartbeat.
+        const nowIso = new Date().toISOString();
         const { error } = await supabaseAdmin
-            .from('booths')
-            .update({
+            .from('booth_telemetry')
+            .upsert({
+                booth_id: booth.booth_id,
                 device_ip: ip,
                 device_name: deviceName,
-                last_heartbeat: new Date().toISOString(),
+                last_heartbeat: nowIso,
                 booth_status: vitals?.status || 'online',
                 camera_battery: typeof vitals?.camera_battery === 'number' ? vitals.camera_battery : null,
                 printer_status: vitals?.printer_status || 'unknown',
                 prints_remaining: typeof vitals?.prints_remaining === 'number' ? vitals.prints_remaining : null,
-                telemetry_updated_at: new Date().toISOString(),
-            })
-            .eq('id', booth.booth_id);
+                telemetry_updated_at: nowIso,
+                updated_at: nowIso,
+            }, { onConflict: 'booth_id' });
 
         if (error) {
             console.error('Heartbeat update error:', error);

@@ -584,7 +584,7 @@ export function SessionManager() {
                                                     onChange={(e) =>
                                                         setEditingSession({ ...editingSession, brand_title: e.target.value })
                                                     }
-                                                    placeholder="ChronoSnap"
+                                                    placeholder="Framr Studio"
                                                 />
                                             </div>
                                             <div className="space-y-2">

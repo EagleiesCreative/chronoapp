@@ -120,25 +120,40 @@ export async function generateStopMotionGif(
         }
     }
 
-    // Render GIF
+    // Render GIF.
+    // IMPORTANT: gif.js only frees its web workers on the 'finished' event.
+    // If encoding errors or hangs, the workers leak — over a long event this
+    // accumulates and can exhaust memory. So we always abort() on the way out.
     return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (fn: () => void) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            try { gif.abort(); } catch { /* already finished */ }
+            fn();
+        };
+
+        const timer = setTimeout(() => {
+            finish(() => reject(new Error('GIF render timed out')));
+        }, 30000);
+
         gif.on('finished', (blob: Blob) => {
-            // Convert to data URL
             const reader = new FileReader();
             reader.onloadend = () => {
                 const totalFrames = loadedImages.length * loops;
-                resolve({
+                finish(() => resolve({
                     blob,
                     dataUrl: reader.result as string,
                     duration: (totalFrames * frameDelay) / 1000,
                     size: blob.size,
-                });
+                }));
             };
-            reader.onerror = reject;
+            reader.onerror = () => finish(() => reject(reader.error ?? new Error('GIF read failed')));
             reader.readAsDataURL(blob);
         });
 
-        gif.on('error', reject);
+        gif.on('error', (err: unknown) => finish(() => reject(err instanceof Error ? err : new Error(String(err)))));
         gif.render();
     });
 }
@@ -390,20 +405,34 @@ export async function generateFramedVideoGif(
         });
 
         return new Promise((resolve, reject) => {
+            let settled = false;
+            const finish = (fn: () => void) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                try { gif.abort(); } catch { /* already finished */ }
+                fn();
+            };
+
+            // Framed video GIFs are heavier; give them a longer ceiling.
+            const timer = setTimeout(() => {
+                finish(() => reject(new Error('Framed GIF render timed out')));
+            }, 45000);
+
             gif.on('finished', (blob: Blob) => {
                 const reader = new FileReader();
                 reader.onloadend = () => {
-                    resolve({
+                    finish(() => resolve({
                         blob,
                         dataUrl: reader.result as string,
                         duration: durationSec,
                         size: blob.size,
-                    });
+                    }));
                 };
-                reader.onerror = reject;
+                reader.onerror = () => finish(() => reject(reader.error ?? new Error('GIF read failed')));
                 reader.readAsDataURL(blob);
             });
-            gif.on('error', reject);
+            gif.on('error', (err: unknown) => finish(() => reject(err instanceof Error ? err : new Error(String(err)))));
             gif.render();
         });
 

@@ -22,7 +22,7 @@ export function CaptureScreen() {
     } = useBoothStore();
 
     const { selectedCameraId, isCameraMirrored } = useAdminStore();
-    const { stream, getScreenshot, getSonyCapture, isCameraReady: cameraReady, cameraError, isSonyMode } = useCamera();
+    const { stream, getScreenshot, getBackendCapture, isCameraReady: cameraReady, cameraError, isBackendMode } = useCamera();
     const [cachedOverlayUrl, setCachedOverlayUrl] = useState<string | null>(null);
 
     useEffect(() => {
@@ -55,7 +55,7 @@ export function CaptureScreen() {
         retakingIndex,
         retakePhoto,
         startCountdown,
-    } = useCaptureFlow(getScreenshot, cameraReady, stream, getSonyCapture, isSonyMode);
+    } = useCaptureFlow(getScreenshot, cameraReady, stream, getBackendCapture, isBackendMode);
 
     return (
         <BoothErrorBoundary fallbackMessage="Camera issue detected. Please return to the start screen.">
@@ -115,11 +115,11 @@ export function CaptureScreen() {
                                     alt="Captured preview"
                                     className="w-full h-full object-cover"
                                 />
-                            ) : isSonyMode ? (
-                                /* Sony: Show MJPEG live view from the backend stream server */
+                            ) : isBackendMode ? (
+                                /* Sony/Canon: MJPEG live view from the backend stream server */
                                 <img
                                     src="http://localhost:3030/stream"
-                                    alt="Sony Live View"
+                                    alt="Live View"
                                     className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
                                     onError={(e) => {
                                         // Fallback: show a placeholder if MJPEG stream is not available

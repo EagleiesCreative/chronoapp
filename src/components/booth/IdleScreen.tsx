@@ -17,7 +17,7 @@ export function IdleScreen() {
     const { setStep, appliedVoucher } = useBoothStore();
     const { isCameraMirrored, isLivePreviewEnabled } = useAdminStore();
     const { booth } = useTenantStore();
-    const { stream, isCameraReady, cameraError, isSonyMode } = useCamera();
+    const { stream, isCameraReady, cameraError, isBackendMode } = useCamera();
     const activeSession = useSessionProfileStore((s) => s.activeSession);
     const [showSonyStream, setShowSonyStream] = useState(true);
 
@@ -56,7 +56,7 @@ export function IdleScreen() {
         ? { backgroundImage: `url(${effectiveBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
         : { backgroundColor: effectiveBgColor || '#ffffff' };
 
-    const hasLivePreviewBackground = isLivePreviewEnabled && isMediaSupported && !cameraError && isCameraReady && (isSonyMode ? showSonyStream : !!stream);
+    const hasLivePreviewBackground = isLivePreviewEnabled && isMediaSupported && !cameraError && isCameraReady && (isBackendMode ? showSonyStream : !!stream);
     const hasDarkBackground = effectiveBgImage || effectiveSlideshow || hasLivePreviewBackground;
 
     return (
@@ -72,7 +72,7 @@ export function IdleScreen() {
             {/* Full-screen live camera background before Start */}
             {hasLivePreviewBackground && (
                 <div className="absolute inset-0 z-0 overflow-hidden">
-                    {isSonyMode ? (
+                    {isBackendMode ? (
                         <img
                             src="http://localhost:3030/stream"
                             alt="Live camera background"
@@ -168,10 +168,10 @@ export function IdleScreen() {
                         <>
                             <h1 className={`text-5xl md:text-6xl font-light tracking-tight mb-4 ${hasDarkBackground ? 'text-white' : ''}`}>
                                 <span className={hasDarkBackground ? 'text-white font-medium' : 'gradient-text font-medium'}>
-                                    {effectiveBrandTitle ? effectiveBrandTitle.split(' ')[0] : 'Chrono'}
+                                    {effectiveBrandTitle ? effectiveBrandTitle.split(' ')[0] : 'Framr'}
                                 </span>
                                 <span className={hasDarkBackground ? 'text-white' : 'text-foreground'}>
-                                    {effectiveBrandTitle ? effectiveBrandTitle.split(' ').slice(1).join(' ') || '' : 'Snap'}
+                                    {effectiveBrandTitle ? effectiveBrandTitle.split(' ').slice(1).join(' ') || '' : ' Studio'}
                                 </span>
                             </h1>
 

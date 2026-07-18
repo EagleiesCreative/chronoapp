@@ -3,8 +3,10 @@ fn main() {
     {
         // Canon EDSDK
         if std::path::Path::new("libs/EDSDK.framework").exists() {
+            // Loaded dynamically at runtime via libloading (see canon.rs), so we
+            // only add the search path and deliberately do NOT hard-link the
+            // framework — that keeps Canon support optional, exactly like Sony.
             println!("cargo:rustc-link-search=framework=libs");
-            println!("cargo:rustc-link-lib=framework=EDSDK");
         } else {
             println!("cargo:warning=EDSDK.framework not found in src-tauri/libs. Canon SDK integration will be disabled.");
         }

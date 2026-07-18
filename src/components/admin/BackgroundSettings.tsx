@@ -399,7 +399,7 @@ export function BackgroundSettings() {
                         >
                             {backgroundImage && <div className="absolute inset-0 bg-black/30" />}
                             <span className={`text-lg font-light relative z-10 ${backgroundImage || selectedColor === '#0f172a' || selectedColor === '#1e293b' ? 'text-white' : 'text-foreground'}`}>
-                                ChronoSnap
+                                Framr Studio
                             </span>
                         </div>
                     </div>

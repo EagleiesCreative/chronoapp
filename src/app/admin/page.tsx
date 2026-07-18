@@ -164,7 +164,7 @@ export default function AdminPage() {
                         </Link>
                         <div className="flex items-center gap-2">
                             <Camera className="w-5 h-5 text-primary" />
-                            <h1 className="text-lg font-semibold">ChronoSnap Admin</h1>
+                            <h1 className="text-lg font-semibold">Framr Studio Admin</h1>
                         </div>
                     </div>
 

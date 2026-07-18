@@ -67,7 +67,7 @@ export function LocalBackupSettings() {
                                 <Input
                                     value={savePath || ''}
                                     onChange={(e) => setSavePath(e.target.value || null)}
-                                    placeholder="/Users/.../ChronoSnap Photos"
+                                    placeholder="/Users/.../Framr Studio Photos"
                                     className="pr-8 font-mono text-xs"
                                 />
                                 {effectivePathStatus === 'ok' && (

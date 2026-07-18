@@ -21,12 +21,12 @@ export default function ShareNotFound() {
                     href="/"
                     className="inline-flex items-center justify-center bg-gray-900 text-white py-3 px-8 rounded-full font-medium hover:bg-gray-800 transition-colors"
                 >
-                    Go to ChronoSnap
+                    Go to Framr Studio
                 </Link>
             </div>
 
             <p className="text-xs text-gray-400 mt-auto pt-8">
-                Powered by <span className="font-medium">ChronoSnap</span>
+                Powered by <span className="font-medium">Framr Studio</span>
             </p>
         </div>
     );

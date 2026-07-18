@@ -61,7 +61,7 @@ export function usePrintHandler(compositeImage: string | null) {
             <!DOCTYPE html>
             <html>
               <head>
-                <title>ChronoSnap Print</title>
+                <title>Framr Studio Print</title>
                 <style>
                   body { margin: 0; background: white; }
                   .page-break { 

@@ -131,7 +131,7 @@ export function TenantLoginScreen({ onLogin }: TenantLoginScreenProps) {
                 </div>
 
                 {/* Title */}
-                <h1 className="text-3xl font-light mb-2">ChronoSnap</h1>
+                <h1 className="text-3xl font-light mb-2">Framr Studio</h1>
                 <p className="text-muted-foreground mb-8">
                     Enter your booth code to start
                 </p>

@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         // Build query - select all fields to handle potentially missing columns
         let query = supabase
             .from('booths')
-            .select('*')
+            .select('*, booth_telemetry(*)')
             .eq('status', 'active')
             .order('name');
 
@@ -82,14 +82,20 @@ export async function GET(request: NextRequest) {
             let status: 'online' | 'offline' | 'never_connected';
             let onlineDuration: number | null = null;
 
+            // Telemetry now lives in the 1:1 booth_telemetry table.
+            // Supabase may embed a one-to-one relation as an object or a single-item array.
+            const tele = Array.isArray(booth.booth_telemetry)
+                ? booth.booth_telemetry[0]
+                : booth.booth_telemetry;
+
             if (!booth.device_token) {
                 // Never logged in
                 status = 'never_connected';
-            } else if (!booth.last_heartbeat) {
+            } else if (!tele?.last_heartbeat) {
                 // Has logged in but no heartbeat yet
                 status = 'offline';
             } else {
-                const lastHeartbeat = new Date(booth.last_heartbeat).getTime();
+                const lastHeartbeat = new Date(tele.last_heartbeat).getTime();
                 const timeSinceHeartbeat = now - lastHeartbeat;
 
                 if (timeSinceHeartbeat <= OFFLINE_THRESHOLD_MS) {
@@ -110,17 +116,17 @@ export async function GET(request: NextRequest) {
                 booth_code: booth.code,
                 location: booth.location,
                 organization_id: booth.organization_id,
-                device_name: booth.device_name,
-                device_ip: booth.device_ip,
+                device_name: tele?.device_name ?? null,
+                device_ip: tele?.device_ip ?? null,
                 status,
-                last_heartbeat: booth.last_heartbeat,
+                last_heartbeat: tele?.last_heartbeat ?? null,
                 last_login_at: booth.last_login_at,
                 online_duration_seconds: onlineDuration,
-                booth_status: booth.booth_status ?? null,
-                camera_battery: booth.camera_battery ?? null,
-                printer_status: booth.printer_status ?? null,
-                prints_remaining: booth.prints_remaining ?? null,
-                telemetry_updated_at: booth.telemetry_updated_at ?? null,
+                booth_status: tele?.booth_status ?? null,
+                camera_battery: tele?.camera_battery ?? null,
+                printer_status: tele?.printer_status ?? null,
+                prints_remaining: tele?.prints_remaining ?? null,
+                telemetry_updated_at: tele?.telemetry_updated_at ?? null,
             };
         });
 

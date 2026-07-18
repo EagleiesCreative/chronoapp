@@ -20,10 +20,10 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "ChronoSnap - Premium Photo Booth",
+  title: "Framr Studio - Premium Photo Booth",
   description: "Capture your moments in stunning photo booth style",
   keywords: ["photobooth", "photo booth", "photography", "events"],
-  authors: [{ name: "ChronoSnap" }],
+  authors: [{ name: "Framr Studio" }],
 };
 
 export default function RootLayout({

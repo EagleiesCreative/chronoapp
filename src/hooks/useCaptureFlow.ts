@@ -9,8 +9,8 @@ export function useCaptureFlow(
     getScreenshot: () => string | null,
     cameraReady: boolean,
     stream?: MediaStream | null,
-    getSonyCapture?: () => Promise<string | null>,
-    isSonyMode: boolean = false,
+    getBackendCapture?: () => Promise<string | null>,
+    isBackendMode: boolean = false,
 ) {
     const {
         selectedFrame,
@@ -68,11 +68,11 @@ export function useCaptureFlow(
 
         let imageSrc: string | null = null;
 
-        if (isSonyMode && getSonyCapture) {
-            // Sony: trigger actual shutter release via CrSDK
-            imageSrc = await getSonyCapture();
+        if (isBackendMode && getBackendCapture) {
+            // Sony (CrSDK) / Canon (EDSDK): trigger the real shutter release
+            imageSrc = await getBackendCapture();
         } else {
-            // System/Canon: grab frame from webcam
+            // System webcam: grab frame from the browser video stream
             imageSrc = getScreenshot();
         }
 
@@ -82,15 +82,15 @@ export function useCaptureFlow(
             // Keep preview duration, but auto-continue without Keep/Retake dialog.
             setPreviewCountdown(previewSec);
         }
-    }, [getScreenshot, getSonyCapture, isSonyMode, previewSec]);
+    }, [getScreenshot, getBackendCapture, isBackendMode, previewSec]);
 
     useEffect(() => {
         if (!cameraReady || phase !== 'countdown') return;
 
         if (countdown > 0) {
             // Start recording 3 seconds before capture, or handle cases where countdown is precisely 3, 2 or 1
-            // Video recording is disabled for Sony mode (still-image only)
-            if (isVideoMode && !isSonyMode && stream && countdown === Math.min(3, countdownSec)) {
+            // Video recording is disabled for backend SDK cameras (still-image only)
+            if (isVideoMode && !isBackendMode && stream && countdown === Math.min(3, countdownSec)) {
                 try {
                     videoChunksRef.current = [];
                     // Prefer webm since mp4 via MediaRecorder can be very finicky in Safari/WebKit
@@ -136,7 +136,7 @@ export function useCaptureFlow(
             }
             capturePhoto();
         }
-    }, [cameraReady, countdown, phase, capturePhoto, isVideoMode, isSonyMode, stream, countdownSec]);
+    }, [cameraReady, countdown, phase, capturePhoto, isVideoMode, isBackendMode, stream, countdownSec]);
 
     const handleContinue = useCallback(() => {
         if (lastCapturedPhoto && phase === 'preview') {

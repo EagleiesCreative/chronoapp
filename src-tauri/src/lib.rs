@@ -12,7 +12,7 @@ use image_processor::{composite_images, CompositeRequest, CompositeResponse};
 use reliability::setup_reliability;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use crossbeam_channel::unbounded;
+use crossbeam_channel::bounded;
 use tauri::Manager;
 
 #[tauri::command]
@@ -26,8 +26,13 @@ async fn composite_image_rust(req: CompositeRequest) -> Result<CompositeResponse
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let (frame_tx, frame_rx) = unbounded();
-  
+  // Bounded live-view frame channel. Capacity is intentionally tiny: if the
+  // MJPEG client isn't draining (between screens, admin panel open, heavy
+  // compositing, or simply rendering slower than the camera produces), the
+  // producer's try_send drops frames instead of accumulating them in RAM.
+  // An unbounded channel here grew without limit and crashed the machine.
+  let (frame_tx, frame_rx) = bounded(2);
+
   tauri::Builder::default()
     .manage(CameraState::new(frame_tx))
     .setup(|app| {
@@ -64,6 +69,7 @@ pub fn run() {
       printer::get_default_printer,
       printer::print_test_page,
       printer::print_photo,
+      printer::get_printer_media_options,
       printer::get_print_queue,
       printer::clear_print_queue,
       printer::resume_printer,
@@ -74,6 +80,7 @@ pub fn run() {
       camera::capture_frame,
       camera::get_preview_frame,
       camera::sony_capture_image,
+      camera::canon_capture_image,
       filesystem::save_file_to_disk,
       filesystem::pick_directory,
       filesystem::check_directory_writable,

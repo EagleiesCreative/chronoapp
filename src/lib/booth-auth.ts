@@ -190,7 +190,7 @@ export async function resetRateLimit(identifier: string): Promise<void> {
 export function parseDeviceName(userAgent: string): string {
     // Check for Tauri app
     if (userAgent.includes('Tauri')) {
-        return 'ChronoSnap Booth App';
+        return 'Framr Studio Booth App';
     }
 
     // Check for common browsers/platforms

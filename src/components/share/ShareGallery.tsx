@@ -460,7 +460,7 @@ export function ShareGallery({
             {/* Powered By Footer */}
             <div className="text-center py-3 border-t bg-gray-50">
                 <p className="text-xs text-gray-400">
-                    Powered by <span className="font-medium">ChronoSnap</span>
+                    Powered by <span className="font-medium">Framr Studio</span>
                 </p>
             </div>
         </div>
