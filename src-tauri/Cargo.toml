@@ -55,6 +55,9 @@ tauri-plugin-process = "2"
 [target.'cfg(target_os = "macos")'.dependencies]
 nokhwa = { version = "0.10.11", features = ["input-avfoundation"] }
 nokhwa-core = "0.1.9"
+# 0.2.4 widened the frame channel to (Vec<u8>, FrameFormat, Option<Duration>), which is
+# what nokhwa 0.10.11 sends. 0.2.3 only accepts the 2-element tuple and fails to compile.
+nokhwa-bindings-macos = "0.2.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 nokhwa = { version = "0.10.11", features = ["input-msmf"] }
