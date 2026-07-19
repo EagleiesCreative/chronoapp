@@ -314,3 +314,20 @@
     background: white !important;
   }
 }
+/* ── Public web routes opt out of the kiosk lock ──────────────────────────────
+   The booth runs fullscreen, so `html, body` are pinned with
+   `overflow-hidden h-screen w-screen select-none` above. That rule is global,
+   which also froze the public /share page — it could not be scrolled on a phone,
+   hiding everything below the fold (including the Live Video tab).
+   Share routes add `.allow-scroll` to <html>/<body> to restore normal scrolling.
+   Unlayered, so it wins over the @layer base rule without needing !important. */
+html.allow-scroll,
+body.allow-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: auto;
+  min-height: 100%;
+  width: auto;
+  user-select: auto;
+  -webkit-overflow-scrolling: touch;
+}
