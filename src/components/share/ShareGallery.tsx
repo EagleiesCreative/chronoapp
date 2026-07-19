@@ -35,6 +35,13 @@ export function ShareGallery({
     const [copied, setCopied] = useState(false);
     const [viewMode, setViewMode] = useState<'strip' | 'individual' | 'video'>('strip');
 
+    // `video_url` holds either a real recorded clip (Live Video mode) or the
+    // animated GIF fallback. Label it for what it actually is, rather than always
+    // calling it "Live Video Frame".
+    const isRealVideo = !!videoUrl && (videoUrl.includes('.mp4') || videoUrl.includes('.webm'));
+    const mediaLabel = isRealVideo ? 'Live Video' : 'GIF';
+    const mediaSlug = isRealVideo ? 'live_video' : 'animation';
+
     // First photo is the composite strip, rest are individual photos
     const stripImage = photos[0];
     const individualPhotos = photos.slice(1);
@@ -94,7 +101,7 @@ export function ShareGallery({
             if (videoUrl.includes('.mp4')) extension = 'mp4';
             else if (videoUrl.includes('.webm')) extension = 'webm';
             
-            const filename = `${eventName.replace(/\s+/g, '_')}_live_video_frame.${extension}`;
+            const filename = `${eventName.replace(/\s+/g, '_')}_${mediaSlug}.${extension}`;
             
             // Use our proxy to avoid CORS issues
             const downloadUrl = `/api/download?url=${encodeURIComponent(videoUrl)}&filename=${encodeURIComponent(filename)}`;
@@ -169,7 +176,7 @@ export function ShareGallery({
                 if (videoUrl.includes('.mp4')) extension = 'mp4';
                 else if (videoUrl.includes('.webm')) extension = 'webm';
                 
-                const filename = `${eventName.replace(/\s+/g, '_')}_live_video_frame.${extension}`;
+                const filename = `${eventName.replace(/\s+/g, '_')}_${mediaSlug}.${extension}`;
                 const downloadUrl = `/api/download?url=${encodeURIComponent(videoUrl)}&filename=${encodeURIComponent(filename)}`;
 
                 const response = await fetch(downloadUrl);
@@ -239,7 +246,7 @@ export function ShareGallery({
                     <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
                         <div className="bg-gray-900/80 text-white text-sm px-3 py-1 rounded-full flex items-center gap-1.5">
                             {viewMode === 'video' ? (
-                                <><Film className="w-3.5 h-3.5" /> GIF</>
+                                <><Film className="w-3.5 h-3.5" /> {mediaLabel}</>
                             ) : (
                                 <>{viewMode === 'strip' ? '1' : currentIndex + 1}/{viewMode === 'strip' ? totalPhotos : individualPhotos.length}</>
                             )}
@@ -417,8 +424,10 @@ export function ShareGallery({
                                         <Film className="w-4 h-4 text-purple-500" />
                                     </div>
                                     <div className="text-left">
-                                        <p className="text-sm font-medium text-gray-900">Live Video Frame</p>
-                                        <p className="text-xs text-gray-500">Live Video Frame</p>
+                                        <p className="text-sm font-medium text-gray-900">{mediaLabel}</p>
+                                        <p className="text-xs text-gray-500">
+                                            {isRealVideo ? 'Recorded video clip' : 'Animated GIF of your shots'}
+                                        </p>
                                     </div>
                                 </div>
                                 <Download className="w-4 h-4 text-gray-400 group-hover:text-gray-900 transition-colors" />

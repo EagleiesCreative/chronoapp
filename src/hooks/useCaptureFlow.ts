@@ -114,6 +114,18 @@ export function useCaptureFlow(
                         console.error("Fallback MediaRecorder failed", e2);
                     }
                 }
+            } else if (countdown === Math.min(3, countdownSec)) {
+                // We are at the exact tick where the clip should have started but a
+                // precondition failed. Recording used to fail silently here, which made
+                // the booth fall back to a GIF with no explanation. Say why.
+                const reasons: string[] = [];
+                if (!isVideoMode) reasons.push('Live Video Mode is OFF (Admin > Camera)');
+                if (isBackendMode) reasons.push('camera is a backend SDK (Canon/Sony) — still-image only');
+                if (!stream) reasons.push('no browser MediaStream available for this camera');
+                console.warn(
+                    `[CaptureFlow] Live Video clip NOT recorded → will fall back to GIF. Reason(s): ${reasons.join('; ')}`,
+                    { isVideoMode, isBackendMode, hasStream: !!stream, countdown, countdownSec }
+                );
             }
 
             const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
