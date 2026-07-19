@@ -25,8 +25,9 @@ tauri = { version = "2.10.3", features = [] }
 tauri-plugin-log = "2"
 printers = "2.2"
 chrono = "0.4"
-# Camera support
-nokhwa = { version = "0.10", features = ["input-avfoundation"] }
+# Camera support — see the per-OS [target.*] sections at the bottom of this file.
+# nokhwa's capture backend is selected by feature flags at compile time, so it must
+# match the target OS (avfoundation on macOS, Media Foundation on Windows).
 base64 = "0.22"
 image = "0.25"
 rfd = "0.15"
@@ -41,3 +42,17 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 uuid = { version = "1", features = ["v4", "serde"] }
 tauri-plugin-updater = "2.10"
 tauri-plugin-process = "2"
+
+# ── Camera backends (per OS) ──────────────────────────────────────────────────
+# nokhwa only compiles the backend enabled by its feature flags. Previously only
+# "input-avfoundation" (macOS) was enabled, so on Windows nokhwa::query() returned
+# no devices at all — including USB/HDMI capture cards. Windows needs "input-msmf"
+# (Media Foundation), which is how capture cards expose themselves as video inputs.
+[target.'cfg(target_os = "macos")'.dependencies]
+nokhwa = { version = "0.10", features = ["input-avfoundation"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+nokhwa = { version = "0.10", features = ["input-msmf"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nokhwa = { version = "0.10", features = ["input-v4l"] }
