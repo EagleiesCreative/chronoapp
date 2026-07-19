@@ -48,11 +48,18 @@ tauri-plugin-process = "2"
 # "input-avfoundation" (macOS) was enabled, so on Windows nokhwa::query() returned
 # no devices at all — including USB/HDMI capture cards. Windows needs "input-msmf"
 # (Media Foundation), which is how capture cards expose themselves as video inputs.
+#
+# nokhwa 0.10.11 calls `Buffer::with_timestamp`, which only exists in
+# nokhwa-core >= 0.1.9. nokhwa itself only requires "^0.1", so Cargo would happily
+# keep the older 0.1.8 already in Cargo.lock and fail to compile. Pin it explicitly.
 [target.'cfg(target_os = "macos")'.dependencies]
 nokhwa = { version = "0.10.11", features = ["input-avfoundation"] }
+nokhwa-core = "0.1.9"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 nokhwa = { version = "0.10.11", features = ["input-msmf"] }
+nokhwa-core = "0.1.9"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nokhwa = { version = "0.10.11", features = ["input-v4l"] }
+nokhwa-core = "0.1.9"
