@@ -35,20 +35,24 @@ async function uploadToStorage(
             const folder = filePath.split('/')[0] || 'photos';
             formData.append('folder', folder);
 
-            const { getApiUrl } = await import('@/lib/api');
-            const url = getApiUrl('/api/upload');
+            // Use apiFetch (not raw fetch): it attaches the `Authorization: Bearer
+            // <booth_token>` header. /api/upload requires booth auth, and in the Tauri
+            // desktop app there is no cookie for the production domain, so a plain
+            // `credentials: 'include'` request is rejected with 401 and the photo is lost.
+            const { apiFetch } = await import('@/lib/api');
 
-            const response = await fetch(url, {
+            const response = await apiFetch('/api/upload', {
                 method: 'POST',
                 body: formData,
-                credentials: 'include',
             });
 
-            const data = await response.json();
-            if (data.success && data.url) {
+            const data = await response.json().catch(() => null);
+            if (response.ok && data?.success && data?.url) {
                 return data.url;
             }
-            throw new Error(data.error || 'API upload failed');
+            throw new Error(
+                data?.error || `API upload failed (HTTP ${response.status})`
+            );
         } catch (err) {
             lastError = err instanceof Error ? err : new Error(String(err));
             console.warn(`[Upload] Attempt ${attempt + 1}/${maxRetries} failed:`, lastError.message);
