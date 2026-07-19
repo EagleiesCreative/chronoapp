@@ -421,9 +421,17 @@ export function subscribeToPaymentUpdates(
 // Upload logic migrated to Cloudflare R2
 // ============================================================
 
-import { uploadPhotoClient, uploadFinalImageClient, uploadGifClient, uploadVideoClient } from './upload-client';
-
-export { uploadPhotoClient, uploadFinalImageClient, uploadGifClient, uploadVideoClient };
+// NOTE: do NOT re-export from './upload-client' here.
+//
+// upload-client.ts is a 'use client' module (it touches window/localStorage via
+// @/lib/api). This file is imported by many server-side API route handlers, so
+// re-exporting from it pulled a browser-only module graph into the server bundle.
+// Under Turbopack that made routes fail during module evaluation — the handler
+// never ran, so its try/catch could not respond and Next returned a bare
+// "Internal Server Error" string instead of JSON (which then broke the client's
+// response.json() with: Unexpected token 'I', "Internal S"... is not valid JSON).
+//
+// Every consumer already imports these directly from '@/lib/upload-client'.
 
 /**
  * Server-side upload to R2 (replaces previous Supabase Storage logic)
