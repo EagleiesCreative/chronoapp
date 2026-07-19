@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import QRCode from 'qrcode';
-import { apiFetch, getAssetUrl } from '@/lib/api';
+import { apiFetch, getApiUrl, getAssetUrl } from '@/lib/api';
 import { uploadFinalImageClient, uploadPhotoClient, uploadGifClient, uploadVideoClient } from '@/lib/upload-client';
 import { saveToLocalDisk } from '@/lib/local-save';
 import { generateCompressedGif, generateFramedVideoGif } from '@/lib/video-generator';
@@ -162,11 +162,19 @@ export function useUploadSession() {
                         if (isVideoMode && hasVideoBlobs && selectedFrame?.image_url) {
                             try {
                                 const sourceUrl = getAssetUrl(selectedFrame.image_url);
-                                const proxyUrl = `/api/frames/image?url=${encodeURIComponent(sourceUrl)}`;
-                                
+                                // Must go through getApiUrl: a relative "/api/..." path resolves to
+                                // tauri://localhost inside the desktop app, where the API routes do
+                                // not exist (the build strips src/app/api). That made this fetch fail
+                                // every time, so the framed animation silently degraded to a plain GIF.
+                                const proxyUrl = getApiUrl(
+                                    `/api/frames/image?url=${encodeURIComponent(sourceUrl)}`
+                                );
+
                                 // Securely fetch into Blob to prevent Canvas Tainting
                                 const frameRes = await fetch(proxyUrl);
-                                if (!frameRes.ok) throw new Error('Proxied frame fetch failed');
+                                if (!frameRes.ok) {
+                                    throw new Error(`Proxied frame fetch failed (HTTP ${frameRes.status}) for ${proxyUrl}`);
+                                }
                                 
                                 const frameBlob = await frameRes.blob();
                                 const safeDataUrl = await new Promise<string>((resolve, reject) => {

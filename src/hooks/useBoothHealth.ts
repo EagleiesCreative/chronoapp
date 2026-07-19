@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getApiUrl } from '@/lib/api';
 
 export function useBoothHealth() {
     const [isOnline, setIsOnline] = useState(true);
@@ -26,7 +27,10 @@ export function useBoothHealth() {
                     return;
                 }
 
-                const res = await fetch('/api/health');
+                // getApiUrl, not a relative path: inside Tauri "/api/health" resolves to
+                // tauri://localhost where no API routes exist, so this always failed and
+                // the booth reported itself offline every 30s regardless of connectivity.
+                const res = await fetch(getApiUrl('/api/health'));
                 setIsOnline(res.ok);
             } catch {
                 setIsOnline(false);
