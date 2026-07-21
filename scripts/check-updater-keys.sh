@@ -53,12 +53,28 @@ PY
   exit 0
 fi
 
+fetch_release() {
+  # Empty output means 404 / rate limit rather than a parse problem.
+  curl -sfL "$1" || true
+}
+
 if [ -z "$TAG" ]; then
-  TAG="$(curl -sfL "https://api.github.com/repos/$REPO/releases/latest" |
-    python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
+  LATEST_JSON="$(fetch_release "https://api.github.com/repos/$REPO/releases/latest")"
+  if [ -z "$LATEST_JSON" ]; then
+    echo "Could not reach the GitHub API (no published release yet, or rate limited)."
+    exit 1
+  fi
+  TAG="$(printf '%s' "$LATEST_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
 fi
 
-SIG_URL="$(curl -sfL "https://api.github.com/repos/$REPO/releases/tags/$TAG" |
+TAG_JSON="$(fetch_release "https://api.github.com/repos/$REPO/releases/tags/$TAG")"
+if [ -z "$TAG_JSON" ]; then
+  echo "No release found for tag '$TAG'."
+  echo "Still building, still a draft, or the tag name is wrong — check the Actions tab."
+  exit 1
+fi
+
+SIG_URL="$(printf '%s' "$TAG_JSON" |
   python3 -c 'import json,sys; a=[x["browser_download_url"] for x in json.load(sys.stdin)["assets"] if x["name"].endswith(".sig")]; print(a[0] if a else "")')"
 
 if [ -z "$SIG_URL" ]; then
