@@ -9,9 +9,11 @@ import { useTenantStore } from '@/store/tenant-store';
 import { useCompositing } from '@/hooks/useCompositing';
 import { useUploadSession } from '@/hooks/useUploadSession';
 import { usePrintHandler } from '@/hooks/usePrintHandler';
+import { useExtraPrint } from '@/hooks/useExtraPrint';
 
 import { ReviewActions } from './ReviewActions';
 import { ReviewQRCode } from './ReviewQRCode';
+import { ExtraPrintOverlay } from './ExtraPrintOverlay';
 import { BoothErrorBoundary } from './BoothErrorBoundary';
 import { getApiUrl, getAssetUrl } from '@/lib/api';
 
@@ -342,6 +344,8 @@ export function ReviewScreen() {
 
     const { isPrinting, handlePrint, printCopiesCount } = usePrintHandler(effectiveCompositeImage);
 
+    const extraPrint = useExtraPrint();
+
     const hasPotentialLiveClips =
         isVideoMode && capturedPhotos.some((photo) => !!photo.videoBlob && photo.videoBlob.size > 0);
     const hasPotentialLiveClipsRef = useRef(hasPotentialLiveClips);
@@ -547,8 +551,32 @@ export function ReviewScreen() {
         setCompositeRetryNonce((prev) => prev + 1);
     };
 
+    // Hold the countdown until the QR is actually on screen, otherwise users lose
+    // scan time while the upload is still running. An upload error releases the
+    // hold (the retry button is shown instead, and we don't want a frozen kiosk).
+    const isAwaitingQR = !downloadQR && !effectiveUploadError;
+    const countdownPaused =
+        isCompositing ||
+        isResolvingComposite ||
+        isPrinting ||
+        !!compositeWarning ||
+        isAwaitingQR ||
+        // Never reset the booth out from under someone mid-payment.
+        extraPrint.isOverlayOpen;
+
+    // Give a full timeout window from the moment the QR appears.
+    const qrCountdownResetRef = useRef(false);
     useEffect(() => {
-        if (isCompositing || isResolvingComposite || isPrinting || compositeWarning) return;
+        if (downloadQR && !qrCountdownResetRef.current) {
+            qrCountdownResetRef.current = true;
+            setAutoResetCountdown(timeoutSeconds);
+        } else if (!downloadQR) {
+            qrCountdownResetRef.current = false;
+        }
+    }, [downloadQR, timeoutSeconds]);
+
+    useEffect(() => {
+        if (countdownPaused) return;
         if (autoResetCountdown <= 0) return;
 
         const timer = setInterval(() => {
@@ -556,14 +584,14 @@ export function ReviewScreen() {
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [isCompositing, isResolvingComposite, isPrinting, compositeWarning, autoResetCountdown]);
+    }, [countdownPaused, autoResetCountdown]);
 
     useEffect(() => {
-        if (autoResetCountdown === 0 && !isCompositing && !isResolvingComposite && !isPrinting && !compositeWarning) {
+        if (autoResetCountdown === 0 && !countdownPaused) {
             resetSession();
             setStep('idle');
         }
-    }, [autoResetCountdown, isCompositing, isResolvingComposite, isPrinting, compositeWarning, resetSession, setStep]);
+    }, [autoResetCountdown, countdownPaused, resetSession, setStep]);
 
     useEffect(() => {
         if (compositeWarning) {
@@ -572,6 +600,30 @@ export function ReviewScreen() {
     }, [compositeWarning, timeoutSeconds]);
 
     const resetCountdown = () => setAutoResetCountdown(timeoutSeconds);
+
+    // A settled extra-print payment prints exactly one copy, then closes itself.
+    const extraPrintFulfilledRef = useRef(false);
+    useEffect(() => {
+        if (extraPrint.status === 'idle') {
+            extraPrintFulfilledRef.current = false;
+            return;
+        }
+
+        if (extraPrint.status !== 'paid') return;
+        if (extraPrintFulfilledRef.current) return;
+        if (!effectiveCompositeImage) return;
+
+        extraPrintFulfilledRef.current = true;
+
+        // Short beat so the guest actually sees the payment confirmation.
+        const timeout = setTimeout(async () => {
+            await handlePrint(resetCountdown, 1);
+            extraPrint.reset();
+        }, 1200);
+
+        return () => clearTimeout(timeout);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [extraPrint.status, effectiveCompositeImage]);
 
     const handleNewSession = () => {
         resetSession();
@@ -783,6 +835,9 @@ export function ReviewScreen() {
                         printCopiesCount={printCopiesCount}
                         handleNewSession={handleNewSession}
                         autoResetCountdown={autoResetCountdown}
+                        extraPrintEnabled={extraPrint.isEnabled}
+                        extraPrintPrice={extraPrint.price}
+                        handleExtraPrint={extraPrint.start}
                     >
                         <ReviewQRCode
                             downloadQR={downloadQR}
@@ -804,6 +859,16 @@ export function ReviewScreen() {
                         />
                     </ReviewActions>
                 </div>
+
+                <ExtraPrintOverlay
+                    status={extraPrint.status}
+                    qrImage={extraPrint.qrImage}
+                    amount={extraPrint.amount}
+                    secondsLeft={extraPrint.secondsLeft}
+                    error={extraPrint.error}
+                    onClose={extraPrint.reset}
+                    onRetry={extraPrint.start}
+                />
 
                 {isUploading && (
                     <motion.p

@@ -167,6 +167,8 @@ export interface Payment {
   xendit_qr_string: string | null;
   amount: number;
   status: 'pending' | 'paid' | 'expired' | 'failed';
+  /** 'session' = the original booking, 'extra_print' = a paid reprint top-up */
+  payment_type?: 'session' | 'extra_print';
   created_at: string;
   updated_at: string;
 }
@@ -228,9 +230,16 @@ export interface Booth {
   filter_enabled?: boolean;
   booth_type?: 'REGULAR_4R' | 'A3_NEWSPAPER';
 
+  // Paid extra print from the review screen
+  extra_print_enabled?: boolean;
+  extra_print_price?: number;
+
   created_at: string;
   updated_at: string;
 }
+
+/** Fallback price (IDR) when a booth has no extra_print_price configured. */
+export const DEFAULT_EXTRA_PRINT_PRICE = 10000;
 
 // Get booth by PIN code (for tenant login)
 export async function getBoothByCode(code: string): Promise<Booth | null> {
@@ -383,12 +392,26 @@ export async function updatePaymentStatus(
 }
 
 export async function getPaymentBySessionId(sessionId: string): Promise<Payment | null> {
+  // Only the booking payment — extra-print top-ups share the session_id and
+  // would otherwise shadow it here (this powers /api/payment/status).
   const { data, error } = await supabase
     .from('payments')
     .select('*')
     .eq('session_id', sessionId)
+    .eq('payment_type', 'session')
     .order('created_at', { ascending: false })
     .limit(1)
+    .single();
+
+  if (error) return null;
+  return data;
+}
+
+export async function getPaymentById(paymentId: string): Promise<Payment | null> {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('id', paymentId)
     .single();
 
   if (error) return null;

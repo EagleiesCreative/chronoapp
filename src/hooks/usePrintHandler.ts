@@ -13,8 +13,15 @@ export function usePrintHandler(compositeImage: string | null) {
     // Use printImage (always 4R) for printing, fall back to compositeImage
     const imageForPrint = printImage || compositeImage;
 
-    const handlePrint = async (onPrintInitiated?: () => void) => {
+    /**
+     * @param copiesOverride print a specific number of copies instead of the
+     *        booth default — used by the paid extra-print flow, which sells one
+     *        copy at a time.
+     */
+    const handlePrint = async (onPrintInitiated?: () => void, copiesOverride?: number) => {
         if (!compositeImage) return;
+
+        const copies = Math.max(1, Math.round(copiesOverride ?? printCopiesCount));
 
         if (onPrintInitiated) {
             onPrintInitiated();
@@ -30,7 +37,7 @@ export function usePrintHandler(compositeImage: string | null) {
 
                 const pageSize = booth?.booth_type === 'A3_NEWSPAPER' ? 'A3' : '4R';
 
-                for (let i = 0; i < printCopiesCount; i++) {
+                for (let i = 0; i < copies; i++) {
                     await invoke('print_photo', {
                         imageData: imageForPrint,
                         printerName: null, // Use default printer
@@ -38,10 +45,10 @@ export function usePrintHandler(compositeImage: string | null) {
                     });
                 }
                 usedTauri = true;
-                console.log(`Printed ${printCopiesCount} copies via Tauri`);
+                console.log(`Printed ${copies} copies via Tauri`);
                 addJob({
                     imageUrl: imageForPrint!,
-                    copies: printCopiesCount,
+                    copies,
                     status: 'success',
                     session_id: session?.id
                 });
@@ -53,7 +60,7 @@ export function usePrintHandler(compositeImage: string | null) {
             if (!usedTauri) {
                 const printWindow = window.open('', '_blank');
                 if (printWindow) {
-                    const imagesHtml = Array(printCopiesCount).fill(0).map(() =>
+                    const imagesHtml = Array(copies).fill(0).map(() =>
                         `<div class="page-break"><img src="${imageForPrint}" /></div>`
                     ).join('');
 
@@ -95,7 +102,7 @@ export function usePrintHandler(compositeImage: string | null) {
                     printWindow.document.close();
                     addJob({
                         imageUrl: imageForPrint!,
-                        copies: printCopiesCount,
+                        copies,
                         status: 'success',
                         session_id: session?.id
                     });
@@ -105,7 +112,7 @@ export function usePrintHandler(compositeImage: string | null) {
             console.error('Print error:', err);
             addJob({
                 imageUrl: compositeImage,
-                copies: printCopiesCount,
+                copies,
                 status: 'failed',
                 session_id: session?.id,
                 error: err.message || 'Unknown error'

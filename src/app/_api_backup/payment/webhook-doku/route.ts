@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
         // Look up the payment by our external reference ID
         const { data: payment } = await supabase
             .from('payments')
-            .select('id, session_id, status, xendit_invoice_id')
+            .select('id, session_id, status, xendit_invoice_id, payment_type')
             .eq('xendit_invoice_id', originalPartnerReferenceNo)
             .single();
 
@@ -78,8 +78,9 @@ export async function POST(request: NextRequest) {
         // Update payment status
         await updatePaymentStatus(payment.xendit_invoice_id, paymentStatus);
 
-        // Update session to paid if payment succeeded
-        if (paymentStatus === 'paid' && payment.session_id) {
+        // Update session to paid if payment succeeded. Extra-print top-ups are
+        // skipped — that session is already finished and must stay that way.
+        if (paymentStatus === 'paid' && payment.session_id && payment.payment_type !== 'extra_print') {
             await updateSession(payment.session_id, { status: 'paid' });
         }
 

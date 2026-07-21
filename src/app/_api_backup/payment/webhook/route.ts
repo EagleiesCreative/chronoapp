@@ -40,12 +40,12 @@ export async function POST(request: NextRequest) {
         const payment = await updatePaymentStatus(id, paymentStatus);
 
         if (payment && paymentStatus === 'paid') {
-            // Get session ID from external_id (format: chrono_{boothId}_{sessionId}_{timestamp})
-            const parts = external_id.split('_');
-            const sessionId = parts[2]; // Index 2 is session_id
-
-            if (sessionId) {
-                await updateSession(sessionId, { status: 'paid' });
+            // Use the payment row's own session_id rather than parsing external_id:
+            // the external_id layout varies by provider and payment type.
+            // Extra-print top-ups must never rewrite the session status — the
+            // session is already completed by the time one is bought.
+            if (payment.session_id && payment.payment_type !== 'extra_print') {
+                await updateSession(payment.session_id, { status: 'paid' });
             }
         }
 

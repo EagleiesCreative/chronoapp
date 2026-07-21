@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Loader2, Printer, RotateCcw } from 'lucide-react';
+import { Loader2, Plus, Printer, RotateCcw } from 'lucide-react';
 import { useTenantStore } from '@/store/tenant-store';
+import { formatIDR } from '@/lib/xendit';
 
 interface ReviewActionsProps {
     isCompositing: boolean;
@@ -10,6 +11,9 @@ interface ReviewActionsProps {
     printCopiesCount: number;
     handleNewSession: () => void;
     autoResetCountdown: number;
+    extraPrintEnabled?: boolean;
+    extraPrintPrice?: number;
+    handleExtraPrint?: () => void;
     children?: React.ReactNode;
 }
 
@@ -20,10 +24,14 @@ export function ReviewActions({
     printCopiesCount,
     handleNewSession,
     autoResetCountdown,
+    extraPrintEnabled = false,
+    extraPrintPrice = 0,
+    handleExtraPrint,
     children
 }: ReviewActionsProps) {
     const { booth } = useTenantStore();
     const printEnabled = booth?.print_enabled !== false; // Default to true if not set
+    const showExtraPrint = printEnabled && extraPrintEnabled && !!handleExtraPrint;
 
     return (
         <motion.div
@@ -47,6 +55,22 @@ export function ReviewActions({
                     )}
                     <span className="flex-1 text-left">
                         Print Photo &nbsp; <span className="opacity-70 text-xs font-normal">({printCopiesCount} {printCopiesCount === 1 ? 'copy' : 'copies'})</span>
+                    </span>
+                </Button>
+            )}
+
+            {/* Paid extra copy — secondary to the included print above it */}
+            {showExtraPrint && (
+                <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={handleExtraPrint}
+                    disabled={isCompositing || isPrinting}
+                    className="-mt-2 px-6 py-5 text-sm font-medium rounded-full border-primary/30 text-foreground hover:bg-primary/5 touch-target"
+                >
+                    <Plus className="w-4 h-4 mr-2" strokeWidth={2} />
+                    <span className="flex-1 text-left">
+                        Extra Print &nbsp; <span className="opacity-70 text-xs font-normal">({formatIDR(extraPrintPrice)})</span>
                     </span>
                 </Button>
             )}

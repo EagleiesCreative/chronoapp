@@ -54,6 +54,8 @@ export async function GET(
                 preview_seconds: booth.preview_seconds,
                 review_timeout_seconds: booth.review_timeout_seconds,
                 print_copies: booth.print_copies,
+                extra_print_enabled: booth.extra_print_enabled,
+                extra_print_price: booth.extra_print_price,
                 brand_logo_url: booth.brand_logo_url,
                 brand_title: booth.brand_title,
                 brand_subtitle: booth.brand_subtitle,

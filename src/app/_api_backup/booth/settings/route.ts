@@ -40,6 +40,8 @@ export async function PATCH(request: NextRequest) {
             preview_seconds,
             review_timeout_seconds,
             print_copies,
+            extra_print_enabled,
+            extra_print_price,
             slideshow_enabled,
             brand_logo_url,
             brand_title,
@@ -68,6 +70,16 @@ export async function PATCH(request: NextRequest) {
 
         const supabase = getSupabaseAdmin();
 
+        // Price must be a non-negative whole number of rupiah when provided.
+        const parsedExtraPrintPrice =
+            extra_print_price === undefined || extra_print_price === null
+                ? undefined
+                : Math.max(0, Math.round(Number(extra_print_price)));
+
+        if (parsedExtraPrintPrice !== undefined && !Number.isFinite(parsedExtraPrintPrice)) {
+            return NextResponse.json({ error: 'Invalid extra print price' }, { status: 400 });
+        }
+
         const { error } = await supabase
             .from('booths')
             .update({
@@ -78,6 +90,8 @@ export async function PATCH(request: NextRequest) {
                 preview_seconds: preview_seconds,
                 review_timeout_seconds: review_timeout_seconds,
                 print_copies: print_copies,
+                extra_print_enabled: extra_print_enabled,
+                extra_print_price: parsedExtraPrintPrice,
                 slideshow_enabled: slideshow_enabled,
                 brand_logo_url: brand_logo_url,
                 brand_title: brand_title,
@@ -131,7 +145,7 @@ export async function GET(request: NextRequest) {
 
         const { data, error } = await supabase
             .from('booths')
-            .select('background_image, background_color, payment_bypass, countdown_seconds, preview_seconds, review_timeout_seconds, print_copies, slideshow_enabled, brand_logo_url, brand_title, brand_subtitle, brand_primary_color, brand_accent_color, event_mode, event_name, event_date, event_hashtag, event_splash_image, event_message, gif_enabled, print_enabled, filter_enabled, booth_type')
+            .select('background_image, background_color, payment_bypass, countdown_seconds, preview_seconds, review_timeout_seconds, print_copies, extra_print_enabled, extra_print_price, slideshow_enabled, brand_logo_url, brand_title, brand_subtitle, brand_primary_color, brand_accent_color, event_mode, event_name, event_date, event_hashtag, event_splash_image, event_message, gif_enabled, print_enabled, filter_enabled, booth_type')
             .eq('id', booth.booth_id)
             .single();
 

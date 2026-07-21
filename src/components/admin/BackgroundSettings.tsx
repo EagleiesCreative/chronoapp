@@ -14,6 +14,7 @@ import { apiFetch } from '@/lib/api';
 import { useTenantStore } from '@/store/tenant-store';
 import { useAdminStore } from '@/store/booth-store';
 import { useSessionProfileStore } from '@/store/session-profile-store';
+import { DEFAULT_EXTRA_PRINT_PRICE } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 const PRESET_COLORS = [
@@ -43,6 +44,9 @@ export function BackgroundSettings() {
     const [reviewTimeoutSeconds, setReviewTimeoutSeconds] = useState(activeSession?.review_timeout_seconds ?? booth?.review_timeout_seconds ?? 60);
     const [printCopies, setPrintCopies] = useState(activeSession?.print_copies ?? booth?.print_copies ?? 1);
     const [slideshowEnabled, setSlideshowEnabled] = useState(activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false);
+    // Extra print is booth-level only (booth_sessions has no such columns).
+    const [extraPrintEnabled, setExtraPrintEnabled] = useState(booth?.extra_print_enabled ?? true);
+    const [extraPrintPrice, setExtraPrintPrice] = useState(booth?.extra_print_price ?? DEFAULT_EXTRA_PRINT_PRICE);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [tempLivePreviewEnabled, setTempLivePreviewEnabled] = useState(isLivePreviewEnabled);
 
@@ -56,6 +60,8 @@ export function BackgroundSettings() {
         setReviewTimeoutSeconds(activeSession?.review_timeout_seconds ?? booth?.review_timeout_seconds ?? 60);
         setPrintCopies(activeSession?.print_copies ?? booth?.print_copies ?? 1);
         setSlideshowEnabled(activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false);
+        setExtraPrintEnabled(booth?.extra_print_enabled ?? true);
+        setExtraPrintPrice(booth?.extra_print_price ?? DEFAULT_EXTRA_PRINT_PRICE);
     }, [activeSession?.id]);
 
     const handleColorChange = (color: string) => {
@@ -117,9 +123,13 @@ export function BackgroundSettings() {
     const effectiveReviewTimeout = activeSession?.review_timeout_seconds ?? booth?.review_timeout_seconds ?? 60;
     const effectivePrintCopies = activeSession?.print_copies ?? booth?.print_copies ?? 1;
     const effectiveSlideshow = activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false;
+    const effectiveExtraPrintEnabled = booth?.extra_print_enabled ?? true;
+    const effectiveExtraPrintPrice = booth?.extra_print_price ?? DEFAULT_EXTRA_PRINT_PRICE;
 
     // Derived state for unsaved changes
     const isDirty =
+        extraPrintEnabled !== effectiveExtraPrintEnabled ||
+        extraPrintPrice !== effectiveExtraPrintPrice ||
         selectedColor !== effectiveBgColor ||
         backgroundImage !== effectiveBgImage ||
         paymentBypass !== effectivePaymentBypass ||
@@ -139,6 +149,8 @@ export function BackgroundSettings() {
         setReviewTimeoutSeconds(effectiveReviewTimeout);
         setPrintCopies(effectivePrintCopies);
         setSlideshowEnabled(effectiveSlideshow);
+        setExtraPrintEnabled(effectiveExtraPrintEnabled);
+        setExtraPrintPrice(effectiveExtraPrintPrice);
         setTempLivePreviewEnabled(isLivePreviewEnabled);
     };
 
@@ -169,6 +181,10 @@ export function BackgroundSettings() {
                 body: JSON.stringify({
                     booth_id: booth.id,
                     ...settingsPayload,
+                    // Booth-only — deliberately kept out of settingsPayload so it
+                    // isn't PATCHed onto booth_sessions, which has no such columns.
+                    extra_print_enabled: extraPrintEnabled,
+                    extra_print_price: extraPrintPrice,
                 }),
             });
 
@@ -187,6 +203,8 @@ export function BackgroundSettings() {
                     review_timeout_seconds: reviewTimeoutSeconds,
                     print_copies: printCopies,
                     slideshow_enabled: slideshowEnabled,
+                    extra_print_enabled: extraPrintEnabled,
+                    extra_print_price: extraPrintPrice,
                 });
 
                 // 2. If an active session exists, also save to it
@@ -483,6 +501,39 @@ export function BackgroundSettings() {
                             className="py-2"
                         />
                         <p className="text-xs text-muted-foreground">How many copies to print automatically when the user clicks Print.</p>
+                    </div>
+
+                    {/* Paid Extra Print */}
+                    <div className="space-y-4 rounded-lg border p-4 bg-muted/20">
+                        <div className="flex flex-row items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base font-semibold">Sell Extra Prints</Label>
+                                <p className="text-sm text-muted-foreground mr-8">
+                                    Show a &quot;Buy Extra Print&quot; button on the review screen. Guests pay by QRIS before the copy prints.
+                                </p>
+                            </div>
+                            <Switch
+                                checked={extraPrintEnabled}
+                                onCheckedChange={setExtraPrintEnabled}
+                            />
+                        </div>
+
+                        {extraPrintEnabled && (
+                            <div className="space-y-2">
+                                <Label className="text-sm font-medium">Price per extra print (IDR)</Label>
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    step={1000}
+                                    value={extraPrintPrice}
+                                    onChange={(e) => setExtraPrintPrice(Math.max(0, Math.round(Number(e.target.value) || 0)))}
+                                    className="max-w-xs"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Charged per copy. If Bypass Payment is on, extra prints are free and print immediately.
+                                </p>
+                            </div>
+                        )}
                     </div>
                         </CardContent>
                     </Card>
