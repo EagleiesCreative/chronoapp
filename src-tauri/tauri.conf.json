@@ -48,7 +48,7 @@
       "open": true
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkwOEVCMjBBMjZCMUQxODAKUldTQTBiRW1DcktPa0x4VlRTMldnWWFIcFd1b0ZYaGdmSXNzSE9ldXIyeklIYmszK0xXNGdNaVkK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgOURCNjUyOTYwRTc5QTI3RgpSV1Ivb25rT2xsSzJuWnJYUUw0TjZuTGswbFE1NzVOVnVsMTdzK2t4Wm5sdHdZRVFrU1ZtOFloago=",
       "endpoints": [
         "https://github.com/EagleiesCreative/chronoapp/releases/latest/download/latest.json"
       ]
