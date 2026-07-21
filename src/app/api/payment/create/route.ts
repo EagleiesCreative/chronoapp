@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
-import { createPayment, createSession, updateSession, getBoothById, getActiveBoothSession } from '@/lib/supabase';
+import { createPayment, createSession, updateSession, getBoothById, getActiveBoothSession, DEFAULT_EXTRA_PRINT_PRICE } from '@/lib/supabase';
 import { getBoothFromRequest } from '@/lib/booth-auth';
 import { resolvePaymentProvider, createQRISPayment } from '@/lib/payment-gateway';
+
+/** Upper bound on prints bought in one go — guards against fat-fingered kiosks. */
+const MAX_PRINT_COPIES = 20;
 
 // Input validation schema
 const createPaymentSchema = z.object({
     frameId: z.string().uuid('Invalid frame ID'),
     voucherCode: z.string().optional(),
+    /** Total prints the guest wants, including the copies the base price covers. */
+    printCopies: z.number().int().positive().max(MAX_PRINT_COPIES).optional(),
 });
 
 /**
@@ -41,7 +46,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { frameId, voucherCode } = validation.data;
+        const { frameId, voucherCode, printCopies } = validation.data;
 
         // SECURITY: Fetch price from booth settings (server-side authority)
         const booth = await getBoothById(boothSession.booth_id);
@@ -55,9 +60,21 @@ export async function POST(request: NextRequest) {
         const effectivePaymentBypass = activeBoothSession?.payment_bypass ?? booth.payment_bypass;
         const boothSessionId         = activeBoothSession?.id;
 
+        // SECURITY: extra-copy pricing is resolved server-side too.
+        const includedCopies   = activeBoothSession?.print_copies ?? booth.print_copies ?? 1;
+        const extraPrintPrice  = booth.extra_print_price ?? DEFAULT_EXTRA_PRINT_PRICE;
+        // The base price always covers `includedCopies`; anything below that is
+        // ignored rather than discounted.
+        const requestedCopies  = Math.min(
+            Math.max(printCopies ?? includedCopies, includedCopies),
+            MAX_PRINT_COPIES
+        );
+        const extraCopies      = Math.max(0, requestedCopies - includedCopies);
+        const extraCopiesTotal = extraCopies * extraPrintPrice;
+
         // Bypass payment if enabled
         if (effectivePaymentBypass) {
-            const session = await createSession(frameId, booth.id, boothSessionId);
+            const session = await createSession(frameId, booth.id, boothSessionId, requestedCopies);
             return NextResponse.json({
                 success: true,
                 sessionId: session.id,
@@ -71,10 +88,16 @@ export async function POST(request: NextRequest) {
                 appliedVoucher: null,
                 isFree: true,
                 isBypassed: true,
+                printCopies: requestedCopies,
+                includedCopies,
+                extraCopies,
+                extraPrintPrice,
+                extraCopiesTotal: 0,
             });
         }
 
-        let amount        = effectivePrice;
+        const basePriceWithExtras = effectivePrice + extraCopiesTotal;
+        let amount        = basePriceWithExtras;
         let appliedVoucher: null | object = null;
         let discountAmount = 0;
 
@@ -119,7 +142,7 @@ export async function POST(request: NextRequest) {
 
         // Handle free session (full voucher discount)
         if (amount <= 0 && appliedVoucher) {
-            const session = await createSession(frameId, booth.id, boothSessionId);
+            const session = await createSession(frameId, booth.id, boothSessionId, requestedCopies);
             return NextResponse.json({
                 success: true,
                 sessionId: session.id,
@@ -128,10 +151,15 @@ export async function POST(request: NextRequest) {
                 invoiceUrl: null,
                 expiryDate: null,
                 amount: 0,
-                originalAmount: effectivePrice,
+                originalAmount: basePriceWithExtras,
                 discountAmount,
                 appliedVoucher,
                 isFree: true,
+                printCopies: requestedCopies,
+                includedCopies,
+                extraCopies,
+                extraPrintPrice,
+                extraCopiesTotal,
             });
         }
 
@@ -143,7 +171,7 @@ export async function POST(request: NextRequest) {
         const provider = await resolvePaymentProvider(booth.organization_id);
 
         // Create DB session first
-        const session = await createSession(frameId, booth.id, boothSessionId);
+        const session = await createSession(frameId, booth.id, boothSessionId, requestedCopies);
 
         // External ID includes provider prefix for easy identification in webhooks
         const externalId = `chrono_${provider}_${booth.id}_${session.id}_${Date.now()}`;
@@ -182,11 +210,16 @@ export async function POST(request: NextRequest) {
             invoiceUrl: qris.qrString,   // Raw QRIS string rendered into QR image client-side
             expiryDate: qris.expiresAt ?? null,
             amount,
-            originalAmount: effectivePrice,
+            originalAmount: basePriceWithExtras,
             discountAmount,
             appliedVoucher,
             isFree: false,
             provider,
+            printCopies: requestedCopies,
+            includedCopies,
+            extraCopies,
+            extraPrintPrice,
+            extraCopiesTotal,
         });
     } catch (error) {
         console.error('/api/payment/create POST error:', error);

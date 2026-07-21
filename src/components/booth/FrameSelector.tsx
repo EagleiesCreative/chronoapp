@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeftIcon, Check, ImageIcon } from 'lucide-react';
+import { ArrowLeftIcon, Check, ImageIcon, Minus, Plus, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { useSessionProfileStore } from '@/store/session-profile-store';
-import { Frame } from '@/lib/supabase';
+import { Frame, DEFAULT_EXTRA_PRINT_PRICE } from '@/lib/supabase';
+import { formatIDR } from '@/lib/xendit';
 import { apiFetch, getAssetUrl } from '@/lib/api';
+
+/** Mirrors MAX_PRINT_COPIES in /api/payment/create. */
+const MAX_PRINT_COPIES = 20;
 import { getCachedFrames, setCachedFrames, getCachedImageUrl, cacheFrameImages } from '@/lib/frame-cache';
 
 function toFiniteNumber(value: unknown, fallback: number): number {
@@ -65,11 +69,27 @@ function normalizeFrame(raw: unknown): Frame {
 }
 
 export function FrameSelector() {
-    const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, isLoading, setError, setSession } = useBoothStore();
+    const { frames, setFrames, selectedFrame, setSelectedFrame, setStep, setIsLoading, isLoading, setError, setSession, printQuantity, setPrintQuantity } = useBoothStore();
     const { booth } = useTenantStore();
     const activeSession = useSessionProfileStore((s) => s.activeSession);
     const effectivePaymentBypass = activeSession?.payment_bypass ?? booth?.payment_bypass;
     const [cachedOverlayUrls, setCachedOverlayUrls] = useState<Record<string, string>>({});
+
+    // Prints are bought upfront: the base price covers `includedCopies`, each
+    // copy beyond that adds `extraPrintPrice`.
+    const includedCopies = activeSession?.print_copies ?? booth?.print_copies ?? 1;
+    const extraPrintPrice = booth?.extra_print_price ?? DEFAULT_EXTRA_PRINT_PRICE;
+    const basePrice = activeSession?.price ?? booth?.price ?? 0;
+    const printEnabled = booth?.print_enabled !== false;
+
+    const copies = Math.min(Math.max(printQuantity ?? includedCopies, includedCopies), MAX_PRINT_COPIES);
+    const extraCopies = Math.max(0, copies - includedCopies);
+    const totalPrice = basePrice + extraCopies * extraPrintPrice;
+    const canBuyExtraCopies = printEnabled && extraPrintPrice > 0 && !effectivePaymentBypass;
+
+    const changeCopies = (delta: number) => {
+        setPrintQuantity(Math.min(Math.max(copies + delta, includedCopies), MAX_PRINT_COPIES));
+    };
 
     // Load indexedDB cached images for frames
     useEffect(() => {
@@ -194,11 +214,13 @@ export function FrameSelector() {
             try {
                 const response = await apiFetch('/api/payment/create', {
                     method: 'POST',
-                    body: JSON.stringify({ frameId: selectedFrame.id }),
+                    body: JSON.stringify({ frameId: selectedFrame.id, printCopies: copies }),
                 });
                 const data = await response.json();
                 if (data.success) {
                     setSession({ id: data.sessionId });
+                    // Trust the server's copy count — it clamps to booth limits.
+                    setPrintQuantity(data.printCopies ?? copies);
                     setStep('capturing');
                 } else {
                     setError(data.error || 'Failed to create session');
@@ -343,6 +365,49 @@ export function FrameSelector() {
                         </AnimatePresence>
                     </div>
                 </div>
+
+                {/* Prints bought upfront — pay once, no reprint payment later */}
+                {canBuyExtraCopies && (
+                    <div className="shrink-0 relative z-10 w-full max-w-[400px] px-10 pt-2">
+                        <div className="rounded-[1.25rem] border-2 border-black/10 bg-white px-5 py-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <Printer className="w-4 h-4 text-black/70" strokeWidth={2} />
+                                    <span className="text-sm font-bold uppercase tracking-wider text-black/70">Prints</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => changeCopies(-1)}
+                                        disabled={copies <= includedCopies}
+                                        aria-label="Fewer prints"
+                                        className="w-11 h-11 rounded-full border-2 border-black/15 flex items-center justify-center text-black disabled:opacity-30 active:scale-95 transition-transform touch-target"
+                                    >
+                                        <Minus className="w-4 h-4" strokeWidth={3} />
+                                    </button>
+                                    <span className="w-8 text-center text-2xl font-extrabold tabular-nums">{copies}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => changeCopies(1)}
+                                        disabled={copies >= MAX_PRINT_COPIES}
+                                        aria-label="More prints"
+                                        className="w-11 h-11 rounded-full border-2 border-black flex items-center justify-center text-black disabled:opacity-30 active:scale-95 transition-transform touch-target"
+                                    >
+                                        <Plus className="w-4 h-4" strokeWidth={3} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex items-baseline justify-between border-t border-black/10 pt-3">
+                                <span className="text-xs text-black/50 font-medium">
+                                    {includedCopies} included
+                                    {extraCopies > 0 && ` + ${extraCopies} x ${formatIDR(extraPrintPrice)}`}
+                                </span>
+                                <span className="text-xl font-extrabold text-black tabular-nums">{formatIDR(totalPrice)}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Confirm Action Button — fixed at bottom */}
                 <div className="shrink-0 relative z-10 w-full max-w-[400px] px-10 pb-6 pt-4">

@@ -110,6 +110,8 @@ export interface Session {
   payment_id: string | null;
   frame_id: string;
   booth_session_id: string | null;
+  /** Prints paid for upfront (booth default copies + purchased extras) */
+  print_copies?: number;
   status: 'pending' | 'paid' | 'capturing' | 'compositing' | 'completed' | 'cancelled';
   photos_urls: string[];
   final_image_url: string | null;
@@ -296,7 +298,12 @@ export async function getFrameById(id: string): Promise<Frame | null> {
   return data;
 }
 
-export async function createSession(frameId: string, boothId?: string, boothSessionId?: string): Promise<Session> {
+export async function createSession(
+  frameId: string,
+  boothId?: string,
+  boothSessionId?: string,
+  printCopies?: number
+): Promise<Session> {
   const { data, error } = await supabase
     .from('sessions')
     .insert({
@@ -305,6 +312,7 @@ export async function createSession(frameId: string, boothId?: string, boothSess
       booth_session_id: boothSessionId || null,
       status: 'pending',
       photos_urls: [],
+      print_copies: printCopies && printCopies > 0 ? Math.round(printCopies) : 1,
     })
     .select()
     .single();

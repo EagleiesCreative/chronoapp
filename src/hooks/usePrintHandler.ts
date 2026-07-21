@@ -5,11 +5,13 @@ import { useTenantStore } from '@/store/tenant-store';
 
 export function usePrintHandler(compositeImage: string | null) {
     const [isPrinting, setIsPrinting] = useState(false);
-    const { session, printImage } = useBoothStore();
+    const { session, printImage, printQuantity } = useBoothStore();
     const { addJob } = usePrintStore();
     const { booth } = useTenantStore();
 
-    const printCopiesCount = booth?.print_copies ?? 1;
+    // Prefer the quantity the guest actually paid for upfront; fall back to the
+    // booth default (e.g. sessions started before the picker existed).
+    const printCopiesCount = printQuantity ?? booth?.print_copies ?? 1;
     // Use printImage (always 4R) for printing, fall back to compositeImage
     const imageForPrint = printImage || compositeImage;
 

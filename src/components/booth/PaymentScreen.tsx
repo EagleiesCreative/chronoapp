@@ -22,6 +22,8 @@ export function PaymentScreen() {
         setIsLoading,
         setError,
         appliedVoucher,
+        printQuantity,
+        setPrintQuantity,
     } = useBoothStore();
 
     const { booth } = useTenantStore();
@@ -30,6 +32,7 @@ export function PaymentScreen() {
     const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
     const [isCreating, setIsCreating] = useState(false);
 
+    const [printCopies, setPrintCopies] = useState<number | null>(printQuantity);
     const [originalPrice, setOriginalPrice] = useState<number>(appliedVoucher?.original_price ?? booth?.price ?? 0);
     const [discountAmount, setDiscountAmount] = useState<number>(appliedVoucher?.discount_value ?? 0);
     const [finalPrice, setFinalPrice] = useState<number>(appliedVoucher?.final_price ?? booth?.price ?? 0);
@@ -47,6 +50,7 @@ export function PaymentScreen() {
                     body: JSON.stringify({
                         frameId: selectedFrame.id,
                         voucherCode: appliedVoucher?.code || undefined,
+                        printCopies: printQuantity ?? undefined,
                     }),
                 });
 
@@ -57,6 +61,11 @@ export function PaymentScreen() {
                     if (data.originalAmount !== undefined) setOriginalPrice(data.originalAmount);
                     if (data.discountAmount !== undefined) setDiscountAmount(data.discountAmount);
                     if (data.amount !== undefined) setFinalPrice(data.amount);
+                    if (data.printCopies !== undefined) {
+                        // Server-clamped copy count is what the guest is paying for.
+                        setPrintCopies(data.printCopies);
+                        setPrintQuantity(data.printCopies);
+                    }
 
                     setSession({ id: data.sessionId });
 
@@ -338,8 +347,15 @@ export function PaymentScreen() {
                                 -{formatIDR(discountAmount)} Discount
                             </div>
                         )}
-                        <div className="inline-block px-4 py-2 bg-green-50 text-green-700 text-xs font-bold rounded-full border border-green-100">
-                            {selectedFrame?.name || 'Photobooth Session'}
+                        <div className="flex flex-wrap gap-2">
+                            <div className="inline-block px-4 py-2 bg-green-50 text-green-700 text-xs font-bold rounded-full border border-green-100">
+                                {selectedFrame?.name || 'Photobooth Session'}
+                            </div>
+                            {printCopies !== null && printCopies > 0 && (
+                                <div className="inline-block px-4 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-full border border-slate-200">
+                                    {printCopies} {printCopies === 1 ? 'print' : 'prints'}
+                                </div>
+                            )}
                         </div>
                     </div>
 

@@ -489,7 +489,7 @@ export function BackgroundSettings() {
                     {/* Print Copies */}
                     <div className="space-y-3">
                         <div className="flex justify-between">
-                            <Label className="text-sm font-medium">Default Print Copies ({printCopies})</Label>
+                            <Label className="text-sm font-medium">Prints Included in Price ({printCopies})</Label>
                             <span className="text-sm text-muted-foreground">Range: 1-5</span>
                         </div>
                         <Slider
@@ -500,7 +500,7 @@ export function BackgroundSettings() {
                             onValueChange={(vals) => setPrintCopies(vals[0])}
                             className="py-2"
                         />
-                        <p className="text-xs text-muted-foreground">How many copies to print automatically when the user clicks Print.</p>
+                        <p className="text-xs text-muted-foreground">Copies covered by the base price. Guests can add more before paying, each charged at the extra print price below.</p>
                     </div>
 
                     {/* Paid Extra Print */}

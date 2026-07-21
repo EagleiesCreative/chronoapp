@@ -88,6 +88,10 @@ interface BoothState {
     printImage: string | null;
     setPrintImage: (image: string | null) => void;
 
+    // Total prints chosen (and paid for) before capture. null = booth default.
+    printQuantity: number | null;
+    setPrintQuantity: (quantity: number | null) => void;
+
     // Loading states
     isLoading: boolean;
     setIsLoading: (loading: boolean) => void;
@@ -172,6 +176,9 @@ export const useBoothStore = create<BoothState>((set) => ({
     printImage: null,
     setPrintImage: (image) => set({ printImage: image }),
 
+    printQuantity: null,
+    setPrintQuantity: (quantity) => set({ printQuantity: quantity }),
+
     isLoading: false,
     setIsLoading: (loading) => set({ isLoading: loading }),
 
@@ -200,6 +207,7 @@ export const useBoothStore = create<BoothState>((set) => ({
         finalVideoUrl: null,
         finalVideoBlob: null,
         printImage: null,
+        printQuantity: null,
         isLoading: false,
         error: null,
         appliedVoucher: null,
