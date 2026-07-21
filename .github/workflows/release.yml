@@ -1,15 +1,135 @@
 name: Release Framr Studio
 
+# Two ways in:
+#   1. Run manually (Actions → Release Framr Studio → Run workflow). The version
+#      is bumped, committed, tagged and pushed for you, then everything builds
+#      and a GitHub Release is published.
+#   2. Push a tag yourself (git tag v1.2.3 && git push origin v1.2.3) — the tag
+#      is used as-is and no bump commit is made.
+
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Which part of the version to increase'
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+      version:
+        description: 'Exact version instead of a bump (e.g. 1.4.0). Leave empty to use the bump above.'
+        type: string
+        required: false
+      publish:
+        description: 'Publish the release (uncheck to leave it as a draft)'
+        type: boolean
+        required: true
+        default: true
 
 permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  # ── Decide the version, then commit + tag it ────────────────────────────────
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need full tag history to find the latest version
+
+      - name: Resolve next version
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Tag push: the tag is the source of truth, nothing to bump.
+            TAG="${GITHUB_REF_NAME}"
+            echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "Using pushed tag ${TAG}"
+            exit 0
+          fi
+
+          EXPLICIT="${{ inputs.version }}"
+          if [ -n "$EXPLICIT" ]; then
+            if ! echo "$EXPLICIT" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::'$EXPLICIT' is not a valid x.y.z version"
+              exit 1
+            fi
+            NEXT="$EXPLICIT"
+          else
+            # Highest existing v* tag wins; fall back to tauri.conf.json for a
+            # fresh repo. (Tags and the config file can drift apart.)
+            # `|| true` so pipefail doesn't trip on head closing the pipe early.
+            LATEST_TAG="$(git tag -l 'v*' --sort=-v:refname | head -n1 || true)"
+            CURRENT="${LATEST_TAG#v}"
+            if [ -z "$CURRENT" ]; then
+              CURRENT="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+            fi
+            echo "Current version: $CURRENT"
+
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+            case "${{ inputs.bump }}" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+            NEXT="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          if git rev-parse "v$NEXT" >/dev/null 2>&1; then
+            echo "::error::Tag v$NEXT already exists"
+            exit 1
+          fi
+
+          echo "Next version: $NEXT"
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Commit, tag and push the bump
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          NEXT: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          node -e "
+            const fs = require('fs');
+            const next = process.env.NEXT;
+
+            for (const file of ['package.json', 'src-tauri/tauri.conf.json']) {
+              const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+              json.version = next;
+              fs.writeFileSync(file, JSON.stringify(json, null, 2) + '\n');
+              console.log('Set ' + file + ' to ' + next);
+            }
+          "
+
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json src-tauri/tauri.conf.json
+          git commit -m "chore(release): v${NEXT}"
+          git tag -a "v${NEXT}" -m "Framr Studio v${NEXT}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "v${NEXT}"
+
+  # ── Build every platform against that tag ──────────────────────────────────
+  build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -26,6 +146,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Always build the exact commit the tag points at.
+          ref: ${{ needs.version.outputs.tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -46,17 +169,17 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Sync version from git tag → tauri.conf.json
+      - name: Sync version into tauri.conf.json
         shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          # Strip the leading 'v' from the tag (e.g. v1.2.3 → 1.2.3)
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Setting tauri.conf.json version to $VERSION"
-          # Use node to patch the JSON safely (available on all runner platforms)
+          # Belt and braces: on a manual run the bump commit already set this,
+          # but a hand-pushed tag may point at a commit with a stale version.
           node -e "
             const fs = require('fs');
             const cfg = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-            cfg.version = '$VERSION';
+            cfg.version = process.env.VERSION;
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(cfg, null, 2) + '\n');
           "
 
@@ -78,13 +201,15 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           BUILD_TARGET: tauri
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Framr Studio ${{ github.ref_name }}'
+          tagName: ${{ needs.version.outputs.tag }}
+          releaseName: 'Framr Studio ${{ needs.version.outputs.tag }}'
           releaseBody: |
-            ## Framr Studio ${{ github.ref_name }}
+            ## Framr Studio ${{ needs.version.outputs.tag }}
 
             Download the installer for your platform below.
             After installing, the app will check for future updates automatically via Admin → Settings → Config.
+          # Stays a draft until every platform has uploaded, so the updater
+          # never sees a half-finished release.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
@@ -96,3 +221,21 @@ jobs:
           mv src/app/_api_backup src/app/api 2>/dev/null || true
           mv src/app/_share_backup src/app/share 2>/dev/null || true
           mv src/app/_event_backup src/app/event 2>/dev/null || true
+
+  # ── Flip the draft to published once all builds succeeded ──────────────────
+  publish:
+    needs: [version, build]
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          # --latest matters: the updater endpoint reads
+          # releases/latest/download/latest.json
+          gh release edit "$TAG" --draft=false --latest
