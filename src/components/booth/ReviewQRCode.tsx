@@ -37,7 +37,7 @@ export function ReviewQRCode({
                         <img
                             src={downloadQR}
                             alt="Sharing QR Code"
-                            className="w-32 h-32"
+                            className="w-32 h-32 max-w-none shrink-0 aspect-square object-contain mx-auto"
                             style={{ imageRendering: 'pixelated' }}
                         />
                     </div>

@@ -38,7 +38,7 @@ export function ReviewActions({
             initial={{ x: 20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ delay: 0.4 }}
-            className="flex flex-col gap-4 max-h-[calc(100vh-230px)] overflow-y-auto hide-scrollbar pr-2"
+            className="flex flex-col gap-4 w-[240px] shrink-0 max-h-[calc(100vh-230px)] overflow-y-auto hide-scrollbar pr-2"
         >
             {/* Print button */}
             {printEnabled && (

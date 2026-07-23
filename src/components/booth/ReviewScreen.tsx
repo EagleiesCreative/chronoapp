@@ -682,9 +682,9 @@ export function ReviewScreen() {
                         initial={{ scale: 0.95, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         transition={{ delay: 0.2 }}
-                        className="flex flex-col items-center justify-center"
+                        className="flex flex-col items-center justify-center min-w-0"
                     >
-                        <div className="elegant-card overflow-hidden">
+                        <div className="elegant-card overflow-hidden max-w-full">
                             {shouldShowLivePreview ? (
                                 <div
                                     className="relative bg-white"
@@ -802,7 +802,7 @@ export function ReviewScreen() {
                                 <img
                                     src={effectiveCompositeImage || ''}
                                     alt="Final composite"
-                                    className="max-h-[calc(100vh-280px)] w-auto object-contain"
+                                    className="max-h-[calc(100vh-280px)] max-w-full w-auto object-contain"
                                 />
                             )}
                         </div>

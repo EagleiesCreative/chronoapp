@@ -100,7 +100,11 @@ export function FinalReviewScreen() {
                                                 boxShadow: '0 20px 50px rgba(0,0,0,0.3), 0 0 1px rgba(255,255,255,0.5) inset'
                                             }}
                                         >
-                                            {selectedFrame.photo_slots.filter((slot) => slot.layer !== 'above').map((slot, originalIndex) => (
+                                            {selectedFrame.photo_slots.filter((slot) => slot.layer !== 'above').map((slot, originalIndex) => {
+                                                // Slots map to captures by capture_index, not slot position.
+                                                // Multiple slots can share one capture ("duplicate" frames).
+                                                const captureIdx = slot.capture_index ?? originalIndex;
+                                                return (
                                                 <div
                                                     key={slot.id}
                                                     className="absolute overflow-hidden z-10"
@@ -112,16 +116,16 @@ export function FinalReviewScreen() {
                                                         transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
                                                     }}
                                                 >
-                                                    {capturedPhotos[originalIndex]?.dataUrl ? (
+                                                    {capturedPhotos[captureIdx]?.dataUrl ? (
                                                         <>
                                                             <img
-                                                                src={capturedPhotos[originalIndex].dataUrl}
-                                                                alt={`Photo ${originalIndex + 1}`}
+                                                                src={capturedPhotos[captureIdx].dataUrl}
+                                                                alt={`Photo ${captureIdx + 1}`}
                                                                 className="w-full h-full object-cover"
                                                             />
                                                             <button
                                                                 type="button"
-                                                                onClick={() => handleRetakePhoto(originalIndex)}
+                                                                onClick={() => handleRetakePhoto(captureIdx)}
                                                                 className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 hover:opacity-100 transition-all duration-300 backdrop-blur-[2px]"
                                                             >
                                                                 <div className="flex flex-col items-center gap-2">
@@ -134,11 +138,12 @@ export function FinalReviewScreen() {
                                                         </>
                                                     ) : (
                                                         <div className="w-full h-full bg-muted/80 flex items-center justify-center text-muted-foreground text-xs">
-                                                            {originalIndex + 1}
+                                                            {captureIdx + 1}
                                                         </div>
                                                     )}
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
 
                                             <img
                                                 src={getAssetUrl(selectedFrame.image_url)}
@@ -146,7 +151,9 @@ export function FinalReviewScreen() {
                                                 className="absolute inset-0 w-full h-full object-contain z-20 pointer-events-none"
                                             />
 
-                                            {selectedFrame.photo_slots.filter((slot) => slot.layer === 'above').map((slot, originalIndex) => (
+                                            {selectedFrame.photo_slots.filter((slot) => slot.layer === 'above').map((slot, originalIndex) => {
+                                                const captureIdx = slot.capture_index ?? originalIndex;
+                                                return (
                                                 <div
                                                     key={slot.id}
                                                     className="absolute overflow-hidden z-30"
@@ -158,10 +165,10 @@ export function FinalReviewScreen() {
                                                         transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
                                                     }}
                                                 >
-                                                    {capturedPhotos[originalIndex]?.dataUrl ? (
+                                                    {capturedPhotos[captureIdx]?.dataUrl ? (
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleRetakePhoto(originalIndex)}
+                                                            onClick={() => handleRetakePhoto(captureIdx)}
                                                             className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 hover:opacity-100 transition-all duration-300 backdrop-blur-[2px]"
                                                         >
                                                             <div className="flex flex-col items-center gap-2">
@@ -173,7 +180,8 @@ export function FinalReviewScreen() {
                                                         </button>
                                                     ) : null}
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     );
                                 })()}

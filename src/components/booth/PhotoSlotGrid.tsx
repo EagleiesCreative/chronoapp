@@ -125,7 +125,10 @@ export function PhotoSlotGrid({
                         <div className="relative overflow-hidden" style={{ width: `${pw}px`, height: `${ph}px` }}>
                             {/* Photo slots - layer below or default */}
                             {selectedFrame?.photo_slots?.filter(slot => slot.layer !== 'above').map((slot) => {
-                                const originalIndex = selectedFrame.photo_slots!.indexOf(slot);
+                                const slotArrayIndex = selectedFrame.photo_slots!.indexOf(slot);
+                                // Map each slot to its capture by capture_index so "duplicate"
+                                // frames (multiple slots sharing one capture) fill correctly.
+                                const originalIndex = slot.capture_index ?? slotArrayIndex;
                                 return (
                                     <div
                                         key={slot.id}
@@ -161,7 +164,10 @@ export function PhotoSlotGrid({
 
                             {/* Photo slots - layer above */}
                             {selectedFrame?.photo_slots?.filter(slot => slot.layer === 'above').map((slot) => {
-                                const originalIndex = selectedFrame.photo_slots!.indexOf(slot);
+                                const slotArrayIndex = selectedFrame.photo_slots!.indexOf(slot);
+                                // Map each slot to its capture by capture_index so "duplicate"
+                                // frames (multiple slots sharing one capture) fill correctly.
+                                const originalIndex = slot.capture_index ?? slotArrayIndex;
                                 return (
                                     <div
                                         key={slot.id}
