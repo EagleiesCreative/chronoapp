@@ -399,7 +399,11 @@ export function ReviewScreen() {
     const previewCanvasWidth = selectedFrame?.canvas_width || 600;
     const previewCanvasHeight = selectedFrame?.canvas_height || 1050;
     const previewMaxHeight = typeof window !== 'undefined' ? Math.max(360, window.innerHeight - 220) : 750;
-    const previewScale = Math.min(previewMaxHeight / previewCanvasHeight, 1);
+    // Constrain by width too — the live preview shares the row with the actions/QR
+    // column, so a wide (landscape) frame scaled by height alone overflowed and got
+    // cut off. Fit within both the available height and width, preserving aspect.
+    const previewMaxWidth = typeof window !== 'undefined' ? Math.max(320, Math.min(600, window.innerWidth - 320)) : 600;
+    const previewScale = Math.min(previewMaxHeight / previewCanvasHeight, previewMaxWidth / previewCanvasWidth, 1);
     const previewWidth = Math.round(previewCanvasWidth * previewScale);
     const previewHeight = Math.round(previewCanvasHeight * previewScale);
 

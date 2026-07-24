@@ -329,8 +329,14 @@ export function ShareGallery({
             </div>
 
             {/* Thumbnail Strip */}
-            <div className="border-t bg-white py-4 px-4">
-                <div className="flex gap-3 overflow-x-auto pb-2 justify-center">
+            <div className="border-t bg-white py-4">
+                {/* Scroll container is separate from the centering track: using
+                    `justify-center` directly on an overflow-x container clips the
+                    leftmost items (the Live/GIF thumb), making them unreachable by
+                    swiping. `w-max mx-auto` centers when it fits and scrolls fully
+                    from the start when it doesn't. */}
+                <div className="overflow-x-auto pb-2 px-4">
+                <div className="flex gap-3 w-max mx-auto">
                     {/* Video thumbnail */}
                     {videoUrl && (
                         <>
@@ -386,6 +392,7 @@ export function ShareGallery({
                             />
                         </button>
                     ))}
+                </div>
                 </div>
             </div>
 
