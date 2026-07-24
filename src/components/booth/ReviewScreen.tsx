@@ -320,7 +320,7 @@ export function ReviewScreen() {
         setFinalImage,
         setPrintImage,
     } = useBoothStore();
-    const { isVideoMode } = useAdminStore();
+    const { isVideoMode, isCameraMirrored } = useAdminStore();
 
     const { booth } = useTenantStore();
     const timeoutSeconds = booth?.review_timeout_seconds ?? 60;
@@ -714,7 +714,7 @@ export function ReviewScreen() {
                                                         loop
                                                         muted
                                                         playsInline
-                                                        className="w-full h-full object-cover"
+                                                        className={`w-full h-full object-cover ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
                                                     />
                                                 ) : slotPhoto ? (
                                                     <img
@@ -757,7 +757,7 @@ export function ReviewScreen() {
                                                         loop
                                                         muted
                                                         playsInline
-                                                        className="w-full h-full object-cover"
+                                                        className={`w-full h-full object-cover ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
                                                     />
                                                 ) : slotPhoto ? (
                                                     <img

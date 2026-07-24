@@ -12,7 +12,7 @@ import { queueSessionSync } from '@/lib/reliability-sync';
 
 export function useUploadSession() {
     const { session, capturedPhotos, finalVideoBlob, selectedFrame } = useBoothStore();
-    const { isVideoMode } = useAdminStore();
+    const { isCameraMirrored } = useAdminStore();
     const { booth } = useTenantStore();
 
     const [downloadQR, setDownloadQR] = useState<string | null>(null);
@@ -122,25 +122,32 @@ export function useUploadSession() {
             let gifUrl: string | null = null;
             let videoUrl: string | null = null;
 
-            if (isVideoMode && finalVideoBlob) {
+            // Read the freshest values straight from the stores. `finalVideoBlob` is
+            // produced by the compositor and can land a beat after this hook last
+            // rendered; relying on the closed-over value here occasionally missed the
+            // clip and silently dropped it from the web share.
+            const videoModeNow = useAdminStore.getState().isVideoMode;
+            const freshVideoBlob = useBoothStore.getState().finalVideoBlob;
+
+            if (videoModeNow && freshVideoBlob) {
                 setUploadStatus('Uploading video...');
                 try {
-                    videoUrl = await uploadVideoClient(sessionId, finalVideoBlob);
+                    videoUrl = await uploadVideoClient(sessionId, freshVideoBlob);
                     setVideoGenerated(true);
                     setGifDownloadUrl(videoUrl);
-                    console.log(`Video uploaded: ${(finalVideoBlob.size / 1024).toFixed(1)}KB`);
+                    console.log(`Video uploaded: ${(freshVideoBlob.size / 1024).toFixed(1)}KB`);
 
                     // Save locally
                     if (localSaveEnabled && savePath && localSessionFolder) {
                         const reader = new FileReader();
                         reader.onloadend = () => {
                             const videoDataUrl = reader.result as string;
-                            const extension = finalVideoBlob.type.includes('mp4') ? 'mp4' : 'webm';
+                            const extension = freshVideoBlob.type.includes('mp4') ? 'mp4' : 'webm';
                             saveToLocalDisk(savePath, localSessionFolder!, `video.${extension}`, videoDataUrl)
                                 .then(p => p && console.log('[LocalSave] Video saved:', p))
                                 .catch(err => console.error('[LocalSave] Video save failed:', err));
                         };
-                        reader.readAsDataURL(finalVideoBlob);
+                        reader.readAsDataURL(freshVideoBlob);
                     }
                 } catch (e) {
                     console.error('Video upload failed:', e);
@@ -159,7 +166,7 @@ export function useUploadSession() {
                         let gifResult = null;
                         
                         // If it's video mode and we have video blobs and a frame, compile the framed gif!
-                        if (isVideoMode && hasVideoBlobs && selectedFrame?.image_url) {
+                        if (videoModeNow && hasVideoBlobs && selectedFrame?.image_url) {
                             try {
                                 const sourceUrl = getAssetUrl(selectedFrame.image_url);
                                 // Must go through getApiUrl: a relative "/api/..." path resolves to
@@ -192,6 +199,7 @@ export function useUploadSession() {
                                     canvasWidth: selectedFrame.canvas_width || 1200,
                                     canvasHeight: selectedFrame.canvas_height || 1800,
                                     quality: 15,
+                                    mirrored: isCameraMirrored,
                                 });
                             } catch (err) {
                                 console.warn('Failed to construct framed video GIF, falling back:', err);

@@ -133,7 +133,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
     const [compositeWarning, setCompositeWarning] = useState<string | null>(null);
 
     const { selectedFrame, capturedPhotos, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl, selectedFilter } = useBoothStore();
-    const { isVideoMode } = useAdminStore();
+    const { isVideoMode, isCameraMirrored } = useAdminStore();
     const { booth } = useTenantStore();
 
     // Keep refs so the effect closure always reads the latest values
@@ -144,6 +144,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
     const selectedFilterRef = useRef(selectedFilter);
     const boothRef = useRef(booth);
     const isVideoModeRef = useRef(isVideoMode);
+    const isCameraMirroredRef = useRef(isCameraMirrored);
 
     // Synchronise refs on every render so the effect closure is never stale.
     selectedFrameRef.current = selectedFrame;
@@ -151,6 +152,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
     selectedFilterRef.current = selectedFilter;
     boothRef.current = booth;
     isVideoModeRef.current = isVideoMode;
+    isCameraMirroredRef.current = isCameraMirrored;
 
     // Helper: proxy external URLs through our API to avoid CORS issues in Tauri
     const getProxiedImageUrl = (url: string): string => {
@@ -182,6 +184,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
         const filter = selectedFilterRef.current;
         const boothData = boothRef.current;
         const videoMode = isVideoModeRef.current;
+        // Stills are already mirror-baked by react-webcam's `mirrored` option, but
+        // the recorded live-video clips come from the raw MediaStream (unmirrored).
+        // Flip the video draw to match the stills when the camera is mirrored.
+        const mirrored = isCameraMirroredRef.current;
 
         setIsCompositing(true);
         setCompositeImage(null);
@@ -671,7 +677,14 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                             ctx.rotate((slot.rotation * Math.PI) / 180);
                             ctx.translate(-(destX + destW / 2), -(destY + destH / 2));
                         }
-                        ctx.drawImage(videoNode, srcX, srcY, srcW, srcH, destX, destY, destW, destH);
+                        if (mirrored) {
+                            // Horizontal flip within the slot so the clip matches the mirrored still.
+                            ctx.translate(destX + destW, destY);
+                            ctx.scale(-1, 1);
+                            ctx.drawImage(videoNode, srcX, srcY, srcW, srcH, 0, 0, destW, destH);
+                        } else {
+                            ctx.drawImage(videoNode, srcX, srcY, srcW, srcH, destX, destY, destW, destH);
+                        }
                         ctx.restore();
                         return;
                     }

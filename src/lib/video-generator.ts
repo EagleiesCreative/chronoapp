@@ -225,6 +225,8 @@ export interface FramedVideoGifOptions {
     canvasWidth: number;
     canvasHeight: number;
     quality?: number;
+    /** Flip live-video frames horizontally to match mirror-baked stills. */
+    mirrored?: boolean;
 }
 
 export async function generateFramedVideoGif(
@@ -238,6 +240,7 @@ export async function generateFramedVideoGif(
         canvasWidth,
         canvasHeight,
         quality = 10,
+        mirrored = false,
     } = options;
 
     try {
@@ -372,7 +375,14 @@ export async function generateFramedVideoGif(
                         sH = v.videoWidth / slotAspect;
                         sY = (v.videoHeight - sH) / 2;
                     }
-                    ctx.drawImage(v, sX, sY, sW, sH, destX, destY, destW, destH);
+                    if (mirrored) {
+                        // Flip the live clip so it matches the mirror-baked still fallback.
+                        ctx.translate(destX + destW, destY);
+                        ctx.scale(-1, 1);
+                        ctx.drawImage(v, sX, sY, sW, sH, 0, 0, destW, destH);
+                    } else {
+                        ctx.drawImage(v, sX, sY, sW, sH, destX, destY, destW, destH);
+                    }
                 } else if (fb) {
                     const fbAspect = fb.naturalWidth / fb.naturalHeight;
                     let sW = fb.naturalWidth, sH = fb.naturalHeight, sX = 0, sY = 0;

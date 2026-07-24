@@ -118,9 +118,13 @@ export function PhotoSlotGrid({
                     const cw = selectedFrame?.canvas_width || 600;
                     const ch = selectedFrame?.canvas_height || 1050;
                     const maxH = 380;
-                    const scale = maxH / ch;
+                    // Landscape frames are wider than tall — scaling by height alone made
+                    // the preview overflow its column and get cut off. Fit within both a
+                    // max height and a max width, preserving aspect ratio.
+                    const maxW = 460;
+                    const scale = Math.min(maxH / ch, maxW / cw);
                     const pw = Math.round(cw * scale);
-                    const ph = maxH;
+                    const ph = Math.round(ch * scale);
                     return (
                         <div className="relative overflow-hidden" style={{ width: `${pw}px`, height: `${ph}px` }}>
                             {/* Photo slots - layer below or default */}
