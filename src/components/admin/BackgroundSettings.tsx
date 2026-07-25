@@ -179,16 +179,34 @@ export function BackgroundSettings() {
 
         setIsSaving(true);
         try {
-            // 1. Always save to booth (baseline defaults)
+            // The settings in `settingsPayload` are SESSION-scoped: those columns
+            // exist only on `booth_sessions`, and the booth screens read them as
+            // `activeSession?.x ?? booth?.x`. So the active session is the source
+            // of truth and is saved first; only genuinely booth-wide fields go to
+            // the booth record.
+            if (activeSession?.id) {
+                const sessionRes = await apiFetch(`/api/booth-sessions/${activeSession.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(settingsPayload),
+                });
+                const sessionResult = await sessionRes.json().catch(() => ({}));
+                if (!sessionRes.ok) {
+                    toast.error(sessionResult?.error || 'Failed to save session settings');
+                    return;
+                }
+                setActiveSession({ ...activeSession, ...sessionResult.data });
+            }
+
+            // Booth-wide settings (these columns really do live on `booths`).
             const response = await apiFetch('/api/booth/settings', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
                     booth_id: booth.id,
-                    ...settingsPayload,
-                    // Booth-only — deliberately kept out of settingsPayload so it
-                    // isn't PATCHed onto booth_sessions, which has no such columns.
+                    live_video_seconds: liveVideoSeconds,
                     extra_print_enabled: extraPrintEnabled,
                     extra_print_price: extraPrintPrice,
                 }),
@@ -196,44 +214,23 @@ export function BackgroundSettings() {
 
             setIsLivePreviewEnabled(tempLivePreviewEnabled);
 
-            const data = await response.json();
-            if (data.success) {
-                // Update booth store
-                setBooth({
-                    ...booth,
-                    background_image: backgroundImage || undefined,
-                    background_color: selectedColor,
-                    payment_bypass: paymentBypass,
-                    countdown_seconds: countdownSeconds,
-                    preview_seconds: previewSeconds,
-                    live_video_seconds: liveVideoSeconds,
-                    review_timeout_seconds: reviewTimeoutSeconds,
-                    print_copies: printCopies,
-                    slideshow_enabled: slideshowEnabled,
-                    extra_print_enabled: extraPrintEnabled,
-                    extra_print_price: extraPrintPrice,
-                });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.success) {
+                toast.error(data.error || 'Failed to save booth settings');
+                return;
+            }
 
-                // 2. If an active session exists, also save to it
-                if (activeSession?.id) {
-                    try {
-                        const sessionRes = await apiFetch(`/api/booth-sessions/${activeSession.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(settingsPayload),
-                        });
-                        if (sessionRes.ok) {
-                            const sessionResult = await sessionRes.json();
-                            setActiveSession({ ...activeSession, ...sessionResult.data });
-                        }
-                    } catch (e) {
-                        console.error('Failed to sync settings to active session:', e);
-                    }
-                }
+            setBooth({
+                ...booth,
+                live_video_seconds: liveVideoSeconds,
+                extra_print_enabled: extraPrintEnabled,
+                extra_print_price: extraPrintPrice,
+            });
 
-                toast.success('Settings saved');
+            if (activeSession?.id) {
+                toast.success(`Settings saved to session "${activeSession.name}"`);
             } else {
-                toast.error(data.error || 'Failed to save settings');
+                toast.warning('Saved booth-wide settings only — activate a session to save timing, bypass and print settings.');
             }
         } catch (error) {
             console.error('Save error:', error);

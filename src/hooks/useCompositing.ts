@@ -1075,8 +1075,37 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         };
                     });
 
+                    // Start playback and paint a complete first frame BEFORE the
+                    // recorder starts. Previously mr.start() ran while the canvas
+                    // was still blank and the <video> elements hadn't begun
+                    // decoding, so every clip opened with a white flash and the
+                    // photos faded in one-by-one as each element started.
+                    await Promise.all(
+                        videoElements.map(async (v) => {
+                            if (!v) return;
+                            try {
+                                v.currentTime = 0;
+                                await v.play();
+                            } catch {
+                                /* autoplay of a muted clip should not fail; ignore */
+                            }
+                        })
+                    );
+
+                    // Wait (briefly) until every clip has real decoded pixels, so
+                    // the first recorded frame is the finished composite.
+                    const framesReady = Date.now();
+                    while (
+                        videoElements.some((v) => !!v && v.readyState < 2 /* HAVE_CURRENT_DATA */) &&
+                        Date.now() - framesReady < 1000
+                    ) {
+                        await new Promise((r) => setTimeout(r, 16));
+                    }
+
+                    // Paint the composite once so the canvas is never blank at t=0.
+                    await drawFullComposite(videoElements);
+
                     mr.start();
-                    videoElements.forEach(v => v?.play());
 
                     const duration = liveVideoSec * 1000;
                     const startTime = performance.now();
