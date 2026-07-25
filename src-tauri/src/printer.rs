@@ -223,60 +223,59 @@ param(
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 
-# Target paper dimensions in hundredths of an inch.
-switch ($PageSize) {
-  "A4" { $tw = 827;  $th = 1169 }
-  "A3" { $tw = 1169; $th = 1654 }
-  default { $tw = 400; $th = 600 }   # 4x6 (2R is 2-up on a 4R sheet upstream)
-}
-
 $img = [System.Drawing.Image]::FromFile($ImagePath)
 try {
-  # Manual rotation override (admin panel). Applied before orientation is
-  # computed, so the page fills correctly around the rotated image.
-  switch ($Rotate) {
-    "90"  { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone) }
-    "180" { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate180FlipNone) }
-    "270" { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate270FlipNone) }
-  }
-
   $doc = New-Object System.Drawing.Printing.PrintDocument
   if ($PrinterName -ne "") { $doc.PrinterSettings.PrinterName = $PrinterName }
   if (-not $doc.PrinterSettings.IsValid) { throw "Invalid printer: '$PrinterName'" }
   $doc.DocumentName = "Framr Studio Photo"
 
-  # Prefer a real driver paper size matching the target dimensions (either
-  # orientation); fall back to a custom size if the driver lists none.
-  $paper = $null
-  foreach ($ps in $doc.PrinterSettings.PaperSizes) {
-    if (($ps.Width -eq $tw -and $ps.Height -eq $th) -or ($ps.Width -eq $th -and $ps.Height -eq $tw)) {
-      $paper = $ps; break
+  # Use the DRIVER DEFAULT media for 4x6/2R (the DNP's own 6x4) — the same thing
+  # Windows uses when you print the file directly, which the operator confirmed
+  # works perfectly. We only force a paper size for the A4/A3 newspaper booth.
+  switch ($PageSize) {
+    "A4" { $tw = 827;  $th = 1169 }
+    "A3" { $tw = 1169; $th = 1654 }
+    default { $tw = 0; $th = 0 }
+  }
+  if ($tw -gt 0) {
+    foreach ($ps in $doc.PrinterSettings.PaperSizes) {
+      if (($ps.Width -eq $tw -and $ps.Height -eq $th) -or ($ps.Width -eq $th -and $ps.Height -eq $tw)) {
+        $doc.DefaultPageSettings.PaperSize = $ps; break
+      }
     }
   }
-  if ($null -eq $paper) {
-    $paper = New-Object System.Drawing.Printing.PaperSize("Custom_$PageSize", $tw, $th)
-  }
-  $doc.DefaultPageSettings.PaperSize = $paper
+
   $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0,0,0,0)
   $doc.OriginAtMargins = $false
 
-  # Orientation is driven by the IMAGE, not by hand-rotating pixels. The DNP
-  # driver may label its 4x6 media as either 4x6 (portrait) or 6x4 (landscape);
-  # we set the page's Landscape flag to whatever makes the sheet's orientation
-  # match the image. A portrait composite therefore always prints upright,
-  # regardless of how the driver reports the paper. (Hand-rotating the pixels
-  # instead produced the "6x4 printed on 4x6" sideways result.)
-  $paperPortrait = $paper.Height -ge $paper.Width
-  $imgPortrait   = $img.Height -ge $img.Width
-  $doc.DefaultPageSettings.Landscape = ($paperPortrait -ne $imgPortrait)
-
+  $rot = $Rotate
   $doc.add_PrintPage({
     param($s, $e)
+    $b = $e.PageBounds
+
+    # Simple, predictable rotation. "auto" rotates the image only if needed so
+    # its long edge matches the sheet's long edge (fills without distortion).
+    # A manual 90/180/270 is applied exactly as chosen and is NOT overridden —
+    # this is the operator's knob to get orientation right on the DNP.
+    switch ($rot) {
+      "90"  { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone) }
+      "180" { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate180FlipNone) }
+      "270" { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate270FlipNone) }
+      default {
+        $pageLandscape = $b.Width -gt $b.Height
+        $imgLandscape  = $img.Width -gt $img.Height
+        if ($pageLandscape -ne $imgLandscape) {
+          $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone)
+        }
+      }
+    }
+
     $e.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $e.Graphics.DrawImage($img, $e.PageBounds)
+    $e.Graphics.DrawImage($img, $b)
   })
   $doc.Print()
-  Write-Output ("Printed on {0} ({1})" -f $doc.PrinterSettings.PrinterName, $paper.PaperName)
+  Write-Output ("Printed on {0}" -f $doc.PrinterSettings.PrinterName)
 } finally {
   $img.Dispose()
 }
