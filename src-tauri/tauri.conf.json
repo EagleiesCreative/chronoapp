@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Framr Studio",
-  "version": "2.2.5",
+  "version": "2.2.6",
   "identifier": "com.chronosnap.app",
   "build": {
     "frontendDist": "../out",
