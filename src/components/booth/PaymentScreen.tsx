@@ -7,6 +7,7 @@ import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { useBoothStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
+import { useSessionProfileStore } from '@/store/session-profile-store';
 import { formatIDR } from '@/lib/xendit';
 import { apiFetch } from '@/lib/api';
 
@@ -27,15 +28,20 @@ export function PaymentScreen() {
     } = useBoothStore();
 
     const { booth } = useTenantStore();
+    const activeSession = useSessionProfileStore((s) => s.activeSession);
+    // The active session's price is the authoritative amount; booth.price is only
+    // a fallback. Using it here stops the screen showing the stale booth default
+    // (e.g. 25000) before the QR/server response arrives.
+    const displayBasePrice = activeSession?.price ?? booth?.price ?? 0;
     const [qrCodeImage, setQrCodeImage] = useState<string | null>(null);
     const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'expired' | 'failed'>('pending');
     const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
     const [isCreating, setIsCreating] = useState(false);
 
     const [printCopies, setPrintCopies] = useState<number | null>(printQuantity);
-    const [originalPrice, setOriginalPrice] = useState<number>(appliedVoucher?.original_price ?? booth?.price ?? 0);
+    const [originalPrice, setOriginalPrice] = useState<number>(appliedVoucher?.original_price ?? displayBasePrice);
     const [discountAmount, setDiscountAmount] = useState<number>(appliedVoucher?.discount_value ?? 0);
-    const [finalPrice, setFinalPrice] = useState<number>(appliedVoucher?.final_price ?? booth?.price ?? 0);
+    const [finalPrice, setFinalPrice] = useState<number>(appliedVoucher?.final_price ?? displayBasePrice);
 
     useEffect(() => {
         async function createPayment() {

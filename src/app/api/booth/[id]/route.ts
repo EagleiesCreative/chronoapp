@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getBoothById } from '@/lib/supabase';
+import { getBoothById, getActiveBoothSession } from '@/lib/supabase';
 import { requireBoothAuth } from '@/lib/booth-auth';
 
 /**
@@ -36,8 +36,16 @@ export async function GET(
             );
         }
 
+        // Fetch the active session server-side (service role — not subject to the
+        // browser client's RLS), so the client always has the authoritative
+        // session price/settings for display instead of falling back to booth
+        // defaults (which is what showed the stale 25000 on the idle/payment
+        // screens until the QR was generated).
+        const activeSession = await getActiveBoothSession(id);
+
         return NextResponse.json({
             success: true,
+            activeSession,
             booth: {
                 id: booth.id,
                 name: booth.name,

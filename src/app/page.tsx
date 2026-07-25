@@ -116,9 +116,12 @@ export default function HomePage() {
             // Also save to tenant store for FrameSelector/PaymentScreen
             setTenantBooth(boothData.booth);
 
-            // Fetch and store active booth session
+            // Prefer the active session the server already resolved (service
+            // role, authoritative price). Fall back to the client fetch only if
+            // the server didn't include it.
             try {
-              const activeSession = await getActiveBoothSession(boothData.booth.id);
+              const activeSession = boothData.activeSession
+                ?? await getActiveBoothSession(boothData.booth.id);
               setActiveSession(activeSession);
             } catch (e) {
               console.error('Failed to fetch active booth session:', e);
@@ -240,9 +243,17 @@ export default function HomePage() {
     setBooth(boothInfo);
     setTenantBooth(boothInfo);
 
-    // Fetch and store active booth session on login
+    // Pull the full booth (with price) and its active session from the server,
+    // so the idle/payment screens show the authoritative session price right
+    // away instead of booth defaults.
     try {
-      const activeSession = await getActiveBoothSession(boothInfo.id);
+      const boothData = await apiJson<any>(`/api/booth/${boothInfo.id}`);
+      if (boothData?.booth) {
+        setBooth(boothData.booth);
+        setTenantBooth(boothData.booth);
+      }
+      const activeSession = boothData?.activeSession
+        ?? await getActiveBoothSession(boothInfo.id);
       setActiveSession(activeSession);
     } catch (e) {
       console.error('Failed to fetch active booth session:', e);
