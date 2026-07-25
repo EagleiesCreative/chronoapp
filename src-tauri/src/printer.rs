@@ -222,6 +222,13 @@ param(
 )
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
+# Win32 SetICMMode lets us turn ON color management for the printer device
+# context, so the driver's colour profile is applied (neutral black) instead of
+# raw device RGB (which prints black as olive-green on the DNP dye-sub).
+Add-Type -Namespace Framr -Name Gdi -MemberDefinition @"
+[DllImport("gdi32.dll")]
+public static extern int SetICMMode(System.IntPtr hdc, int mode);
+"@
 
 $img = [System.Drawing.Image]::FromFile($ImagePath)
 try {
@@ -253,6 +260,13 @@ try {
   $doc.add_PrintPage({
     param($s, $e)
     $b = $e.PageBounds
+
+    # Turn ON ICM colour management for this page's printer DC. This applies the
+    # DNP driver's colour profile (ICM_ON = 1), matching what Windows does when
+    # you print the file directly, so black prints as neutral black.
+    $ICM_ON = 1
+    $hdc = $e.Graphics.GetHdc()
+    try { [Framr.Gdi]::SetICMMode($hdc, $ICM_ON) | Out-Null } finally { $e.Graphics.ReleaseHdc($hdc) }
 
     # Simple, predictable rotation. "auto" rotates the image only if needed so
     # its long edge matches the sheet's long edge (fills without distortion).
