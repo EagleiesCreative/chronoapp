@@ -1,5 +1,9 @@
 use printers;
+// Only the non-Windows test-print path uses the printers-crate job API; on
+// Windows we print via PowerShell, so these would be unused there.
+#[cfg(not(target_os = "windows"))]
 use printers::common::base::job::PrinterJobOptions;
+#[cfg(not(target_os = "windows"))]
 use printers::common::converters::Converter;
 use serde::Serialize;
 use tauri::command;
@@ -113,10 +117,18 @@ fn driver_supports_media_type(printer: Option<&str>) -> bool {
 
 /// Run an embedded PowerShell script with the given named args, returning
 /// stdout on success or a descriptive error (including stderr) on failure.
+///
+/// The child is spawned (not run to completion inline) and polled against a
+/// deadline. If a printer driver call inside the script hangs — a real failure
+/// mode with dye-sub drivers like the DNP RX1HS — the child is force-killed and
+/// an error is returned, so a stuck driver can never freeze or crash the app.
 #[cfg(target_os = "windows")]
-fn run_powershell(script: &str, args: &[&str]) -> Result<String, String> {
+fn run_powershell(script: &str, args: &[&str], timeout_secs: u64) -> Result<String, String> {
     use std::fs;
-    use std::process::Command;
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    use std::thread::sleep;
+    use std::time::{Duration, Instant};
 
     let script_path = std::env::temp_dir().join(format!(
         "chronosnap_ps_{}.ps1",
@@ -131,22 +143,69 @@ fn run_powershell(script: &str, args: &[&str]) -> Result<String, String> {
         .arg("-ExecutionPolicy")
         .arg("Bypass")
         .arg("-File")
-        .arg(&script_path);
+        .arg(&script_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     for a in args {
         cmd.arg(a);
     }
 
-    let output = cmd.output();
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = fs::remove_file(&script_path);
+            return Err(format!("Failed to launch powershell: {}", e));
+        }
+    };
+
+    // Poll for completion up to the deadline; kill if the driver call hangs.
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break None;
+                }
+                sleep(Duration::from_millis(50));
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&script_path);
+                return Err(format!("Failed while waiting on powershell: {}", e));
+            }
+        }
+    };
+
     let _ = fs::remove_file(&script_path);
 
-    match output {
-        Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            Err(format!("{}{}", stderr.trim(), stdout.trim()))
+    let status = match status {
+        Some(s) => s,
+        None => {
+            return Err(format!(
+                "PowerShell timed out after {}s — the printer driver is not responding",
+                timeout_secs
+            ))
         }
-        Err(e) => Err(format!("Failed to launch powershell: {}", e)),
+    };
+
+    // Outputs are small (a media list or a one-line result), so reading after
+    // exit won't deadlock on a full pipe.
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    if let Some(mut o) = child.stdout.take() {
+        let _ = o.read_to_string(&mut stdout);
+    }
+    if let Some(mut e) = child.stderr.take() {
+        let _ = e.read_to_string(&mut stderr);
+    }
+
+    if status.success() {
+        Ok(stdout)
+    } else {
+        Err(format!("{}{}", stderr.trim(), stdout.trim()))
     }
 }
 
@@ -192,21 +251,52 @@ try {
   $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0,0,0,0)
   $doc.OriginAtMargins = $false
 
-  # Rotate so the image's long edge runs along the paper's long edge.
-  $paperPortrait = $paper.Height -ge $paper.Width
-  $imgPortrait   = $img.Height -ge $img.Width
-  $doc.DefaultPageSettings.Landscape = ($paperPortrait -ne $imgPortrait)
-
+  # The DNP driver often registers its 4x6 media as 6x4 (landscape). Relying on
+  # the driver's declared orientation via the Landscape flag is unreliable and
+  # is what caused the intermittent "6x4 not 4x6" print errors. Instead we make
+  # orientation deterministic: at draw time we read the actual page rectangle,
+  # rotate the IMAGE to match its orientation, then fill it edge to edge. This
+  # produces a correct full-bleed print no matter how the driver labels the size.
   $doc.add_PrintPage({
     param($s, $e)
+    $b = $e.PageBounds
+    $pageLandscape = $b.Width -gt $b.Height
+    $imgLandscape  = $img.Width -gt $img.Height
+    if ($pageLandscape -ne $imgLandscape) {
+      $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone)
+    }
     $e.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $e.Graphics.DrawImage($img, $e.PageBounds)
+    $e.Graphics.DrawImage($img, $b)
   })
   $doc.Print()
   Write-Output ("Printed on {0} ({1})" -f $doc.PrinterSettings.PrinterName, $paper.PaperName)
 } finally {
   $img.Dispose()
 }
+"#;
+
+/// Print a simple GDI text test page. Deliberately does NOT enumerate
+/// PaperSizes (that call can hang some dye-sub drivers) — it prints on the
+/// driver's default media, which for a DNP RX1HS is the loaded 4x6 stock.
+#[cfg(target_os = "windows")]
+const TEST_PAGE_PS: &str = r#"
+param([Parameter(Mandatory=$true)][string]$PrinterName)
+$ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Drawing
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = $PrinterName
+if (-not $doc.PrinterSettings.IsValid) { throw "Invalid printer: '$PrinterName'" }
+$doc.DocumentName = "Framr Studio Test Page"
+$stamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+$doc.add_PrintPage({
+  param($s, $e)
+  $font = New-Object System.Drawing.Font("Arial", 14)
+  $text = "Framr Studio Printer Test Page`n`nPrinter: $PrinterName`n`nIf you can read this clearly, your printer is working correctly.`n`n$stamp"
+  $e.Graphics.DrawString($text, $font, [System.Drawing.Brushes]::Black, $e.MarginBounds)
+  $font.Dispose()
+})
+$doc.Print()
+Write-Output "Test page sent to $PrinterName"
 "#;
 
 /// Enumerate a printer's paper sizes as `Name|WxH` lines (H/W in 1/100 inch).
@@ -308,12 +398,31 @@ pub fn get_default_printer() -> Result<Option<PrinterInfo>, String> {
 /// Print a test page to the specified printer
 #[command]
 pub fn print_test_page(printer_name: String) -> Result<String, String> {
+    // Windows: never send raw bytes through the printers crate (it can fault a
+    // dye-sub driver). Render a GDI text page via PowerShell, timeout-guarded.
+    #[cfg(target_os = "windows")]
+    {
+        return run_powershell(TEST_PAGE_PS, &["-PrinterName", printer_name.as_str()], 60)
+            .map(|out| {
+                let t = out.trim();
+                if t.is_empty() {
+                    format!("Test page sent to printer: {}", printer_name)
+                } else {
+                    t.to_string()
+                }
+            })
+            .map_err(|e| format!("Test print failed: {}", e));
+    }
+
+    // macOS / other: existing printers-crate path.
+    #[cfg(not(target_os = "windows"))]
+    {
     // Find the printer by name
     let system_printers = printers::get_printers();
     let printer = system_printers
         .into_iter()
         .find(|p| p.name == printer_name || p.system_name == printer_name);
-    
+
     match printer {
         Some(p) => {
             // Create a simple test page content
@@ -355,6 +464,7 @@ Framr Studio Photobooth System
         }
         None => Err(format!("Printer '{}' not found", printer_name)),
     }
+    }
 }
 
 /// Print a photo to the specified printer (or default if not specified)
@@ -375,7 +485,12 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
     let image_bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, base64_data)
         .map_err(|e| format!("Failed to decode image: {}", e))?;
     
-    // Determine the target printer name
+    // Determine the target printer name.
+    // macOS/other resolve the friendly name to a driver system name via the
+    // printers crate. Windows skips this native call entirely (it drives the
+    // print through PowerShell, where an empty name means the default printer),
+    // so we don't poke the DNP driver more than necessary.
+    #[cfg(not(target_os = "windows"))]
     let target_printer_name = if let Some(ref name) = printer_name {
         let system_printers = printers::get_printers();
         let found = system_printers
@@ -493,10 +608,10 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
     {
         use std::fs;
 
-        // `target_printer_name` (resolved above) is Some(system_name) for an
-        // explicit printer, or None to fall through to the Windows default.
-        // An empty string tells the PowerShell helper to use the default.
-        let printer_arg = target_printer_name.clone().unwrap_or_default();
+        // Empty name => the PowerShell helper prints to the Windows default.
+        // The photobooth flow passes null (default printer); a friendly name,
+        // if given, is passed through to PrinterSettings.PrinterName as-is.
+        let printer_arg = printer_name.clone().unwrap_or_default();
 
         // Write image bytes to a temp file for GDI rendering.
         let temp_path = std::env::temp_dir()
@@ -513,7 +628,7 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
             "-ImagePath", &*img_path,
             "-PrinterName", printer_arg.as_str(),
             "-PageSize", page_size_val.as_str(),
-        ]);
+        ], 90);
 
         let _ = fs::remove_file(&temp_path);
 
@@ -593,24 +708,12 @@ pub fn get_printer_media_options(printer_name: Option<String>) -> Result<Printer
 
     #[cfg(target_os = "windows")]
     {
-        // Resolve friendly name -> driver system name (empty = default printer).
-        let system_name: String = match printer_name {
-            Some(ref name) => {
-                let system_printers = printers::get_printers();
-                match system_printers
-                    .iter()
-                    .find(|p| p.name == *name || p.system_name == *name)
-                {
-                    Some(p) => p.system_name.clone(),
-                    None => return Err(format!("Printer '{}' not found", name)),
-                }
-            }
-            None => printers::get_default_printer()
-                .map(|p| p.system_name.clone())
-                .unwrap_or_default(),
-        };
-
-        let raw = run_powershell(MEDIA_OPTIONS_PS, &["-PrinterName", system_name.as_str()])?;
+        // Pass the name straight to PowerShell (empty = default printer). The
+        // frontend already supplies the driver's system name, and PowerShell
+        // resolves/validates it — so we avoid an extra native printers-crate
+        // call against the DNP driver here. 12s timeout guards a hung driver.
+        let name_arg = printer_name.unwrap_or_default();
+        let raw = run_powershell(MEDIA_OPTIONS_PS, &["-PrinterName", name_arg.as_str()], 12)?;
 
         let mut available: Vec<String> = Vec::new();
         let mut resolved_4r: Option<String> = None;
@@ -716,7 +819,7 @@ pub fn get_print_queue(printer_name: String) -> Result<Vec<PrintJobInfo>, String
     
     #[cfg(target_os = "windows")]
     {
-        let raw = run_powershell(GET_QUEUE_PS, &["-PrinterName", printer_name.as_str()])?;
+        let raw = run_powershell(GET_QUEUE_PS, &["-PrinterName", printer_name.as_str()], 12)?;
         let mut jobs = Vec::new();
         for line in raw.lines() {
             if line.trim().is_empty() {
@@ -767,7 +870,7 @@ pub fn clear_print_queue(printer_name: String) -> Result<String, String> {
     
     #[cfg(target_os = "windows")]
     {
-        let out = run_powershell(CLEAR_QUEUE_PS, &["-PrinterName", printer_name.as_str()])?;
+        let out = run_powershell(CLEAR_QUEUE_PS, &["-PrinterName", printer_name.as_str()], 15)?;
         let msg = out.trim();
         Ok(if msg.is_empty() {
             format!("Cleared print queue for {}", printer_name)
@@ -806,7 +909,7 @@ pub fn resume_printer(printer_name: String) -> Result<String, String> {
     
     #[cfg(target_os = "windows")]
     {
-        let out = run_powershell(RESUME_PS, &["-PrinterName", printer_name.as_str()])?;
+        let out = run_powershell(RESUME_PS, &["-PrinterName", printer_name.as_str()], 15)?;
         let msg = out.trim();
         Ok(if msg.is_empty() {
             format!("Resumed printer {}", printer_name)
