@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useBoothStore } from '@/store/booth-store';
 import { usePrintStore } from '@/store/print-store';
 import { useTenantStore } from '@/store/tenant-store';
+import { usePrinterSettingsStore } from '@/store/printer-settings-store';
 
 export function usePrintHandler(compositeImage: string | null) {
     const [isPrinting, setIsPrinting] = useState(false);
     const { session, printImage, printQuantity } = useBoothStore();
     const { addJob } = usePrintStore();
     const { booth } = useTenantStore();
+    const { printRotation } = usePrinterSettingsStore();
 
     // Prefer the quantity the guest actually paid for upfront; fall back to the
     // booth default (e.g. sessions started before the picker existed).
@@ -43,7 +45,8 @@ export function usePrintHandler(compositeImage: string | null) {
                     await invoke('print_photo', {
                         imageData: imageForPrint,
                         printerName: null, // Use default printer
-                        pageSize: pageSize
+                        pageSize: pageSize,
+                        rotate: printRotation // 'auto' | '90' | '180' | '270'
                     });
                 }
                 usedTauri = true;

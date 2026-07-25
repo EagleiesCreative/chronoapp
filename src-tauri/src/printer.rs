@@ -217,7 +217,8 @@ const PRINT_PHOTO_PS: &str = r#"
 param(
   [Parameter(Mandatory=$true)][string]$ImagePath,
   [string]$PrinterName = "",
-  [string]$PageSize = "4R"
+  [string]$PageSize = "4R",
+  [string]$Rotate = "auto"
 )
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
@@ -231,6 +232,14 @@ switch ($PageSize) {
 
 $img = [System.Drawing.Image]::FromFile($ImagePath)
 try {
+  # Manual rotation override (admin panel). Applied before orientation is
+  # computed, so the page fills correctly around the rotated image.
+  switch ($Rotate) {
+    "90"  { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone) }
+    "180" { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate180FlipNone) }
+    "270" { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate270FlipNone) }
+  }
+
   $doc = New-Object System.Drawing.Printing.PrintDocument
   if ($PrinterName -ne "") { $doc.PrinterSettings.PrinterName = $PrinterName }
   if (-not $doc.PrinterSettings.IsValid) { throw "Invalid printer: '$PrinterName'" }
@@ -278,7 +287,10 @@ try {
 /// driver's default media, which for a DNP RX1HS is the loaded 4x6 stock.
 #[cfg(target_os = "windows")]
 const TEST_PAGE_PS: &str = r#"
-param([Parameter(Mandatory=$true)][string]$PrinterName)
+param(
+  [Parameter(Mandatory=$true)][string]$PrinterName,
+  [string]$Rotate = "auto"
+)
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 $doc = New-Object System.Drawing.Printing.PrintDocument
@@ -286,11 +298,24 @@ $doc.PrinterSettings.PrinterName = $PrinterName
 if (-not $doc.PrinterSettings.IsValid) { throw "Invalid printer: '$PrinterName'" }
 $doc.DocumentName = "Framr Studio Test Page"
 $stamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+$rot = $Rotate
 $doc.add_PrintPage({
   param($s, $e)
-  $font = New-Object System.Drawing.Font("Arial", 14)
-  $text = "Framr Studio Printer Test Page`n`nPrinter: $PrinterName`n`nIf you can read this clearly, your printer is working correctly.`n`n$stamp"
-  $e.Graphics.DrawString($text, $font, [System.Drawing.Brushes]::Black, $e.MarginBounds)
+  $g = $e.Graphics
+  $b = $e.PageBounds
+  # Apply the same manual rotation so the operator can SEE how the current
+  # setting orients the sheet. "TOP" should end up at the top of the print.
+  switch ($rot) {
+    "90"  { $g.TranslateTransform($b.Width, 0); $g.RotateTransform(90) }
+    "180" { $g.TranslateTransform($b.Width, $b.Height); $g.RotateTransform(180) }
+    "270" { $g.TranslateTransform(0, $b.Height); $g.RotateTransform(270) }
+  }
+  $bigFont = New-Object System.Drawing.Font("Arial", 20, [System.Drawing.FontStyle]::Bold)
+  $font = New-Object System.Drawing.Font("Arial", 12)
+  $g.DrawString("^ TOP OF PRINT ^", $bigFont, [System.Drawing.Brushes]::Black, 40, 30)
+  $text = "Framr Studio Printer Test Page`n`nPrinter: $PrinterName`nRotation: $rot`n`nIf 'TOP' is at the top and readable,`nthis rotation setting is correct.`n`n$stamp"
+  $g.DrawString($text, $font, [System.Drawing.Brushes]::Black, 40, 90)
+  $bigFont.Dispose()
   $font.Dispose()
 })
 $doc.Print()
@@ -395,12 +420,14 @@ pub fn get_default_printer() -> Result<Option<PrinterInfo>, String> {
 
 /// Print a test page to the specified printer
 #[command]
-pub fn print_test_page(printer_name: String) -> Result<String, String> {
+pub fn print_test_page(printer_name: String, rotate: Option<String>) -> Result<String, String> {
+    let rotate_val = rotate.unwrap_or_else(|| "auto".to_string());
     // Windows: never send raw bytes through the printers crate (it can fault a
     // dye-sub driver). Render a GDI text page via PowerShell, timeout-guarded.
+    // The test page respects the same rotation so operators can calibrate.
     #[cfg(target_os = "windows")]
     {
-        return run_powershell(TEST_PAGE_PS, &["-PrinterName", printer_name.as_str()], 60)
+        return run_powershell(TEST_PAGE_PS, &["-PrinterName", printer_name.as_str(), "-Rotate", rotate_val.as_str()], 60)
             .map(|out| {
                 let t = out.trim();
                 if t.is_empty() {
@@ -412,9 +439,11 @@ pub fn print_test_page(printer_name: String) -> Result<String, String> {
             .map_err(|e| format!("Test print failed: {}", e));
     }
 
-    // macOS / other: existing printers-crate path.
+    // macOS / other: existing printers-crate path (rotation not applied to the
+    // text test page here; it's mainly a Windows/DNP calibration aid).
     #[cfg(not(target_os = "windows"))]
     {
+    let _ = rotate_val;
     // Find the printer by name
     let system_printers = printers::get_printers();
     let printer = system_printers
@@ -468,7 +497,9 @@ Framr Studio Photobooth System
 /// Print a photo to the specified printer (or default if not specified)
 /// Takes base64 encoded image data (JPEG)
 #[command]
-pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: Option<String>) -> Result<String, String> {
+pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: Option<String>, rotate: Option<String>) -> Result<String, String> {
+    // Manual rotation override from the admin panel: "auto" | "90" | "180" | "270".
+    let rotate_val = rotate.unwrap_or_else(|| "auto".to_string());
     // Remove data URL prefix if present
     let base64_data = if image_data.starts_with("data:image") {
         image_data
@@ -570,6 +601,14 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
                 cmd.arg("-o").arg("MediaType=photographic-glossy");
             }
             cmd.arg("-o").arg("fit-to-page");
+            // Manual rotation override from the admin panel. CUPS
+            // orientation-requested: 4 = 90°, 5 = 270°, 6 = 180°.
+            match rotate_val.as_str() {
+                "90" => { cmd.arg("-o").arg("orientation-requested=4"); }
+                "180" => { cmd.arg("-o").arg("orientation-requested=6"); }
+                "270" => { cmd.arg("-o").arg("orientation-requested=5"); }
+                _ => {}
+            }
             cmd.arg("-t").arg("Framr Studio Photo");
             cmd.arg(&temp_path);
 
@@ -626,6 +665,7 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
             "-ImagePath", &*img_path,
             "-PrinterName", printer_arg.as_str(),
             "-PageSize", page_size_val.as_str(),
+            "-Rotate", rotate_val.as_str(),
         ], 90);
 
         let _ = fs::remove_file(&temp_path);
@@ -641,7 +681,7 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let _ = (printer_name, page_size_val, image_bytes, target_printer_name);
+        let _ = (printer_name, page_size_val, image_bytes, target_printer_name, rotate_val);
         Err("Photo printing is only supported on macOS and Windows".to_string())
     }
 }

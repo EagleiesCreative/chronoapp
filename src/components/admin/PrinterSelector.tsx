@@ -5,6 +5,7 @@ import { Printer, PrinterCheck, AlertTriangle, FileText, RefreshCw, CheckCircle2
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { usePrinterSettingsStore, type PrintRotation } from '@/store/printer-settings-store';
 
 // Type for printer info from Rust
 interface PrinterInfo {
@@ -49,6 +50,15 @@ export function PrinterSelector() {
     const [isQueueLoading, setIsQueueLoading] = useState(false);
     const [isClearingQueue, setIsClearingQueue] = useState(false);
     const [isResuming, setIsResuming] = useState(false);
+
+    // Manual print rotation override (fixes DNP RX1HS printing 4x6 sideways as 6x4)
+    const { printRotation, setPrintRotation } = usePrinterSettingsStore();
+    const rotationOptions: { value: PrintRotation; label: string }[] = [
+        { value: 'auto', label: 'Auto' },
+        { value: '90', label: '90°' },
+        { value: '180', label: '180°' },
+        { value: '270', label: '270°' },
+    ];
 
     // Check if Tauri is available by trying to import the API
     useEffect(() => {
@@ -115,7 +125,7 @@ export function PrinterSelector() {
 
         try {
             const { invoke } = await import('@tauri-apps/api/core');
-            const result = await invoke<string>('print_test_page', { printerName: selectedPrinter });
+            const result = await invoke<string>('print_test_page', { printerName: selectedPrinter, rotate: printRotation });
             setLastTestResult('success');
             toast.success(result);
             fetchQueue(selectedPrinter); // Refresh queue after test
@@ -480,6 +490,33 @@ export function PrinterSelector() {
                         )}
                     </div>
                 )}
+
+                {/* Print rotation override (for DNP RX1HS printing 4x6 as 6x4) */}
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">Print Rotation</label>
+                        <span className="text-xs text-muted-foreground">Current: {printRotation === 'auto' ? 'Auto' : `${printRotation}°`}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                        {rotationOptions.map((opt) => (
+                            <Button
+                                key={opt.value}
+                                variant={printRotation === opt.value ? 'default' : 'outline'}
+                                size="sm"
+                                className="text-xs"
+                                onClick={() => {
+                                    setPrintRotation(opt.value);
+                                    toast.success(`Print rotation set to ${opt.value === 'auto' ? 'Auto' : opt.value + '°'}`);
+                                }}
+                            >
+                                {opt.label}
+                            </Button>
+                        ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        If prints come out sideways or upside-down, pick a rotation and run a test print. &quot;TOP&quot; should end up at the top of the sheet.
+                    </p>
+                </div>
 
                 {/* Test print button */}
                 <Button
