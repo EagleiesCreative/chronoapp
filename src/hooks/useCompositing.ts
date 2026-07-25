@@ -398,6 +398,12 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             canvas.width = canvasWidth;
             canvas.height = canvasHeight;
 
+            // Still image produced by the Rust compositor (Tauri only). When a Live
+            // Video clip is also being built we hold this back until recording is done,
+            // so the upload sees the finished clip instead of racing past it.
+            let rustFinalImage: string | null = null;
+            let rustPrintImage: string | null = null;
+
             // First, check if we are running in Tauri runtime before attempting Rust backend.
             const isTauri = isTauriRuntimeEnvironment();
             let invoke: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null = null;
@@ -528,8 +534,23 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         if (result.errors?.length > 0) {
                             setCompositeWarning(`Rust compositing had warnings: ${result.errors.join('; ')}`);
                         }
-                        safeFinish(result.final_base64, result.print_base64 || result.final_base64);
-                        return;
+                        rustFinalImage = result.final_base64;
+                        rustPrintImage = result.print_base64 || result.final_base64;
+
+                        // Live Video: Rust only produces a still. Historically we returned
+                        // here, so the desktop app never produced a video clip and the web
+                        // share silently fell back to a GIF. Instead, fall through to the
+                        // canvas recorder to build the clip, then publish the still once
+                        // recording finishes (publishing early would start the upload
+                        // before the clip exists). Everything below is wrapped in
+                        // try/catch, so if the WKWebView refuses (tainted canvas / no
+                        // MediaRecorder) we still finish with the Rust image as before.
+                        if (videoMode && hasVideoBlobs) {
+                            console.log('[Compositing] Tauri: Rust still ready — attempting canvas Live Video clip before publishing...');
+                        } else {
+                            safeFinish(rustFinalImage, rustPrintImage);
+                            return;
+                        }
                     } else {
                         const msg = `Rust compositing produced blank image (0 slots rendered). Errors: ${result?.errors?.join('; ') || 'none'}`;
                         console.error(`[Compositing] ${msg}`);
@@ -764,6 +785,22 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
             const filterDef = getFilterByName(filter);
             const doingVideo = videoMode && hasVideoBlobs;
 
+            // When we reach the canvas recorder purely to add a Live Video clip (Tauri:
+            // the Rust compositor already published the still image), re-running the
+            // canvas static composite is pointless and throws SecurityError in WKWebView.
+            const staticFallbackIfNeeded = async () => {
+                if (compositingDone) {
+                    console.log('[Compositing] Still image already published — skipping canvas static composite.');
+                    return;
+                }
+                if (rustFinalImage) {
+                    console.log('[Compositing] Publishing Rust still image (canvas video path unavailable).');
+                    safeFinish(rustFinalImage, rustPrintImage || rustFinalImage);
+                    return;
+                }
+                await doStaticComposite();
+            };
+
             let frameImg: HTMLImageElement | null = null;
             if (frame.image_url) {
                 try {
@@ -876,7 +913,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                 try {
                     if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
                         console.warn("MediaRecorder or captureStream not available, falling back to static compositing");
-                        await doStaticComposite();
+                        await staticFallbackIfNeeded();
                         return;
                     }
 
@@ -950,7 +987,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                     );
                     if (!hasRenderableVideos) {
                         console.warn('[Compositing] No renderable capture videos; using static composite fallback.');
-                        await doStaticComposite();
+                        await staticFallbackIfNeeded();
                         return;
                     }
 
@@ -976,12 +1013,35 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                             clearTimeout(videoTimeout);
                             try {
                                 const finalBlob = new Blob(chunks, { type: mimeType });
+
+                                // A zero-byte blob means the webview gave us nothing to
+                                // record (e.g. tainted canvas). Don't publish it — the
+                                // upload would fail and the GIF fallback is better.
+                                if (finalBlob.size === 0) {
+                                    console.warn('[Compositing] Recorded clip is empty — skipping Live Video for this session.');
+                                    videoElements.forEach(v => { if (v) URL.revokeObjectURL(v.src); });
+                                    resolve();
+                                    return;
+                                }
+
                                 const finalUrl = URL.createObjectURL(finalBlob);
                                 setFinalVideoBlob(finalBlob);
                                 setFinalVideoUrl(finalUrl);
-                                console.log("Video compositing complete:", finalUrl);
+                                console.log(`Video compositing complete: ${(finalBlob.size / 1024).toFixed(1)}KB`, finalUrl);
 
-                                const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                                // In the Tauri webview the still image is already published
+                                // by the Rust compositor, and canvas.toDataURL() can throw
+                                // SecurityError here. Never let that discard the clip we
+                                // just recorded.
+                                let imageDataUrl: string;
+                                try {
+                                    imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                                } catch (exportErr) {
+                                    console.warn('[Compositing] Canvas export unavailable after recording (keeping Live Video):', exportErr);
+                                    videoElements.forEach(v => { if (v) URL.revokeObjectURL(v.src); });
+                                    resolve();
+                                    return;
+                                }
                                 let printDataUrl = imageDataUrl;
                                 if (is2R) {
                                     const printCanvas = document.createElement('canvas');
@@ -1034,10 +1094,13 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                     setTimeout(drawFrameLoop, 0);
 
                     await videoComplete;
+                    // Tauri: the clip is recorded (or was skipped) — now publish the
+                    // Rust still image so the upload runs with the clip available.
+                    await staticFallbackIfNeeded();
                     return;
                 } catch (videoErr) {
                     console.error("Video compositing failed, falling back to static:", videoErr);
-                    await doStaticComposite();
+                    await staticFallbackIfNeeded();
                     return;
                 }
             } else {
