@@ -84,8 +84,11 @@ export function FrameSelector() {
 
     const copies = Math.min(Math.max(printQuantity ?? includedCopies, includedCopies), MAX_PRINT_COPIES);
     const extraCopies = Math.max(0, copies - includedCopies);
-    const totalPrice = basePrice + extraCopies * extraPrintPrice;
-    const canBuyExtraCopies = printEnabled && extraPrintPrice > 0 && !effectivePaymentBypass;
+    // When payment is bypassed the whole session is free, so extra copies are
+    // free too — the picker should still be available (the server already
+    // honours printCopies in bypass mode); we just don't charge for them.
+    const totalPrice = effectivePaymentBypass ? 0 : basePrice + extraCopies * extraPrintPrice;
+    const canBuyExtraCopies = printEnabled && (effectivePaymentBypass || extraPrintPrice > 0);
 
     const changeCopies = (delta: number) => {
         setPrintQuantity(Math.min(Math.max(copies + delta, includedCopies), MAX_PRINT_COPIES));
@@ -400,10 +403,16 @@ export function FrameSelector() {
 
                             <div className="flex items-baseline justify-between border-t border-black/10 pt-3">
                                 <span className="text-xs text-black/50 font-medium">
-                                    {includedCopies} included
-                                    {extraCopies > 0 && ` + ${extraCopies} x ${formatIDR(extraPrintPrice)}`}
+                                    {effectivePaymentBypass
+                                        ? `${copies} ${copies === 1 ? 'print' : 'prints'}`
+                                        : <>
+                                            {includedCopies} included
+                                            {extraCopies > 0 && ` + ${extraCopies} x ${formatIDR(extraPrintPrice)}`}
+                                        </>}
                                 </span>
-                                <span className="text-xl font-extrabold text-black tabular-nums">{formatIDR(totalPrice)}</span>
+                                <span className="text-xl font-extrabold text-black tabular-nums">
+                                    {effectivePaymentBypass ? 'FREE' : formatIDR(totalPrice)}
+                                </span>
                             </div>
                         </div>
                     </div>
