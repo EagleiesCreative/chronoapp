@@ -152,7 +152,13 @@ export function useUploadSession() {
                 } catch (e) {
                     console.error('Video upload failed:', e);
                 }
-            } else {
+            }
+
+            // Fall back to a GIF whenever we don't have a usable video URL — either
+            // because this wasn't a video session, or the video upload failed (e.g.
+            // the clip exceeded the upload size limit). This keeps the web share from
+            // ending up with no animated media at all.
+            if (!videoUrl) {
                 const photoDataUrls = capturedPhotos
                     .map(photo => photo.dataUrl)
                     .filter((dataUrl): dataUrl is string => Boolean(dataUrl));

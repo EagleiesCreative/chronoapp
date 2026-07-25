@@ -945,7 +945,12 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
 
                     const stream = canvas.captureStream(30);
                     const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-                    const mr = new MediaRecorder(stream, { mimeType });
+                    // Cap the bitrate so the ~3s clip stays comfortably under the
+                    // upload body limit (~4.5MB on serverless). Without this, large /
+                    // high-motion (e.g. 4R landscape) frames produced multi-MB clips
+                    // that were rejected on upload, so the live video was missing from
+                    // the web share for some sessions. ~2.5 Mbps × 3s ≈ 0.9MB.
+                    const mr = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_500_000 });
                     const chunks: Blob[] = [];
                     mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
