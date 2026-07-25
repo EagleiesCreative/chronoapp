@@ -41,6 +41,7 @@ export function BackgroundSettings() {
     const [paymentBypass, setPaymentBypass] = useState(activeSession?.payment_bypass ?? booth?.payment_bypass ?? false);
     const [countdownSeconds, setCountdownSeconds] = useState(activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3);
     const [previewSeconds, setPreviewSeconds] = useState(activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5);
+    const [liveVideoSeconds, setLiveVideoSeconds] = useState(activeSession?.live_video_seconds ?? booth?.live_video_seconds ?? 3);
     const [reviewTimeoutSeconds, setReviewTimeoutSeconds] = useState(activeSession?.review_timeout_seconds ?? booth?.review_timeout_seconds ?? 60);
     const [printCopies, setPrintCopies] = useState(activeSession?.print_copies ?? booth?.print_copies ?? 1);
     const [slideshowEnabled, setSlideshowEnabled] = useState(activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false);
@@ -57,6 +58,7 @@ export function BackgroundSettings() {
         setPaymentBypass(activeSession?.payment_bypass ?? booth?.payment_bypass ?? false);
         setCountdownSeconds(activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3);
         setPreviewSeconds(activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5);
+        setLiveVideoSeconds(activeSession?.live_video_seconds ?? booth?.live_video_seconds ?? 3);
         setReviewTimeoutSeconds(activeSession?.review_timeout_seconds ?? booth?.review_timeout_seconds ?? 60);
         setPrintCopies(activeSession?.print_copies ?? booth?.print_copies ?? 1);
         setSlideshowEnabled(activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false);
@@ -120,6 +122,7 @@ export function BackgroundSettings() {
     const effectivePaymentBypass = activeSession?.payment_bypass ?? booth?.payment_bypass ?? false;
     const effectiveCountdown = activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3;
     const effectivePreview = activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5;
+    const effectiveLiveVideo = activeSession?.live_video_seconds ?? booth?.live_video_seconds ?? 3;
     const effectiveReviewTimeout = activeSession?.review_timeout_seconds ?? booth?.review_timeout_seconds ?? 60;
     const effectivePrintCopies = activeSession?.print_copies ?? booth?.print_copies ?? 1;
     const effectiveSlideshow = activeSession?.slideshow_enabled ?? booth?.slideshow_enabled ?? false;
@@ -135,6 +138,7 @@ export function BackgroundSettings() {
         paymentBypass !== effectivePaymentBypass ||
         countdownSeconds !== effectiveCountdown ||
         previewSeconds !== effectivePreview ||
+        liveVideoSeconds !== effectiveLiveVideo ||
         reviewTimeoutSeconds !== effectiveReviewTimeout ||
         printCopies !== effectivePrintCopies ||
         slideshowEnabled !== effectiveSlideshow ||
@@ -146,6 +150,7 @@ export function BackgroundSettings() {
         setPaymentBypass(effectivePaymentBypass);
         setCountdownSeconds(effectiveCountdown);
         setPreviewSeconds(effectivePreview);
+        setLiveVideoSeconds(effectiveLiveVideo);
         setReviewTimeoutSeconds(effectiveReviewTimeout);
         setPrintCopies(effectivePrintCopies);
         setSlideshowEnabled(effectiveSlideshow);
@@ -160,6 +165,7 @@ export function BackgroundSettings() {
         payment_bypass: paymentBypass,
         countdown_seconds: countdownSeconds,
         preview_seconds: previewSeconds,
+        live_video_seconds: liveVideoSeconds,
         review_timeout_seconds: reviewTimeoutSeconds,
         print_copies: printCopies,
         slideshow_enabled: slideshowEnabled,
@@ -200,6 +206,7 @@ export function BackgroundSettings() {
                     payment_bypass: paymentBypass,
                     countdown_seconds: countdownSeconds,
                     preview_seconds: previewSeconds,
+                    live_video_seconds: liveVideoSeconds,
                     review_timeout_seconds: reviewTimeoutSeconds,
                     print_copies: printCopies,
                     slideshow_enabled: slideshowEnabled,
@@ -468,6 +475,23 @@ export function BackgroundSettings() {
                             className="py-2"
                         />
                         <p className="text-xs text-muted-foreground">How long to show the photo preview before automatically continuing.</p>
+                    </div>
+
+                    {/* Live Video Duration */}
+                    <div className="space-y-3">
+                        <div className="flex justify-between">
+                            <Label className="text-sm font-medium">Live Video Duration ({liveVideoSeconds}s)</Label>
+                            <span className="text-sm text-muted-foreground">Range: 2-8s</span>
+                        </div>
+                        <Slider
+                            min={2}
+                            max={8}
+                            step={1}
+                            value={[liveVideoSeconds]}
+                            onValueChange={(vals) => setLiveVideoSeconds(vals[0])}
+                            className="py-2"
+                        />
+                        <p className="text-xs text-muted-foreground">Length of the Live Video clip shown and shared in the web gallery. Longer clips make larger files.</p>
                     </div>
 
                     {/* Review Timeout */}

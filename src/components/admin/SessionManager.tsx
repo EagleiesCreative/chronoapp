@@ -44,6 +44,7 @@ const DEFAULT_SESSION: Partial<BoothSession> = {
     price: 15000,
     countdown_seconds: 3,
     preview_seconds: 3,
+    live_video_seconds: 3,
     review_timeout_seconds: 60,
     print_copies: 1,
     default_filter: 'none',
@@ -486,6 +487,21 @@ export function SessionManager() {
                                                         setEditingSession({
                                                             ...editingSession,
                                                             preview_seconds: parseInt(e.target.value) || 3,
+                                                        })
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Live Video (sec)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={2}
+                                                    max={8}
+                                                    value={editingSession.live_video_seconds ?? 3}
+                                                    onChange={(e) =>
+                                                        setEditingSession({
+                                                            ...editingSession,
+                                                            live_video_seconds: parseInt(e.target.value) || 3,
                                                         })
                                                     }
                                                 />

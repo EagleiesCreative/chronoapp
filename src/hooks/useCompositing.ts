@@ -3,6 +3,7 @@ import { getAssetUrl, getApiUrl } from '@/lib/api';
 import { getCachedImageUrl } from '@/lib/frame-cache';
 import { useBoothStore, useAdminStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
+import { useSessionProfileStore } from '@/store/session-profile-store';
 import { getFilterByName } from '@/lib/photo-filters';
 
 const PRINT_4R_WIDTH = 1200;
@@ -135,6 +136,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
     const { selectedFrame, capturedPhotos, setFinalImage, setPrintImage, setFinalVideoBlob, setFinalVideoUrl, selectedFilter } = useBoothStore();
     const { isVideoMode, isCameraMirrored } = useAdminStore();
     const { booth } = useTenantStore();
+    const activeSession = useSessionProfileStore((s) => s.activeSession);
 
     // Keep refs so the effect closure always reads the latest values
     // without needing them in the dependency array (which would retrigger
@@ -145,6 +147,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
     const boothRef = useRef(booth);
     const isVideoModeRef = useRef(isVideoMode);
     const isCameraMirroredRef = useRef(isCameraMirrored);
+    const activeSessionRef = useRef(activeSession);
 
     // Synchronise refs on every render so the effect closure is never stale.
     selectedFrameRef.current = selectedFrame;
@@ -153,6 +156,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
     boothRef.current = booth;
     isVideoModeRef.current = isVideoMode;
     isCameraMirroredRef.current = isCameraMirrored;
+    activeSessionRef.current = activeSession;
 
     // Helper: proxy external URLs through our API to avoid CORS issues in Tauri
     const getProxiedImageUrl = (url: string): string => {
@@ -188,6 +192,10 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
         // the recorded live-video clips come from the raw MediaStream (unmirrored).
         // Flip the video draw to match the stills when the camera is mirrored.
         const mirrored = isCameraMirroredRef.current;
+        // Configurable Live Video clip length (session overrides booth), clamped so
+        // the uploaded clip stays under the size limit.
+        const liveVideoSec = Math.min(8, Math.max(2,
+            activeSessionRef.current?.live_video_seconds ?? boothData?.live_video_seconds ?? 3));
 
         setIsCompositing(true);
         setCompositeImage(null);
@@ -886,6 +894,9 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                         v.muted = true;
                         v.playsInline = true;
                         v.preload = 'auto';
+                        // Loop the source so a short recorded clip fills the full
+                        // (possibly longer) configured Live Video duration smoothly.
+                        v.loop = true;
 
                         const loaded = await new Promise<boolean>((resolve) => {
                             const timeout = setTimeout(() => {
@@ -1007,7 +1018,7 @@ export function useCompositing(canvasRef: RefObject<HTMLCanvasElement | null>, r
                     mr.start();
                     videoElements.forEach(v => v?.play());
 
-                    const duration = 3000;
+                    const duration = liveVideoSec * 1000;
                     const startTime = performance.now();
 
                     const drawFrameLoop = async () => {

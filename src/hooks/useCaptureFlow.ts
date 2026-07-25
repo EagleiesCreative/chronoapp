@@ -33,6 +33,11 @@ export function useCaptureFlow(
     // Session settings take priority over booth settings
     const countdownSec = activeSession?.countdown_seconds ?? booth?.countdown_seconds ?? 3;
     const previewSec = activeSession?.preview_seconds ?? booth?.preview_seconds ?? 5;
+    // Configurable Live Video clip length (seconds), clamped to a safe range so the
+    // uploaded clip stays under the size limit. The recorder captures the last
+    // `min(liveVideoSec, countdownSec)` seconds of the countdown; the compositor
+    // loops that source to fill the full clip length.
+    const liveVideoSec = Math.min(8, Math.max(2, activeSession?.live_video_seconds ?? booth?.live_video_seconds ?? 3));
     const filterEnabled = activeSession?.filter_enabled ?? booth?.filter_enabled ?? true;
     const nextStepAfterCapture = filterEnabled ? 'filter' : 'final-review';
 
@@ -90,7 +95,7 @@ export function useCaptureFlow(
         if (countdown > 0) {
             // Start recording 3 seconds before capture, or handle cases where countdown is precisely 3, 2 or 1
             // Video recording is disabled for backend SDK cameras (still-image only)
-            if (isVideoMode && !isBackendMode && stream && countdown === Math.min(3, countdownSec)) {
+            if (isVideoMode && !isBackendMode && stream && countdown === Math.min(liveVideoSec, countdownSec)) {
                 try {
                     videoChunksRef.current = [];
                     // Prefer webm since mp4 via MediaRecorder can be very finicky in Safari/WebKit
@@ -114,7 +119,7 @@ export function useCaptureFlow(
                         console.error("Fallback MediaRecorder failed", e2);
                     }
                 }
-            } else if (countdown === Math.min(3, countdownSec)) {
+            } else if (countdown === Math.min(liveVideoSec, countdownSec)) {
                 // We are at the exact tick where the clip should have started but a
                 // precondition failed. Recording used to fail silently here, which made
                 // the booth fall back to a GIF with no explanation. Say why.
@@ -148,7 +153,7 @@ export function useCaptureFlow(
             }
             capturePhoto();
         }
-    }, [cameraReady, countdown, phase, capturePhoto, isVideoMode, isBackendMode, stream, countdownSec]);
+    }, [cameraReady, countdown, phase, capturePhoto, isVideoMode, isBackendMode, stream, countdownSec, liveVideoSec]);
 
     const handleContinue = useCallback(() => {
         if (lastCapturedPhoto && phase === 'preview') {

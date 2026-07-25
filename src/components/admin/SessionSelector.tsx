@@ -35,6 +35,7 @@ const DEFAULT_SESSION: Partial<BoothSession> = {
     price: 15000,
     countdown_seconds: 3,
     preview_seconds: 3,
+    live_video_seconds: 3,
     review_timeout_seconds: 60,
     print_copies: 1,
     default_filter: 'none',

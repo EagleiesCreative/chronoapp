@@ -127,6 +127,7 @@ export interface BoothSession {
   price: number;
   countdown_seconds: number;
   preview_seconds: number;
+  live_video_seconds: number;
   review_timeout_seconds: number;
   print_copies: number;
   default_filter: string;
@@ -200,6 +201,7 @@ export interface Booth {
   // Feature config fields (new)
   countdown_seconds?: number;
   preview_seconds?: number;
+  live_video_seconds?: number;
   review_timeout_seconds?: number;
   print_copies?: number;
   slideshow_enabled?: boolean;

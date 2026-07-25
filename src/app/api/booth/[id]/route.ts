@@ -52,6 +52,7 @@ export async function GET(
                 background_color: booth.background_color,
                 countdown_seconds: booth.countdown_seconds,
                 preview_seconds: booth.preview_seconds,
+                live_video_seconds: booth.live_video_seconds,
                 review_timeout_seconds: booth.review_timeout_seconds,
                 print_copies: booth.print_copies,
                 extra_print_enabled: booth.extra_print_enabled,
