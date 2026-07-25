@@ -11,7 +11,10 @@ import { enqueueUpload } from '@/lib/upload-queue';
 import { queueSessionSync } from '@/lib/reliability-sync';
 
 export function useUploadSession() {
-    const { session, capturedPhotos, finalVideoBlob, selectedFrame } = useBoothStore();
+    // NOTE: finalVideoBlob is intentionally NOT destructured here — it is read
+    // fresh from the store at upload time (see uploadAndGenerateQR), because the
+    // compositor can produce it after this hook's last render.
+    const { session, capturedPhotos, selectedFrame } = useBoothStore();
     const { isCameraMirrored } = useAdminStore();
     const { booth } = useTenantStore();
 
