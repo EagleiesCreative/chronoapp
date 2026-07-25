@@ -251,22 +251,20 @@ try {
   $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0,0,0,0)
   $doc.OriginAtMargins = $false
 
-  # The DNP driver often registers its 4x6 media as 6x4 (landscape). Relying on
-  # the driver's declared orientation via the Landscape flag is unreliable and
-  # is what caused the intermittent "6x4 not 4x6" print errors. Instead we make
-  # orientation deterministic: at draw time we read the actual page rectangle,
-  # rotate the IMAGE to match its orientation, then fill it edge to edge. This
-  # produces a correct full-bleed print no matter how the driver labels the size.
+  # Orientation is driven by the IMAGE, not by hand-rotating pixels. The DNP
+  # driver may label its 4x6 media as either 4x6 (portrait) or 6x4 (landscape);
+  # we set the page's Landscape flag to whatever makes the sheet's orientation
+  # match the image. A portrait composite therefore always prints upright,
+  # regardless of how the driver reports the paper. (Hand-rotating the pixels
+  # instead produced the "6x4 printed on 4x6" sideways result.)
+  $paperPortrait = $paper.Height -ge $paper.Width
+  $imgPortrait   = $img.Height -ge $img.Width
+  $doc.DefaultPageSettings.Landscape = ($paperPortrait -ne $imgPortrait)
+
   $doc.add_PrintPage({
     param($s, $e)
-    $b = $e.PageBounds
-    $pageLandscape = $b.Width -gt $b.Height
-    $imgLandscape  = $img.Width -gt $img.Height
-    if ($pageLandscape -ne $imgLandscape) {
-      $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone)
-    }
     $e.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $e.Graphics.DrawImage($img, $b)
+    $e.Graphics.DrawImage($img, $e.PageBounds)
   })
   $doc.Print()
   Write-Output ("Printed on {0} ({1})" -f $doc.PrinterSettings.PrinterName, $paper.PaperName)
