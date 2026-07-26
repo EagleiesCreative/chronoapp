@@ -136,22 +136,36 @@ export function useCaptureFlow(
             const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
             return () => clearTimeout(timer);
         } else {
-            // Stop recording
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                const mrSettings = mediaRecorderRef.current.mimeType;
-                mediaRecorderRef.current.onstop = () => {
-                    const blob = new Blob(videoChunksRef.current, { type: mrSettings || 'video/webm' });
-                    if (blob.size > 0) {
-                        setLastCapturedVideo(blob);
-                    } else {
-                        console.warn('[CaptureFlow] Recorded video blob is empty; skipping video clip for this shot.');
-                        setLastCapturedVideo(null);
-                    }
-                    mediaRecorderRef.current = null;
-                };
-                mediaRecorderRef.current.stop();
-            }
-            capturePhoto();
+            // countdown === 0 → the overlay switches to "Smile!".
+            //
+            // Previously the shutter fired in this exact tick, so the final
+            // second was never given to the guests: the flash went off the
+            // instant "1" disappeared and people were caught mid-pose ("not
+            // ready yet"). Hold here for SMILE_HOLD_MS so "Smile!" is actually
+            // on screen and everyone is set before the frame is grabbed. The
+            // video recorder is stopped at the same moment, so the clip now
+            // includes the smile instead of ending just before it.
+            const SMILE_HOLD_MS = 900;
+
+            const shutter = setTimeout(() => {
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                    const mrSettings = mediaRecorderRef.current.mimeType;
+                    mediaRecorderRef.current.onstop = () => {
+                        const blob = new Blob(videoChunksRef.current, { type: mrSettings || 'video/webm' });
+                        if (blob.size > 0) {
+                            setLastCapturedVideo(blob);
+                        } else {
+                            console.warn('[CaptureFlow] Recorded video blob is empty; skipping video clip for this shot.');
+                            setLastCapturedVideo(null);
+                        }
+                        mediaRecorderRef.current = null;
+                    };
+                    mediaRecorderRef.current.stop();
+                }
+                capturePhoto();
+            }, SMILE_HOLD_MS);
+
+            return () => clearTimeout(shutter);
         }
     }, [cameraReady, countdown, phase, capturePhoto, isVideoMode, isBackendMode, stream, countdownSec, liveVideoSec]);
 
