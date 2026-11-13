@@ -65,11 +65,12 @@ export function CaptureScreen() {
                 exit={{ opacity: 0 }}
                 className="h-full w-full flex bg-white kiosk relative overflow-hidden"
             >
-                {/* Photo counter - minimal */}
+                {/* Photo counter - refined studio pill */}
                 <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20">
-                    <div className="px-6 py-3 rounded-full bg-white border border-border elegant-shadow">
-                        <p className="text-base font-light text-foreground">
-                            Photo {currentPhotoIndex + 1} of {totalPhotos}
+                    <div className="px-6 py-2.5 rounded-full bg-white/95 backdrop-blur-sm border border-border/80 elegant-shadow flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full bg-primary" />
+                        <p className="text-base font-medium text-foreground tracking-wide">
+                            Photo {currentPhotoIndex + 1} <span className="text-muted-foreground font-light">of {totalPhotos}</span>
                         </p>
                     </div>
                 </div>
@@ -145,14 +146,20 @@ export function CaptureScreen() {
                                         exit={{ opacity: 0 }}
                                         transition={{ duration: 0.3 }}
                                         onClick={startCountdown}
-                                        className="absolute inset-0 z-40 flex items-center justify-center cursor-pointer bg-black/40 backdrop-blur-sm"
+                                        className="absolute inset-0 z-40 flex items-center justify-center cursor-pointer bg-black/35 backdrop-blur-[2px]"
                                     >
-                                        <div className="text-center">
+                                        <div className="text-center flex flex-col items-center gap-4 px-8 py-6 rounded-3xl bg-black/30 border border-white/20 backdrop-blur-md">
+                                            <div className="w-16 h-16 rounded-full bg-white/15 border border-white/30 flex items-center justify-center">
+                                                <CameraIcon className="w-8 h-8 text-white" strokeWidth={1.5} />
+                                            </div>
                                             <p
-                                                className="text-white text-4xl md:text-5xl lg:text-6xl font-light tracking-widest animate-pulse"
+                                                className="text-white text-3xl md:text-4xl lg:text-5xl font-light tracking-[0.18em] animate-pulse"
                                                 style={{ textShadow: '0 4px 20px rgba(0,0,0,0.6)' }}
                                             >
                                                 TAP TO START
+                                            </p>
+                                            <p className="text-white/75 text-xs uppercase tracking-[0.2em] font-medium">
+                                                Get ready for your pose
                                             </p>
                                         </div>
                                     </motion.div>

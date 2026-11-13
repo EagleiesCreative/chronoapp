@@ -61,10 +61,9 @@ export function getApiUrl(path: string): string {
         return `http://localhost:3000${normalizedPath}`;
     }
 
-    // Force localhost in development mode, even for Tauri
-    // This ensures dev app talks to dev server, not production
+    // Honor NEXT_PUBLIC_API_URL in development mode if set, otherwise localhost
     if (process.env.NODE_ENV === 'development') {
-        const devUrl = 'http://localhost:3000';
+        const devUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
         return `${devUrl}${normalizedPath}`;
     }
 
@@ -102,7 +101,8 @@ export function getAssetUrl(url: string | null | undefined): string {
     const normalizedPath = url.startsWith('/') ? url : `/${url}`;
 
     if (process.env.NODE_ENV === 'development') {
-        return `http://localhost:3000${normalizedPath}`;
+        const devUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+        return `${devUrl}${normalizedPath}`;
     }
 
     if (isTauriEnvironment()) {

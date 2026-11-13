@@ -466,62 +466,118 @@ export default function HomePage() {
                   <BackgroundSettings />
                 </TabsContent>
 
-                <TabsContent value="config" className="space-y-6">
-                  <AppUpdater />
-                  <LocalBackupSettings />
-                  <CameraSelector />
-                  <PrinterSelector />
+                <TabsContent value="config" className="space-y-8 max-w-7xl mx-auto">
+                  {/* Hardware Studio: Camera & Printer side-by-side */}
+                  <section className="space-y-3">
+                    <div className="flex items-center justify-between px-1">
+                      <div>
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+                          Hardware Studio
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Configure live capture camera and 2R/4R photo printer
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+                      <CameraSelector />
+                      <PrinterSelector />
+                    </div>
+                  </section>
+
+                  {/* Print History */}
                   <PrintHistory />
 
-                  <Card className="border">
-                    <CardHeader>
-                      <CardTitle>Xendit Configuration</CardTitle>
-                      <CardDescription>
-                        Payment gateway settings
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Configure your Xendit API keys in environment variables:
+                  {/* Updates & Local Backup */}
+                  <section className="space-y-3">
+                    <div className="px-1">
+                      <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+                        System & Backup
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Application updates and local session archival
                       </p>
-                      <ul className="text-sm space-y-1 text-muted-foreground list-disc list-inside">
-                        <li><code className="bg-gray-100 px-1 rounded text-xs">XENDIT_SECRET_KEY</code></li>
-                        <li><code className="bg-gray-100 px-1 rounded text-xs">XENDIT_WEBHOOK_TOKEN</code></li>
-                      </ul>
-                    </CardContent>
-                  </Card>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                      <AppUpdater />
+                      <LocalBackupSettings />
+                    </div>
+                  </section>
 
-                  <Card className="border">
-                    <CardHeader>
-                      <CardTitle>Supabase Configuration</CardTitle>
-                      <CardDescription>
-                        Database and storage settings
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Configure Supabase in environment variables:
+                  {/* Environment & Security */}
+                  <section className="space-y-3">
+                    <div className="px-1">
+                      <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+                        Environment & Security
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Server-configured integrations and access control
                       </p>
-                      <ul className="text-sm space-y-1 text-muted-foreground list-disc list-inside">
-                        <li><code className="bg-gray-100 px-1 rounded text-xs">NEXT_PUBLIC_SUPABASE_URL</code></li>
-                        <li><code className="bg-gray-100 px-1 rounded text-xs">NEXT_PUBLIC_SUPABASE_ANON_KEY</code></li>
-                      </ul>
-                    </CardContent>
-                  </Card>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card className="border border-border/80 shadow-xs">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">Xendit Configuration</CardTitle>
+                          <CardDescription className="text-xs">
+                            Payment gateway settings
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <p className="text-xs text-muted-foreground">
+                            Configure Xendit API keys in environment variables:
+                          </p>
+                          <ul className="text-xs space-y-1.5 text-muted-foreground">
+                            <li className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                              <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px] text-foreground">XENDIT_SECRET_KEY</code>
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                              <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px] text-foreground">XENDIT_WEBHOOK_TOKEN</code>
+                            </li>
+                          </ul>
+                        </CardContent>
+                      </Card>
 
-                  <Card className="border">
-                    <CardHeader>
-                      <CardTitle>Admin PIN</CardTitle>
-                      <CardDescription>
-                        Security settings
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground">
-                        Set <code className="bg-gray-100 px-1 rounded text-xs">ADMIN_PIN</code> in your environment variables to change the admin PIN.
-                      </p>
-                    </CardContent>
-                  </Card>
+                      <Card className="border border-border/80 shadow-xs">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">Supabase Configuration</CardTitle>
+                          <CardDescription className="text-xs">
+                            Database and storage settings
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <p className="text-xs text-muted-foreground">
+                            Configure Supabase in environment variables:
+                          </p>
+                          <ul className="text-xs space-y-1.5 text-muted-foreground">
+                            <li className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                              <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px] text-foreground">NEXT_PUBLIC_SUPABASE_URL</code>
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                              <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px] text-foreground">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+                            </li>
+                          </ul>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border border-border/80 shadow-xs">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">Admin PIN</CardTitle>
+                          <CardDescription className="text-xs">
+                            Security settings
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            Set <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px] text-foreground">ADMIN_PIN</code> in your environment variables to change the admin PIN.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </section>
                 </TabsContent>
               </Tabs>
             </div>

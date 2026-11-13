@@ -17,8 +17,10 @@ use tauri::command;
 ///   - DNP official ..... "PC-4x6", "Postcard"
 #[cfg(target_os = "macos")]
 const MEDIA_4R_CANDIDATES: &[&str] = &[
-    "4x6.Fullbleed",
-    "w288h432",
+    "EPKG.NMgn",           // Epson 10x15cm (4x6") Borderless (e.g. Epson L8050)
+    "4x6.Fullbleed",       // Brother 4x6" Borderless
+    "w288h432",            // DNP RX-1 / Gutenprint 4x6" (288x432 pt)
+    "EPKG",                // Epson 10x15cm (4x6") Bordered
     "4x6",
     "6x4",
     "oe_photo-4x6_4x6in",
@@ -97,12 +99,24 @@ fn resolve_4r_media(printer: Option<&str>) -> String {
     "4x6".to_string()
 }
 
-/// Whether the driver exposes a MediaType option (Brother inkjets do; most
-/// dye-sub printers like the DNP RX-1 do not and would reject the option).
+/// Whether the printer uses an Epson Inkjet CUPS driver (exposes `EPIJ_Medi`).
+#[cfg(target_os = "macos")]
+fn is_epson_inkjet_driver(printer: Option<&str>) -> bool {
+    let lines = lpoptions_list(printer);
+    !option_choices(&lines, "EPIJ_Medi").is_empty()
+}
+
+/// Whether the driver exposes a MediaType option (Epson / Brother inkjets do;
+/// most dye-sub printers like the DNP RX-1 do not and would reject the option).
 #[cfg(target_os = "macos")]
 fn driver_supports_media_type(printer: Option<&str>) -> bool {
+    if is_epson_inkjet_driver(printer) {
+        return true;
+    }
     let lines = lpoptions_list(printer);
-    !option_choices(&lines, "MediaType").is_empty()
+    option_choices(&lines, "MediaType")
+        .iter()
+        .any(|c| c.eq_ignore_ascii_case("photographic-glossy"))
 }
 
 // ---------------------------------------------------------------------------
@@ -582,7 +596,16 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
             "A4" => vec![Some("A4".to_string())],
             _ => {
                 let mut v: Vec<Option<String>> = vec![Some(cups_media.clone())];
-                for fallback in ["w288h432", "4x6", "6x4", "PC-4x6", "Postcard"] {
+                for fallback in [
+                    "EPKG.NMgn",
+                    "4x6.Fullbleed",
+                    "w288h432",
+                    "EPKG",
+                    "4x6",
+                    "6x4",
+                    "PC-4x6",
+                    "Postcard",
+                ] {
                     if !v.iter().any(|m| m.as_deref() == Some(fallback)) {
                         v.push(Some(fallback.to_string()));
                     }
@@ -592,6 +615,7 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
             }
         };
 
+        let is_epson = is_epson_inkjet_driver(target_printer_name.as_deref());
         let send_media_type = driver_supports_media_type(target_printer_name.as_deref());
         let mut last_err = String::new();
         let mut result: Option<String> = None;
@@ -607,10 +631,21 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
             if let Some(ref media) = attempt {
                 cmd.arg("-o").arg(format!("media={}", media));
             }
-            // Only send MediaType on drivers that expose it (Brother inkjets).
-            // Dye-sub printers like the DNP RX-1 have no MediaType option and
-            // would reject/complain about this, so we skip it for them.
-            if send_media_type {
+            // Apply Epson glossy photo paper + borderless 4R options when printing
+            // to an Epson inkjet driver (e.g. EPSON L8050 Series), or Brother glossy
+            // MediaType when supported. Dye-sub printers like DNP RX-1 reject MediaType.
+            if is_epson {
+                cmd.arg("-o").arg("MediaType=13"); // Epson Premium Glossy
+                cmd.arg("-o").arg("EPIJ_Medi=13"); // Epson Premium Glossy
+                cmd.arg("-o").arg("EPIJ_Qual=306"); // High Quality
+                cmd.arg("-o").arg("EPIJ_Mode=3"); // Photo mode
+                cmd.arg("-o").arg("Resolution=720x720dpi");
+                if page_size_val != "A3" && page_size_val != "A4" {
+                    cmd.arg("-o").arg("EPIJ_Size=74"); // 10 x 15 cm (4 x 6 in)
+                    cmd.arg("-o").arg("EPIJ_PSrc=3"); // Borderless page setup
+                    cmd.arg("-o").arg("EPIJ_Bdls=1"); // Borderless On
+                }
+            } else if send_media_type {
                 cmd.arg("-o").arg("MediaType=photographic-glossy");
             }
             cmd.arg("-o").arg("fit-to-page");

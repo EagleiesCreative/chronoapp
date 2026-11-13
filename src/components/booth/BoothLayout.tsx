@@ -82,31 +82,31 @@ export function BoothLayout() {
                 className={isNewspaper ? 'newspaper-layout w-full h-screen flex flex-col overflow-hidden select-none' : 'w-full h-screen flex flex-col overflow-hidden select-none'}
             >
                 {showProgress && (
-                    <div className="w-full bg-white/80 backdrop-blur-md border-b border-border/50 py-2.5 px-6 flex justify-center items-center select-none z-40">
-                        <div className="flex items-center gap-1 max-w-lg w-full justify-between">
+                    <div className="w-full bg-white/85 backdrop-blur-md border-b border-border/60 py-3 px-6 flex justify-center items-center select-none z-40">
+                        <div className="flex items-center gap-2 max-w-xl w-full justify-between">
                             {STEPS.map((s, idx) => {
                                 const isCompleted = idx < currentStepIndex;
                                 const isActive = idx === currentStepIndex;
                                 return (
                                     <div key={idx} className="flex items-center flex-1 last:flex-none">
-                                        <div className="flex items-center gap-1.5">
-                                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all duration-300 ${
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-300 ${
                                                 isActive 
-                                                    ? 'bg-primary text-primary-foreground font-bold scale-105 shadow-sm' 
+                                                    ? 'bg-primary text-primary-foreground font-bold scale-105 shadow-sm ring-2 ring-primary/20' 
                                                     : isCompleted 
-                                                        ? 'bg-primary/20 text-primary font-medium' 
+                                                        ? 'bg-primary/15 text-primary font-semibold' 
                                                         : 'bg-muted text-muted-foreground'
                                             }`}>
                                                 {isCompleted ? '✓' : idx + 1}
                                             </div>
-                                            <span className={`text-[10px] font-medium hidden sm:inline transition-colors duration-300 ${
-                                                isActive ? 'text-foreground font-bold' : 'text-muted-foreground'
+                                            <span className={`text-xs font-medium hidden sm:inline transition-colors duration-300 ${
+                                                isActive ? 'text-foreground font-semibold' : 'text-muted-foreground'
                                             }`}>
                                                 {s.label}
                                             </span>
                                         </div>
                                         {idx < STEPS.length - 1 && (
-                                            <div className="flex-1 h-0.5 mx-1.5 bg-muted relative overflow-hidden">
+                                            <div className="flex-1 h-0.5 mx-2.5 bg-muted relative overflow-hidden rounded-full">
                                                 <div 
                                                     className="absolute inset-y-0 left-0 right-0 bg-primary origin-left transition-transform duration-500 ease-out"
                                                     style={{ transform: `scaleX(${isCompleted ? 1 : 0})` }}

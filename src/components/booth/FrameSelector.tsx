@@ -282,10 +282,15 @@ export function FrameSelector() {
                                 key={frame.id}
                                 onClick={() => setSelectedFrame(frame)}
                                 className={`relative flex flex-col items-center p-2.5 rounded-[1.25rem] bg-white transition-all duration-300 touch-target shadow-sm border ${selectedFrame?.id === frame.id
-                                    ? 'border-[#FFF94F] ring-[6px] ring-[#FFF94F] scale-[0.98] z-10'
-                                    : 'border-border/40 hover:border-black/20 hover:shadow-md hover:-translate-y-1'
+                                    ? 'border-primary ring-4 ring-primary/25 shadow-md scale-[0.99] z-10'
+                                    : 'border-border/60 hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5'
                                     }`}
                             >
+                                {selectedFrame?.id === frame.id && (
+                                    <div className="absolute top-3.5 right-3.5 z-20 w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-sm">
+                                        <Check className="w-4 h-4" strokeWidth={2.5} />
+                                    </div>
+                                )}
                                 {/* Inner Image Container */}
                                 <div className="w-full aspect-[2/3] flex items-center justify-center relative overflow-hidden">
                                     <img
@@ -295,8 +300,8 @@ export function FrameSelector() {
                                     />
 
                                     {/* Number of Photos Pill */}
-                                    <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 bg-[#FDFFE0] px-3 py-1 rounded-full shadow-sm border border-[#BD9700]/20 flex items-center justify-center min-w-[max-content] whitespace-nowrap truncate">
-                                        <span className="text-[#BD9700] text-[10px] font-bold uppercase tracking-wider">
+                                    <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-xs px-3 py-1 rounded-full shadow-sm border border-border/80 flex items-center justify-center min-w-[max-content] whitespace-nowrap truncate">
+                                        <span className="text-foreground text-[11px] font-semibold uppercase tracking-wider">
                                             {new Set((frame.photo_slots || []).map((s, i) => s.capture_index ?? i)).size || 0} Photos
                                         </span>
                                     </div>
@@ -424,7 +429,7 @@ export function FrameSelector() {
                         size="lg"
                         onClick={handleConfirm}
                         disabled={!selectedFrame}
-                        className="w-full h-14 bg-white hover:bg-gray-50 border-2 border-black text-black rounded-[1.25rem] text-lg font-extrabold shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:hover:scale-100 uppercase tracking-widest flex items-center justify-center gap-3 group touch-target"
+                        className="w-full h-15 min-h-[60px] bg-primary hover:bg-primary/90 text-primary-foreground rounded-[1.25rem] text-lg font-bold shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:hover:scale-100 uppercase tracking-widest flex items-center justify-center gap-3 group touch-target"
                     >
                         NEXT
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:translate-x-1">

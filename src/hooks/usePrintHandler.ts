@@ -9,7 +9,7 @@ export function usePrintHandler(compositeImage: string | null) {
     const { session, printImage, printQuantity } = useBoothStore();
     const { addJob } = usePrintStore();
     const { booth } = useTenantStore();
-    const { printRotation } = usePrinterSettingsStore();
+    const { selectedPrinter, printRotation } = usePrinterSettingsStore();
 
     // Prefer the quantity the guest actually paid for upfront; fall back to the
     // booth default (e.g. sessions started before the picker existed).
@@ -44,7 +44,7 @@ export function usePrintHandler(compositeImage: string | null) {
                 for (let i = 0; i < copies; i++) {
                     await invoke('print_photo', {
                         imageData: imageForPrint,
-                        printerName: null, // Use default printer
+                        printerName: selectedPrinter || null,
                         pageSize: pageSize,
                         rotate: printRotation // 'auto' | '90' | '180' | '270'
                     });

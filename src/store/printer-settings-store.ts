@@ -11,6 +11,8 @@ import { persist } from 'zustand/middleware';
 export type PrintRotation = 'auto' | '90' | '180' | '270';
 
 interface PrinterSettingsStore {
+    selectedPrinter: string;
+    setSelectedPrinter: (printer: string) => void;
     printRotation: PrintRotation;
     setPrintRotation: (rotation: PrintRotation) => void;
 }
@@ -18,6 +20,8 @@ interface PrinterSettingsStore {
 export const usePrinterSettingsStore = create<PrinterSettingsStore>()(
     persist(
         (set) => ({
+            selectedPrinter: '',
+            setSelectedPrinter: (printer) => set({ selectedPrinter: printer }),
             printRotation: 'auto',
             setPrintRotation: (rotation) => set({ printRotation: rotation }),
         }),

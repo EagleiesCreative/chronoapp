@@ -267,14 +267,34 @@ export function CameraSelector() {
 
     return (
         <Card className="glass-card">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Video className="w-5 h-5" />
-                    Camera Configuration
-                </CardTitle>
-                <CardDescription>
-                    Select and test your camera before starting a session
-                </CardDescription>
+            <CardHeader className="pb-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                            <Video className="w-5 h-5 text-primary" />
+                            Camera Configuration
+                        </CardTitle>
+                        <CardDescription className="mt-1">
+                            Select and test your camera before starting a session
+                        </CardDescription>
+                    </div>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shrink-0 border ${
+                        isTesting
+                            ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20'
+                            : selectedCameraId
+                                ? 'bg-primary/10 text-primary border-primary/20'
+                                : 'bg-muted text-muted-foreground border-border'
+                    }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                            isTesting
+                                ? 'bg-emerald-500 animate-pulse'
+                                : selectedCameraId
+                                    ? 'bg-primary'
+                                    : 'bg-muted-foreground/50'
+                        }`} />
+                        {isTesting ? 'Previewing' : selectedCameraId ? 'Ready' : 'No Camera'}
+                    </span>
+                </div>
             </CardHeader>
             <CardContent className="space-y-4">
                 {/* Error/Warning for unsupported environment */}
@@ -347,8 +367,12 @@ export function CameraSelector() {
                                             )}
                                             <span className="line-clamp-2" title={camera.name}>{camera.name}</span>
                                         </div>
-                                        {camera.name.includes('(Sony SDK)') && (
-                                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                        {(camera.name.includes('(Sony SDK)') || camera.name.includes('(Canon SDK)')) && (
+                                            <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                                camera.name.includes('(Canon SDK)')
+                                                    ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                                                    : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                            }`}>
                                                 Direct Capture
                                             </span>
                                         )}
@@ -357,7 +381,7 @@ export function CameraSelector() {
                                         <div className={`w-1.5 h-1.5 rounded-full ${selectedCameraId === camera.id ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
                                         <span>
                                             {selectedCameraId === camera.id ? 'Selected' : 'Ready'}
-                                            {camera.name.includes('(Sony SDK)') && selectedCameraId === camera.id && ' — Full-res shutter capture'}
+                                            {(camera.name.includes('(Sony SDK)') || camera.name.includes('(Canon SDK)')) && selectedCameraId === camera.id && ' — Full-res shutter capture'}
                                         </span>
                                     </div>
                                 </div>
@@ -380,20 +404,20 @@ export function CameraSelector() {
                     />
                 </div>
 
-                {/* Video Mode Settings — disabled for Sony (still-image only) */}
+                {/* Video Mode Settings — disabled for Sony/Canon SDK (still-image only) */}
                 <div className="flex items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
                         <Label className="text-base font-medium">Live Video Mode</Label>
                         <p className="text-sm text-muted-foreground">
-                            {cameraType === 'sony'
-                                ? 'Not available with Sony direct capture (still photos only)'
+                            {cameraType === 'sony' || cameraType === 'canon'
+                                ? `Not available with ${cameraType === 'canon' ? 'Canon' : 'Sony'} direct capture (still photos only)`
                                 : 'Record 2-second video clips instead of static photos'}
                         </p>
                     </div>
                     <Switch
-                        checked={cameraType === 'sony' ? false : isVideoMode}
+                        checked={cameraType === 'sony' || cameraType === 'canon' ? false : isVideoMode}
                         onCheckedChange={setIsVideoMode}
-                        disabled={cameraType === 'sony'}
+                        disabled={cameraType === 'sony' || cameraType === 'canon'}
                     />
                 </div>
 
@@ -480,9 +504,28 @@ export function CameraSelector() {
                                 Ensure your camera is set to:
                             </p>
                             <ul className="text-sm text-muted-foreground list-disc list-inside mt-2 space-y-1">
-                                <li>USB mode → <strong>PC Remote</strong></li>
+                                <li>USB mode → <strong>PC Remote</strong> (Sony A7R III: <em>Menu → Setup → USB Connection → PC Remote</em>)</li>
                                 <li>Mode dial → <strong>M, S, A, or P</strong></li>
                                 <li>Save destination → <strong>PC+Camera</strong> or <strong>PC Only</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+                )}
+
+                {/* Canon setup instructions */}
+                {cameraType === 'canon' && (
+                    <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                        <Camera className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-medium text-red-500">Canon Direct Capture Mode</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Full-resolution photos will be captured directly via the camera&apos;s shutter.
+                                Ensure your camera is set to:
+                            </p>
+                            <ul className="text-sm text-muted-foreground list-disc list-inside mt-2 space-y-1">
+                                <li>Wi-Fi / NFC → <strong>Disable</strong> (Canon disables USB control when Wi-Fi is on)</li>
+                                <li>Mode dial → <strong>M, Av, Tv, or P</strong></li>
+                                <li>Auto Power Off → <strong>Disable</strong></li>
                             </ul>
                         </div>
                     </div>

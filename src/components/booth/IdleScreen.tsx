@@ -233,7 +233,7 @@ export function IdleScreen() {
                     <Button
                         size="lg"
                         onClick={() => setStep('select-frame')}
-                        className={`px-14 py-7 text-lg font-medium rounded-full elegant-shadow touch-target transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${hasDarkBackground ? 'bg-white text-black hover:bg-white/90' : ''}`}
+                        className={`px-16 py-7 min-h-[64px] text-xl font-medium rounded-full elegant-shadow touch-target transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${hasDarkBackground ? 'bg-white text-black hover:bg-white/90' : ''}`}
                     >
                         Start Session
                     </Button>
@@ -243,7 +243,7 @@ export function IdleScreen() {
                             variant="outline"
                             size="lg"
                             onClick={() => setStep('voucher')}
-                            className={`px-8 py-5 text-base font-normal rounded-full touch-target transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] ${hasDarkBackground ? 'border-white/50 text-white hover:bg-white/10 backdrop-blur' : ''}`}
+                            className={`px-9 py-5 min-h-[52px] text-base font-normal rounded-full touch-target transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] ${hasDarkBackground ? 'border-white/50 text-white hover:bg-white/10 backdrop-blur' : 'bg-white/80 backdrop-blur-xs'}`}
                         >
                             <Tag className="w-4 h-4 mr-2" />
                             {appliedVoucher ? 'Change Voucher' : 'Use Voucher'}
@@ -256,8 +256,9 @@ export function IdleScreen() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 1.2, duration: 0.8 }}
-                    className={`absolute bottom-12 text-sm font-light tracking-wide ${hasDarkBackground ? 'text-white/70 text-shadow-dark' : 'text-muted-foreground/60'}`}
+                    className={`absolute bottom-10 text-xs uppercase tracking-[0.2em] font-medium ${hasDarkBackground ? 'text-white/70 text-shadow-dark' : 'text-muted-foreground/70'}`}
                 >
+                    Tap Start Session to begin
                 </motion.p>
             </div>
 

@@ -36,7 +36,6 @@ interface PrinterMediaInfo {
 
 export function PrinterSelector() {
     const [printers, setPrinters] = useState<PrinterInfo[]>([]);
-    const [selectedPrinter, setSelectedPrinter] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [isTesting, setIsTesting] = useState(false);
     const [lastTestResult, setLastTestResult] = useState<'idle' | 'success' | 'error'>('idle');
@@ -51,8 +50,8 @@ export function PrinterSelector() {
     const [isClearingQueue, setIsClearingQueue] = useState(false);
     const [isResuming, setIsResuming] = useState(false);
 
-    // Manual print rotation override (fixes DNP RX1HS printing 4x6 sideways as 6x4)
-    const { printRotation, setPrintRotation } = usePrinterSettingsStore();
+    // Persisted printer selection and manual print rotation override
+    const { selectedPrinter, setSelectedPrinter, printRotation, setPrintRotation } = usePrinterSettingsStore();
     const rotationOptions: { value: PrintRotation; label: string }[] = [
         { value: 'auto', label: 'Auto' },
         { value: '90', label: '90°' },
@@ -94,12 +93,15 @@ export function PrinterSelector() {
             const printerList = await invoke<PrinterInfo[]>('get_printers');
             setPrinters(printerList);
 
-            // Auto-select default printer
-            const defaultPrinter = printerList.find(p => p.is_default);
-            if (defaultPrinter && !selectedPrinter) {
-                setSelectedPrinter(defaultPrinter.system_name);
-            } else if (printerList.length > 0 && !selectedPrinter) {
-                setSelectedPrinter(printerList[0].system_name);
+            // Keep persisted printer if still installed; otherwise auto-select default or first
+            const persistedExists = selectedPrinter && printerList.some(p => p.system_name === selectedPrinter);
+            if (!persistedExists) {
+                const defaultPrinter = printerList.find(p => p.is_default);
+                if (defaultPrinter) {
+                    setSelectedPrinter(defaultPrinter.system_name);
+                } else if (printerList.length > 0) {
+                    setSelectedPrinter(printerList[0].system_name);
+                }
             }
         } catch (err) {
             console.error('Failed to load printers:', err);
@@ -107,7 +109,7 @@ export function PrinterSelector() {
         } finally {
             setIsLoading(false);
         }
-    }, [isTauriAvailable, selectedPrinter]);
+    }, [isTauriAvailable, selectedPrinter, setSelectedPrinter]);
 
     // Load printers on mount
     useEffect(() => {
@@ -259,14 +261,34 @@ export function PrinterSelector() {
 
     return (
         <Card className="glass-card">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Printer className="w-5 h-5" />
-                    Printer Configuration
-                </CardTitle>
-                <CardDescription>
-                    Select and test your printer for photo printing
-                </CardDescription>
+            <CardHeader className="pb-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                            <Printer className="w-5 h-5 text-primary" />
+                            Printer Configuration
+                        </CardTitle>
+                        <CardDescription className="mt-1">
+                            Select and test your printer for photo printing
+                        </CardDescription>
+                    </div>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shrink-0 border ${
+                        mediaInfo?.supports_4r
+                            ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20'
+                            : selectedPrinter
+                                ? 'bg-primary/10 text-primary border-primary/20'
+                                : 'bg-muted text-muted-foreground border-border'
+                    }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                            mediaInfo?.supports_4r
+                                ? 'bg-emerald-500'
+                                : selectedPrinter
+                                    ? 'bg-primary'
+                                    : 'bg-muted-foreground/50'
+                        }`} />
+                        {mediaInfo?.supports_4r ? '4R Ready' : selectedPrinter ? 'Selected' : 'No Printer'}
+                    </span>
+                </div>
             </CardHeader>
             <CardContent className="space-y-4">
                 {/* Error display */}
@@ -435,62 +457,6 @@ export function PrinterSelector() {
                     </div>
                 )}
 
-                {/* 2R / 4R media support check */}
-                {selectedPrinter && (
-                    <div className="space-y-3">
-                        <Button
-                            variant="outline"
-                            onClick={handleCheckMedia}
-                            disabled={isCheckingMedia || !selectedPrinter || isLoading}
-                            className="w-full"
-                        >
-                            {isCheckingMedia ? (
-                                <>
-                                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                    Checking 2R / 4R support...
-                                </>
-                            ) : (
-                                <>
-                                    <PrinterCheck className="w-4 h-4 mr-2" />
-                                    Check 2R / 4R Support
-                                </>
-                            )}
-                        </Button>
-
-                        {mediaInfo && (
-                            <div className={`p-4 rounded-lg border text-sm ${
-                                mediaInfo.supports_4r
-                                    ? 'bg-green-50 border-green-200'
-                                    : 'bg-amber-50 border-amber-200'
-                            }`}>
-                                <div className="flex items-center gap-2 font-medium">
-                                    {mediaInfo.supports_4r ? (
-                                        <>
-                                            <CheckCircle2 className="w-4 h-4 text-green-600" />
-                                            <span className="text-green-800">2R &amp; 4R printing ready</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <AlertTriangle className="w-4 h-4 text-amber-600" />
-                                            <span className="text-amber-800">No 4×6 media detected</span>
-                                        </>
-                                    )}
-                                </div>
-                                <div className="mt-2 space-y-1 text-muted-foreground">
-                                    <p><strong>4R/2R media name:</strong> <code className="bg-black/5 px-1 rounded">{mediaInfo.resolved_4r_media}</code></p>
-                                    <p><strong>Available sizes:</strong> {mediaInfo.available_media.length > 0 ? mediaInfo.available_media.join(', ') : 'none reported'}</p>
-                                    {!mediaInfo.supports_4r && (
-                                        <p className="text-amber-700 pt-1">
-                                            Tip: set the <code className="bg-black/5 px-1 rounded">FRAMR_MEDIA_4R</code> environment
-                                            variable to the correct 4×6 name from the list above, or install the DNP driver.
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
                 {/* Print rotation override (for DNP RX1HS printing 4x6 as 6x4) */}
                 <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -518,24 +484,80 @@ export function PrinterSelector() {
                     </p>
                 </div>
 
-                {/* Test print button */}
-                <Button
-                    onClick={handleTestPrint}
-                    disabled={isTesting || !selectedPrinter || isLoading}
-                    className="w-full"
-                >
-                    {isTesting ? (
-                        <>
-                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                            Printing Test Page...
-                        </>
-                    ) : (
-                        <>
-                            <FileText className="w-4 h-4 mr-2" />
-                            Print Test Page
-                        </>
+                {/* Primary Actions Row: Check 2R/4R & Print Test Page */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    {selectedPrinter && (
+                        <Button
+                            variant="outline"
+                            onClick={handleCheckMedia}
+                            disabled={isCheckingMedia || !selectedPrinter || isLoading}
+                            className="w-full h-10"
+                        >
+                            {isCheckingMedia ? (
+                                <>
+                                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                    Checking 2R / 4R...
+                                </>
+                            ) : (
+                                <>
+                                    <PrinterCheck className="w-4 h-4 mr-2" />
+                                    Check 2R / 4R Support
+                                </>
+                            )}
+                        </Button>
                     )}
-                </Button>
+
+                    <Button
+                        onClick={handleTestPrint}
+                        disabled={isTesting || !selectedPrinter || isLoading}
+                        className={`w-full h-10 ${!selectedPrinter ? 'sm:col-span-2' : ''}`}
+                    >
+                        {isTesting ? (
+                            <>
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                Printing Test Page...
+                            </>
+                        ) : (
+                            <>
+                                <FileText className="w-4 h-4 mr-2" />
+                                Print Test Page
+                            </>
+                        )}
+                    </Button>
+                </div>
+
+                {/* 2R / 4R media support details */}
+                {selectedPrinter && mediaInfo && (
+                    <div className={`p-4 rounded-xl border text-sm ${
+                        mediaInfo.supports_4r
+                            ? 'bg-emerald-50/70 border-emerald-200'
+                            : 'bg-amber-50/70 border-amber-200'
+                    }`}>
+                        <div className="flex items-center gap-2 font-medium">
+                            {mediaInfo.supports_4r ? (
+                                <>
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                    <span className="text-emerald-800">2R &amp; 4R printing ready</span>
+                                </>
+                            ) : (
+                                <>
+                                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                                    <span className="text-amber-800">No 4×6 media detected</span>
+                                </>
+                            )}
+                        </div>
+                        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            <p><strong>4R/2R media name:</strong> <code className="bg-black/5 px-1.5 py-0.5 rounded">{mediaInfo.resolved_4r_media}</code></p>
+                            <p><strong>Available sizes:</strong> {mediaInfo.available_media.length > 0 ? mediaInfo.available_media.join(', ') : 'none reported'}</p>
+                            {!mediaInfo.supports_4r && (
+                                <p className="text-amber-700 pt-1">
+                                    Tip: set the <code className="bg-black/5 px-1 rounded">FRAMR_MEDIA_4R</code> environment
+                                    variable to the correct 4×6 name from the list above, or install the DNP driver.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Tips */}
                 <p className="text-sm text-muted-foreground">

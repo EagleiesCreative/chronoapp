@@ -258,11 +258,11 @@ export function PaymentScreen() {
                 <div className="w-full max-w-md p-10 bg-white border border-slate-100 rounded-[3rem] shadow-xl flex flex-col items-center relative overflow-hidden">
                     <span className="text-xs font-black tracking-[0.3em] text-slate-300 mb-8">QRIS</span>
 
-                    <div className="relative p-6 border-2 border-slate-50 rounded-2xl mb-10 bg-white">
-                        <div className="absolute -top-1 -left-1 w-10 h-10 border-t-4 border-l-4 border-yellow-400 rounded-tl-2xl z-10"></div>
-                        <div className="absolute -top-1 -right-1 w-10 h-10 border-t-4 border-r-4 border-yellow-400 rounded-tr-2xl z-10"></div>
-                        <div className="absolute -bottom-1 -left-1 w-10 h-10 border-b-4 border-l-4 border-yellow-400 rounded-bl-2xl z-10"></div>
-                        <div className="absolute -bottom-1 -right-1 w-10 h-10 border-b-4 border-r-4 border-yellow-400 rounded-br-2xl z-10"></div>
+                    <div className="relative p-6 border-2 border-slate-100 rounded-2xl mb-10 bg-white">
+                        <div className="absolute -top-1 -left-1 w-10 h-10 border-t-4 border-l-4 border-primary/70 rounded-tl-2xl z-10"></div>
+                        <div className="absolute -top-1 -right-1 w-10 h-10 border-t-4 border-r-4 border-primary/70 rounded-tr-2xl z-10"></div>
+                        <div className="absolute -bottom-1 -left-1 w-10 h-10 border-b-4 border-l-4 border-primary/70 rounded-bl-2xl z-10"></div>
+                        <div className="absolute -bottom-1 -right-1 w-10 h-10 border-b-4 border-r-4 border-primary/70 rounded-br-2xl z-10"></div>
 
                         <div className="w-56 h-56 relative flex items-center justify-center p-2 bg-white">
                             <AnimatePresence mode="wait">
@@ -368,7 +368,7 @@ export function PaymentScreen() {
                     <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center justify-between">
                         <div>
                             <span className="text-slate-400 font-semibold block mb-2">Time remaining</span>
-                            <div className="text-5xl font-black text-slate-900 tracking-tight">
+                            <div className="text-5xl font-black text-slate-900 tracking-tight tabular-nums">
                                 {formatTime(timeLeft)}
                             </div>
                         </div>
@@ -383,7 +383,7 @@ export function PaymentScreen() {
                                 <circle
                                     cx="18" cy="18" r="16"
                                     fill="none"
-                                    className="stroke-yellow-500 transition-all duration-1000"
+                                    className="stroke-primary transition-all duration-1000"
                                     strokeWidth="3"
                                     strokeDasharray={`${progress}, 100`}
                                     strokeLinecap="round"

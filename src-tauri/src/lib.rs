@@ -3,6 +3,7 @@ mod camera;
 mod filesystem;
 mod canon;
 mod sony;
+pub mod gphoto2;
 mod image_processor;
 mod stream_server;
 mod reliability;

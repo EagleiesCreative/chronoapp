@@ -18,7 +18,7 @@ export function ReviewQRCode({
     handleRetryUpload
 }: ReviewQRCodeProps) {
     return (
-        <div className="w-full bg-white border-2 border-primary/30 rounded-2xl p-6 min-h-[220px] flex flex-col items-center justify-center" style={{ minHeight: '220px' }}>
+        <div className="w-full bg-white border-2 border-primary/30 rounded-2xl p-6 min-h-[240px] flex flex-col items-center justify-center shadow-xs">
             {downloadQR ? (
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -26,18 +26,18 @@ export function ReviewQRCode({
                     className="text-center w-full"
                 >
                     <div className="mb-4">
-                        <p className="text-[10px] uppercase text-primary font-bold tracking-[0.15em] mb-1">
+                        <p className="text-xs uppercase text-primary font-bold tracking-[0.14em] mb-1">
                             Scan for softcopy
                         </p>
-                        <p className="text-[8px] text-muted-foreground font-light">
+                        <p className="text-xs text-muted-foreground font-normal">
                             Download Strip, Photos, & GIF
                         </p>
                     </div>
-                    <div className="bg-white p-2.5 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.08)] inline-block border border-border/50">
+                    <div className="bg-white p-3 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.08)] inline-block border border-border/60">
                         <img
                             src={downloadQR}
                             alt="Sharing QR Code"
-                            className="w-32 h-32 max-w-none shrink-0 aspect-square object-contain mx-auto"
+                            className="w-36 h-36 max-w-none shrink-0 aspect-square object-contain mx-auto"
                             style={{ imageRendering: 'pixelated' }}
                         />
                     </div>
@@ -46,20 +46,20 @@ export function ReviewQRCode({
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="text-center px-6"
+                    className="text-center px-4"
                 >
-                    <div className="w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <XCircle className="w-6 h-6 text-destructive/60" strokeWidth={1.5} />
+                    <div className="w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <XCircle className="w-6 h-6 text-destructive/70" strokeWidth={1.5} />
                     </div>
                     <p className="text-sm font-medium text-foreground mb-1">Upload Issue</p>
-                    <p className="text-[10px] text-muted-foreground font-light mb-4 line-clamp-2">
+                    <p className="text-xs text-muted-foreground font-normal mb-4 line-clamp-2">
                         {uploadError}
                     </p>
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={handleRetryUpload}
-                        className="rounded-full h-9 px-6 text-[11px] font-medium"
+                        className="rounded-full h-10 px-6 text-xs font-medium"
                     >
                         <RotateCcw className="w-3.5 h-3.5 mr-2" />
                         Try Again
@@ -68,15 +68,15 @@ export function ReviewQRCode({
             ) : (
                 <div className="text-center py-6">
                     <div className="relative w-12 h-12 mx-auto mb-4">
-                        <Loader2 className="w-12 h-12 animate-spin text-primary/30" strokeWidth={1} />
+                        <Loader2 className="w-12 h-12 animate-spin text-primary/30" strokeWidth={1.25} />
                         <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-1 h-1 bg-primary rounded-full animate-pulse" />
+                            <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
                         </div>
                     </div>
-                    <p className="text-[10px] uppercase text-muted-foreground/60 font-medium tracking-widest mb-1">
+                    <p className="text-xs uppercase text-muted-foreground/80 font-semibold tracking-widest mb-1">
                         {isCompositing ? 'Preparing' : 'Generating'}
                     </p>
-                    <p className="text-[10px] text-muted-foreground font-light px-4">
+                    <p className="text-xs text-muted-foreground font-normal px-4">
                         {uploadStatus || 'Digital copy coming up...'}
                     </p>
                 </div>

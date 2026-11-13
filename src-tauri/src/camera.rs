@@ -11,13 +11,14 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use crate::canon::{CanonSdk, CanonSession};
+use crate::gphoto2::{GPhoto2Sdk, GPhoto2Session};
 use crate::sony::SonySdk;
 use tauri::State;
 
 
 /// Messages sent to the camera thread
 enum CameraCommand {
-    Start { device_id: String, is_canon: bool, is_sony: bool, reply: Sender<Result<CameraStatus, String>> },
+    Start { device_id: String, is_canon: bool, is_sony: bool, is_gphoto2: bool, reply: Sender<Result<CameraStatus, String>> },
     Stop { reply: Sender<Result<(), String>> },
     Capture { quality: u8, reply: Sender<Result<String, String>> },
     GetStatus { reply: Sender<Result<CameraStatus, String>> },
@@ -27,6 +28,8 @@ enum CameraCommand {
     CanonCapture { _quality: u8, reply: Sender<Result<String, String>> },
     /// Enumerate Canon cameras on the camera thread (EDSDK is single-threaded)
     ListCanon { reply: Sender<Result<Vec<CameraDevice>, String>> },
+    /// Enumerate USB cameras via libgphoto2 (Sony A7R III, Canon 80D, etc.)
+    ListGPhoto2 { reply: Sender<Result<Vec<CameraDevice>, String>> },
 }
 
 
@@ -65,15 +68,19 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
     let mut camera: Option<Camera> = None;
     let canon_sdk = CanonSdk::load().ok();
     let sony_sdk = SonySdk::load().ok();
+    let gphoto2_sdk = GPhoto2Sdk::load().ok();
     let mut is_canon_active = false;
     let mut is_sony_active = false;
+    let mut is_gphoto2_active = false;
     // Sony session handle (raw pointer managed by bridge)
     let mut sony_session: Option<crate::sony::SonySession<'_>> = None;
     // Canon session handle (EdsCameraRef managed by EDSDK)
     let mut canon_session: Option<CanonSession> = None;
+    // libgphoto2 session handle
+    let mut gphoto2_session: Option<GPhoto2Session> = None;
 
     
-    while let Ok(cmd) = receiver.recv_timeout(if camera.is_some() || is_canon_active || is_sony_active { Duration::from_millis(33) } else { Duration::from_secs(1) })
+    while let Ok(cmd) = receiver.recv_timeout(if camera.is_some() || is_canon_active || is_sony_active || is_gphoto2_active { Duration::from_millis(33) } else { Duration::from_secs(1) })
         .map(Some)
         .or_else(|e| {
             if e == mpsc::RecvTimeoutError::Timeout { Ok(None) } else { Err(e) }
@@ -109,11 +116,18 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                     let _ = frame_tx.try_send(frame_data);
                 }
             }
+        } else if is_gphoto2_active {
+            // Poll libgphoto2 live view preview frames and broadcast to MJPEG stream
+            if let Some(ref session) = gphoto2_session {
+                if let Ok(frame_data) = session.get_live_view_frame() {
+                    let _ = frame_tx.try_send(frame_data);
+                }
+            }
         }
 
         if let Some(cmd) = cmd {
             match cmd {
-                CameraCommand::Start { device_id, is_canon, is_sony, reply } => {
+                CameraCommand::Start { device_id, is_canon, is_sony, is_gphoto2, reply } => {
                     // Stop existing camera if any
                     if let Some(mut cam) = camera.take() {
                         cam.stop_stream().ok();
@@ -124,9 +138,29 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                     // Disconnect existing Canon session
                     canon_session = None;
                     is_canon_active = false;
+                    // Disconnect existing libgphoto2 session
+                    gphoto2_session = None;
+                    is_gphoto2_active = false;
 
                     let result = (|| -> Result<CameraStatus, String> {
-                        if is_sony {
+                        if is_gphoto2 {
+                            if let Some(ref sdk) = gphoto2_sdk {
+                                let idx_str = device_id.strip_prefix("gphoto2_").unwrap_or("0");
+                                let idx: u32 = idx_str.parse().unwrap_or(0);
+
+                                let session = sdk.connect(idx)?;
+                                is_gphoto2_active = true;
+                                gphoto2_session = Some(session);
+
+                                Ok(CameraStatus {
+                                    is_active: true,
+                                    device_name: Some(format!("USB Camera ({})", device_id)),
+                                    resolution: Some((6000, 4000)),
+                                })
+                            } else {
+                                Err("libgphoto2 not loaded. Install via `brew install gphoto2`.".to_string())
+                            }
+                        } else if is_sony {
                             // Sony CrSDK: Connect and start live view
                             if let Some(ref sdk) = sony_sdk {
                                 let idx_str = device_id.strip_prefix("sony_").unwrap_or("0");
@@ -198,7 +232,10 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                 }
                 
                 CameraCommand::Stop { reply } => {
-                    if is_sony_active {
+                    if is_gphoto2_active {
+                        gphoto2_session = None;
+                        is_gphoto2_active = false;
+                    } else if is_sony_active {
                         if let Some(ref session) = sony_session {
                             session.stop_live_view().ok();
                         }
@@ -218,7 +255,16 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                 
                 CameraCommand::Capture { quality, reply } => {
                     let result = (|| -> Result<String, String> {
-                        if is_sony_active {
+                        if is_gphoto2_active {
+                            if let Some(ref session) = gphoto2_session {
+                                let frame_data = session.get_live_view_frame()
+                                    .map_err(|e| format!("gphoto2 preview frame error: {}", e))?;
+                                let base64_data = STANDARD.encode(&frame_data);
+                                Ok(format!("data:image/jpeg;base64,{}", base64_data))
+                            } else {
+                                Err("gphoto2 session not active".to_string())
+                            }
+                        } else if is_sony_active {
                             // For preview capture, grab a live view frame
                             if let Some(ref session) = sony_session {
                                 let frame_data = session.get_live_view_frame()
@@ -266,7 +312,16 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                 
                 CameraCommand::SonyCapture { _quality: _, reply } => {
                     let result = (|| -> Result<String, String> {
-                        if let Some(ref session) = sony_session {
+                        if is_gphoto2_active {
+                            if let Some(ref session) = gphoto2_session {
+                                let image_data = session.capture_still()
+                                    .map_err(|e| format!("gphoto2 shutter release failed: {}", e))?;
+                                let base64_data = STANDARD.encode(&image_data);
+                                Ok(format!("data:image/jpeg;base64,{}", base64_data))
+                            } else {
+                                Err("gphoto2 camera not connected".to_string())
+                            }
+                        } else if let Some(ref session) = sony_session {
                             let image_data = session.capture_still()
                                 .map_err(|e| format!("Sony shutter release failed: {}", e))?;
                             let base64_data = STANDARD.encode(&image_data);
@@ -282,7 +337,16 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
 
                 CameraCommand::CanonCapture { _quality: _, reply } => {
                     let result = (|| -> Result<String, String> {
-                        if let Some(ref session) = canon_session {
+                        if is_gphoto2_active {
+                            if let Some(ref session) = gphoto2_session {
+                                let image_data = session.capture_still()
+                                    .map_err(|e| format!("gphoto2 shutter release failed: {}", e))?;
+                                let base64_data = STANDARD.encode(&image_data);
+                                Ok(format!("data:image/jpeg;base64,{}", base64_data))
+                            } else {
+                                Err("gphoto2 camera not connected".to_string())
+                            }
+                        } else if let Some(ref session) = canon_session {
                             let image_data = session.capture_still()
                                 .map_err(|e| format!("Canon shutter release failed: {}", e))?;
                             let base64_data = STANDARD.encode(&image_data);
@@ -312,8 +376,39 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
                     reply.send(result).ok();
                 }
 
+                CameraCommand::ListGPhoto2 { reply } => {
+                    let result = match &gphoto2_sdk {
+                        Some(sdk) => sdk
+                            .list_cameras()
+                            .map(|list| {
+                                list.into_iter()
+                                    .map(|c| {
+                                        let suffix = if c.name.to_lowercase().contains("canon") {
+                                            "(Canon SDK)"
+                                        } else {
+                                            "(Sony SDK)"
+                                        };
+                                        CameraDevice {
+                                            id: c.id,
+                                            name: format!("{} {}", c.name, suffix),
+                                        }
+                                    })
+                                    .collect::<Vec<_>>()
+                            }),
+                        None => Ok(Vec::new()),
+                    };
+                    reply.send(result).ok();
+                }
+
                 CameraCommand::GetStatus { reply } => {
-                    let status = if is_sony_active {
+                    let status = if is_gphoto2_active {
+                        let connected = gphoto2_session.as_ref().map_or(false, |s| s.is_connected());
+                        CameraStatus {
+                            is_active: connected,
+                            device_name: Some("USB Camera (gphoto2)".to_string()),
+                            resolution: Some((6000, 4000)),
+                        }
+                    } else if is_sony_active {
                         let connected = sony_session.as_ref().map_or(false, |s| s.is_connected());
                         CameraStatus {
                             is_active: connected,
@@ -387,12 +482,18 @@ pub fn list_cameras(state: State<'_, CameraState>) -> Result<Vec<CameraDevice>, 
         }
     }
 
+    let mut has_canon = false;
+    let mut has_sony = false;
+
     // 2. Get Canon cameras via the camera thread (EDSDK is single-threaded,
     //    so all EDSDK calls must share the one thread that owns the session).
     if let Ok(sender) = get_or_create_sender(&state) {
         let (reply_tx, reply_rx) = mpsc::channel();
         if sender.send(CameraCommand::ListCanon { reply: reply_tx }).is_ok() {
             if let Ok(Ok(canon_devices)) = reply_rx.recv_timeout(Duration::from_secs(5)) {
+                if !canon_devices.is_empty() {
+                    has_canon = true;
+                }
                 cameras.extend(canon_devices);
             }
         }
@@ -401,11 +502,30 @@ pub fn list_cameras(state: State<'_, CameraState>) -> Result<Vec<CameraDevice>, 
     // 3. Get Sony cameras if CrSDK bridge is available
     if let Ok(sdk) = SonySdk::load() {
         if let Ok(sony_devices) = sdk.list_cameras() {
+            if !sony_devices.is_empty() {
+                has_sony = true;
+            }
             for cam in sony_devices {
                 cameras.push(CameraDevice {
                     id: cam.id,
                     name: format!("{} (Sony SDK)", cam.name),
                 });
+            }
+        }
+    }
+
+    // 4. Fallback/supplement via libgphoto2 (e.g. Sony A7R III, Canon EOS 80D)
+    //    Only add brands not already enumerated by the native SDKs above.
+    if let Ok(sender) = get_or_create_sender(&state) {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        if sender.send(CameraCommand::ListGPhoto2 { reply: reply_tx }).is_ok() {
+            if let Ok(Ok(gp_devices)) = reply_rx.recv_timeout(Duration::from_secs(8)) {
+                for cam in gp_devices {
+                    let is_canon_dev = cam.name.contains("(Canon SDK)");
+                    if (is_canon_dev && !has_canon) || (!is_canon_dev && !has_sony) {
+                        cameras.push(cam);
+                    }
+                }
             }
         }
     }
@@ -426,14 +546,15 @@ pub fn start_camera(
     
     let is_canon = resolved_device_id.starts_with("canon_");
     let is_sony = resolved_device_id.starts_with("sony_");
+    let is_gphoto2 = resolved_device_id.starts_with("gphoto2_");
     let sender = get_or_create_sender(&state)?;
     let (reply_tx, reply_rx) = mpsc::channel();
     
-    sender.send(CameraCommand::Start { device_id: resolved_device_id, is_canon, is_sony, reply: reply_tx })
+    sender.send(CameraCommand::Start { device_id: resolved_device_id, is_canon, is_sony, is_gphoto2, reply: reply_tx })
         .map_err(|e| format!("Failed to send command: {}", e))?;
     
-    // Sony connection can take longer (USB negotiation + PTP handshake)
-    let timeout = if is_sony { Duration::from_secs(15) } else { Duration::from_secs(5) };
+    // Sony / Canon / gphoto2 connection can take longer (USB negotiation + PTP handshake)
+    let timeout = if is_sony || is_canon || is_gphoto2 { Duration::from_secs(15) } else { Duration::from_secs(5) };
     reply_rx.recv_timeout(timeout)
         .map_err(|e| format!("Camera command timeout: {}", e))?
 }
