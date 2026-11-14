@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Camera, Tag } from 'lucide-react';
+import { ArrowRight, Camera, Printer, QrCode, Sparkles, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBoothStore, useAdminStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
@@ -12,6 +12,13 @@ import { BoothStatusIndicator } from '@/components/booth/BoothStatusIndicator';
 import { SlideshowBackground } from '@/components/booth/SlideshowBackground';
 import { AttractLoop } from '@/components/booth/AttractLoop';
 import { useCamera } from './CameraProvider';
+
+const VIEWFINDER_CORNERS = [
+    'top-6 left-6 sm:top-8 sm:left-8 border-t-2 border-l-2 rounded-tl-xl',
+    'top-6 right-6 sm:top-8 sm:right-8 border-t-2 border-r-2 rounded-tr-xl',
+    'bottom-6 left-6 sm:bottom-8 sm:left-8 border-b-2 border-l-2 rounded-bl-xl',
+    'bottom-6 right-6 sm:bottom-8 sm:right-8 border-b-2 border-r-2 rounded-br-xl',
+] as const;
 
 export function IdleScreen() {
     const { setStep, appliedVoucher } = useBoothStore();
@@ -54,10 +61,23 @@ export function IdleScreen() {
     // Background style from session/booth settings
     const backgroundStyle = effectiveBgImage
         ? { backgroundImage: `url(${effectiveBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-        : { backgroundColor: effectiveBgColor || '#ffffff' };
+        : { backgroundColor: effectiveBgColor || '#FDFCFB' };
 
+    const hasEventSplash = Boolean(effectiveEventMode && effectiveEventSplash);
     const hasLivePreviewBackground = isLivePreviewEnabled && isMediaSupported && !cameraError && isCameraReady && (isBackendMode ? showSonyStream : !!stream);
-    const hasDarkBackground = effectiveBgImage || effectiveSlideshow || hasLivePreviewBackground;
+    const hasDarkBackground = Boolean(effectiveBgImage || effectiveSlideshow || hasLivePreviewBackground || hasEventSplash);
+
+    // Split multi-word title so the second part can use editorial gradient contrast on light themes
+    const rawTitle = (effectiveEventMode && effectiveEventName)
+        ? effectiveEventName
+        : (effectiveBrandTitle || 'Framr Studio');
+    const titleWords = rawTitle.trim().split(/\s+/);
+    const titleFirst = titleWords[0] || '';
+    const titleRest = titleWords.slice(1).join(' ');
+
+    const subtitleText = effectiveEventMode
+        ? (effectiveEventMessage || 'Step into the booth and capture the moment!')
+        : (effectiveBrandSubtitle || 'Capture your moments in stunning photo booth style');
 
     // Fresh URL per mount so WebKit reconnects to the MJPEG stream instead of reusing a cached frame.
     const [streamNonce] = useState(() => Date.now());
@@ -67,7 +87,7 @@ export function IdleScreen() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="h-full w-full flex flex-col items-center justify-center p-8 kiosk relative overflow-hidden"
+            className="h-full w-full flex flex-col items-center justify-center px-6 py-16 kiosk relative overflow-hidden"
             style={hasLivePreviewBackground ? { backgroundColor: '#0a0a0a' } : backgroundStyle}
         >
             <BoothStatusIndicator />
@@ -91,154 +111,242 @@ export function IdleScreen() {
                             className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
                         />
                     )}
-                    <div className="absolute inset-0 bg-black/45" />
+                    <div className="absolute inset-0 bg-black/50" />
                 </div>
             )}
 
-            {/* Slideshow background */}
-            {!hasLivePreviewBackground && effectiveSlideshow && <SlideshowBackground />}
-
-            {/* Attract loop animation */}
-            {!hasLivePreviewBackground && (effectiveBgImage || effectiveSlideshow) && <AttractLoop />}
-
-            {/* Overlay for readability when using background image or slideshow */}
-            {!hasLivePreviewBackground && (effectiveBgImage || effectiveSlideshow) && (
-                <div className="absolute inset-0 bg-black/40" />
+            {/* Full-bleed Event mode splash */}
+            {!hasLivePreviewBackground && hasEventSplash && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="absolute inset-0 z-0 overflow-hidden"
+                >
+                    <img src={effectiveEventSplash} alt="Event" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/45" />
+                </motion.div>
             )}
 
-            {/* Content wrapper */}
-            <div className="relative z-20 flex flex-col items-center justify-center">
-                {/* Minimal decorative line */}
-                <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-border to-transparent" />
+            {/* Slideshow background */}
+            {!hasLivePreviewBackground && !hasEventSplash && effectiveSlideshow && <SlideshowBackground />}
 
-                {/* Event mode splash */}
-                {effectiveEventMode && effectiveEventSplash && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="absolute inset-0 z-0"
-                    >
-                        <img src={effectiveEventSplash} alt="Event" className="w-full h-full object-cover" />
-                    </motion.div>
-                )}
+            {/* Attract loop animation */}
+            {!hasLivePreviewBackground && !hasEventSplash && (effectiveBgImage || effectiveSlideshow) && <AttractLoop />}
 
-                {/* Logo and title */}
+            {/* Overlay for readability when using background image or slideshow */}
+            {!hasLivePreviewBackground && !hasEventSplash && (effectiveBgImage || effectiveSlideshow) && (
+                <div className="absolute inset-0 bg-black/45 z-0" />
+            )}
+
+            {/* Ambient studio atmosphere on default light theme */}
+            {!hasDarkBackground && (
+                <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+                    <div
+                        className="absolute -top-32 left-1/2 -translate-x-1/2 w-[780px] h-[420px] rounded-full blur-3xl opacity-70"
+                        style={{ background: 'radial-gradient(circle, rgba(166,144,118,0.16) 0%, rgba(166,144,118,0) 72%)' }}
+                    />
+                    <div
+                        className="absolute -bottom-40 -left-24 w-[480px] h-[480px] rounded-full blur-3xl opacity-60"
+                        style={{ background: 'radial-gradient(circle, rgba(212,201,184,0.28) 0%, rgba(212,201,184,0) 70%)' }}
+                    />
+                    <div
+                        className="absolute -bottom-36 -right-24 w-[480px] h-[480px] rounded-full blur-3xl opacity-60"
+                        style={{ background: 'radial-gradient(circle, rgba(139,115,85,0.12) 0%, rgba(139,115,85,0) 70%)' }}
+                    />
+                    <div
+                        className="absolute inset-0 opacity-60"
+                        style={{
+                            backgroundImage: 'radial-gradient(rgba(139, 115, 85, 0.14) 1px, transparent 1px)',
+                            backgroundSize: '28px 28px',
+                            WebkitMaskImage: 'radial-gradient(ellipse 75% 75% at 50% 50%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.9) 100%)',
+                            maskImage: 'radial-gradient(ellipse 75% 75% at 50% 50%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.9) 100%)',
+                        }}
+                    />
+                </div>
+            )}
+
+            {/* Subtle photo-booth viewfinder corner brackets */}
+            <div className="absolute inset-0 z-10 pointer-events-none">
+                {VIEWFINDER_CORNERS.map((cornerClass, idx) => (
+                    <div
+                        key={idx}
+                        className={`absolute w-7 h-7 sm:w-9 sm:h-9 ${cornerClass} ${hasDarkBackground ? 'border-white/35' : 'border-primary/25'}`}
+                    />
+                ))}
+            </div>
+
+            {/* Top studio status pill */}
+            <motion.div
+                initial={{ y: -12, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.1, duration: 0.5 }}
+                className="absolute top-7 inset-x-0 z-20 flex justify-center pointer-events-none"
+            >
+                <div className={`inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border text-[11px] font-semibold tracking-[0.22em] uppercase ${hasDarkBackground ? 'bg-black/35 border-white/25 text-white/90 backdrop-blur-md' : 'bg-white/85 border-border text-primary shadow-xs backdrop-blur-sm'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${hasDarkBackground ? 'bg-white' : 'bg-primary'}`} />
+                    <span>{effectiveEventMode ? 'Event Edition' : 'Self-Portrait Studio'}</span>
+                </div>
+            </motion.div>
+
+            {/* Center hero composition */}
+            <div className="relative z-20 flex flex-col items-center justify-center max-w-2xl w-full text-center px-4 sm:px-6">
+                {/* Emblem / Brand Logo */}
                 <motion.div
-                    initial={{ y: -30, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.2, duration: 0.6 }}
-                    className="text-center mb-10"
+                    initial={{ scale: 0.92, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.12, duration: 0.5 }}
+                    className="mb-6"
                 >
-                    {/* Logo: custom or camera icon */}
                     {effectiveBrandLogo ? (
                         <motion.div
-                            className="mb-8"
-                            animate={{ rotate: [0, 2, -2, 0] }}
-                            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                            animate={{ y: [0, -3, 0] }}
+                            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
                         >
                             <img
                                 src={effectiveBrandLogo}
-                                alt="Logo"
-                                className="h-20 w-auto mx-auto object-contain drop-shadow-lg"
+                                alt="Brand logo"
+                                className="h-20 sm:h-24 w-auto mx-auto object-contain drop-shadow-md"
                             />
                         </motion.div>
                     ) : (
-                        <motion.div
-                            className={`inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 ${hasDarkBackground ? 'border-white/50 bg-white/20 backdrop-blur' : 'border-border'}`}
-                            animate={{ rotate: [0, 2, -2, 0] }}
-                            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-                        >
-                            <Camera className={`w-9 h-9 ${hasDarkBackground ? 'text-white' : 'text-primary'}`} strokeWidth={1.5} />
-                        </motion.div>
-                    )}
-
-                    {/* Title: event name, custom brand, or default */}
-                    {effectiveEventMode && effectiveEventName ? (
-                        <>
-                            <h1 className={`text-4xl md:text-5xl font-light tracking-tight mb-3 ${hasDarkBackground ? 'text-white text-shadow-dark' : ''}`}>
-                                {effectiveEventName}
-                            </h1>
-                            {effectiveEventHashtag && (
-                                <p className={`text-xl font-medium mb-2 ${hasDarkBackground ? 'text-white/90 text-shadow-dark' : 'text-primary'}`}>
-                                    {effectiveEventHashtag}
-                                </p>
-                            )}
-                            <p className={`text-lg font-light max-w-md mx-auto ${hasDarkBackground ? 'text-white/90 text-shadow-dark' : 'text-muted-foreground'}`}>
-                                {effectiveEventMessage || 'Step into the booth and capture the moment!'}
-                            </p>
-                        </>
-                    ) : (
-                        <>
-                            <h1 className={`text-5xl md:text-6xl font-light tracking-tight mb-4 ${hasDarkBackground ? 'text-white' : ''}`}>
-                                <span className={hasDarkBackground ? 'text-white font-medium' : 'gradient-text font-medium'}>
-                                    {effectiveBrandTitle ? effectiveBrandTitle.split(' ')[0] : 'Framr'}
-                                </span>
-                                <span className={hasDarkBackground ? 'text-white' : 'text-foreground'}>
-                                    {effectiveBrandTitle ? effectiveBrandTitle.split(' ').slice(1).join(' ') || '' : ' Studio'}
-                                </span>
-                            </h1>
-
-                            <p className={`text-lg font-light max-w-md mx-auto ${hasDarkBackground ? 'text-white/90 text-shadow-dark' : 'text-muted-foreground'}`}>
-                                {effectiveBrandSubtitle || 'Capture your moments in stunning photo booth style'}
-                            </p>
-                        </>
+                        <div className="relative inline-flex items-center justify-center">
+                            <motion.div
+                                animate={{ scale: [1, 1.1, 1], opacity: [0.45, 0.15, 0.45] }}
+                                transition={{ duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
+                                className={`absolute w-28 h-28 rounded-full border ${hasDarkBackground ? 'border-white/30' : 'border-primary/20'}`}
+                            />
+                            <div className={`w-24 h-24 rounded-full flex items-center justify-center border ${hasDarkBackground ? 'bg-white/10 border-white/25 backdrop-blur-sm' : 'bg-primary/[0.05] border-primary/15'}`}>
+                                <motion.div
+                                    animate={{ rotate: [0, 2, -2, 0] }}
+                                    transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                                    className={`w-[72px] h-[72px] rounded-full flex items-center justify-center border ${hasDarkBackground ? 'bg-white/20 border-white/45 backdrop-blur-md shadow-lg' : 'bg-white border-primary/20 shadow-[0_8px_24px_rgba(139,115,85,0.14)]'}`}
+                                >
+                                    <Camera className={`w-8 h-8 ${hasDarkBackground ? 'text-white' : 'text-primary'}`} strokeWidth={1.6} />
+                                </motion.div>
+                            </div>
+                        </div>
                     )}
                 </motion.div>
 
-                {/* Price Display */}
+                {/* Editorial Title & Subtitle */}
                 <motion.div
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.3, duration: 0.5 }}
-                    className="text-center mb-8"
+                    initial={{ y: 16, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.2, duration: 0.55 }}
+                    className="mb-6"
                 >
-                    {effectivePaymentBypass ? (
-                        null
-                    ) : (
-                        <>
+                    <h1 className="text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight leading-[1.06] mb-3.5">
+                        {titleRest ? (
+                            <>
+                                <span className={hasDarkBackground ? 'text-white text-shadow-dark' : 'text-foreground'}>
+                                    {titleFirst}{' '}
+                                </span>
+                                <span className={hasDarkBackground ? 'text-white/95 text-shadow-dark' : 'gradient-text'}>
+                                    {titleRest}
+                                </span>
+                            </>
+                        ) : (
+                            <span className={hasDarkBackground ? 'text-white text-shadow-dark' : 'gradient-text'}>
+                                {titleFirst}
+                            </span>
+                        )}
+                    </h1>
+
+                    {effectiveEventMode && effectiveEventHashtag && (
+                        <div className="mb-3">
+                            <span className={`inline-flex items-center px-3.5 py-1 rounded-full text-sm font-medium border ${hasDarkBackground ? 'bg-white/15 border-white/30 text-white backdrop-blur-sm' : 'bg-secondary border-border text-primary'}`}>
+                                {effectiveEventHashtag}
+                            </span>
+                        </div>
+                    )}
+
+                    <p className={`text-base sm:text-lg font-normal leading-relaxed max-w-lg mx-auto ${hasDarkBackground ? 'text-white/90 text-shadow-dark' : 'text-muted-foreground'}`}>
+                        {subtitleText}
+                    </p>
+                </motion.div>
+
+                {/* 3-Step Studio Flow Strip */}
+                <motion.div
+                    initial={{ y: 12, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.28, duration: 0.5 }}
+                    className={`inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 px-4 py-2 rounded-full border text-xs font-medium mb-6 ${hasDarkBackground ? 'bg-black/30 border-white/20 text-white/90 backdrop-blur-md' : 'bg-white/85 border-border/90 text-secondary-foreground shadow-xs backdrop-blur-sm'}`}
+                >
+                    <span className="inline-flex items-center gap-1.5">
+                        <Sparkles className={`w-3.5 h-3.5 ${hasDarkBackground ? 'text-white/85' : 'text-primary'}`} />
+                        Choose Frame
+                    </span>
+                    <span className={hasDarkBackground ? 'text-white/40' : 'text-border'}>•</span>
+                    <span className="inline-flex items-center gap-1.5">
+                        <Camera className={`w-3.5 h-3.5 ${hasDarkBackground ? 'text-white/85' : 'text-primary'}`} />
+                        Strike a Pose
+                    </span>
+                    <span className={hasDarkBackground ? 'text-white/40' : 'text-border'}>•</span>
+                    <span className="inline-flex items-center gap-1.5">
+                        <Printer className={`w-3.5 h-3.5 ${hasDarkBackground ? 'text-white/85' : 'text-primary'}`} />
+                        <QrCode className={`w-3.5 h-3.5 ${hasDarkBackground ? 'text-white/85' : 'text-primary'}`} />
+                        Print &amp; Digital QR
+                    </span>
+                </motion.div>
+
+                {/* Price & Voucher Pill */}
+                {!effectivePaymentBypass && (
+                    <motion.div
+                        initial={{ scale: 0.96, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 0.34, duration: 0.5 }}
+                        className="mb-7"
+                    >
+                        <div className={`inline-flex flex-col items-center px-7 py-3 rounded-2xl border ${hasDarkBackground ? 'bg-black/35 border-white/25 backdrop-blur-md' : 'bg-[#FAF8F5]/90 border-border shadow-xs'}`}>
                             {discountValue > 0 && (
-                                <div className="mb-1">
-                                    <span className={`text-lg line-through ${hasDarkBackground ? 'text-white/80 text-shadow-dark' : 'text-muted-foreground'}`}>
+                                <div className="flex items-center gap-2 mb-0.5">
+                                    <span className={`text-sm line-through ${hasDarkBackground ? 'text-white/75 text-shadow-dark' : 'text-muted-foreground'}`}>
                                         {formatIDR(originalPrice)}
                                     </span>
-                                    <span className="ml-2 text-sm text-green-400 font-medium">
+                                    <span className="text-xs font-semibold text-emerald-500">
                                         -{formatIDR(discountValue)}
                                     </span>
                                 </div>
                             )}
-                            <p className={`text-3xl font-semibold ${hasDarkBackground ? 'text-white' : 'text-foreground'}`}>
-                                {formatIDR(finalPrice)}
-                            </p>
-                            <p className={`text-sm mt-1 ${hasDarkBackground ? 'text-white/80 text-shadow-dark' : 'text-muted-foreground'}`}>per session</p>
+                            <div className="flex items-baseline gap-1.5">
+                                <span className={`text-2xl sm:text-3xl font-semibold tracking-tight ${hasDarkBackground ? 'text-white' : 'text-foreground'}`}>
+                                    {formatIDR(finalPrice)}
+                                </span>
+                                <span className={`text-xs uppercase tracking-[0.14em] font-medium ${hasDarkBackground ? 'text-white/75' : 'text-muted-foreground'}`}>
+                                    / session
+                                </span>
+                            </div>
 
-                            {/* Applied voucher indicator */}
                             {appliedVoucher && (
                                 <motion.div
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm backdrop-blur"
+                                    initial={{ scale: 0.9, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    className={`inline-flex items-center gap-1.5 mt-2 px-3 py-0.5 rounded-full text-xs font-medium ${hasDarkBackground ? 'bg-emerald-500/25 text-emerald-200 border border-emerald-300/30' : 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'}`}
                                 >
-                                    <Tag className="w-3.5 h-3.5" />
+                                    <Tag className="w-3 h-3" />
                                     <span>{appliedVoucher.code}</span>
                                 </motion.div>
                             )}
-                        </>
-                    )}
-                </motion.div>
+                        </div>
+                    </motion.div>
+                )}
 
-                {/* Action Buttons */}
+                {/* Primary CTA & Voucher Action */}
                 <motion.div
-                    initial={{ y: 30, opacity: 0 }}
+                    initial={{ y: 18, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.5, duration: 0.6 }}
-                    className="flex flex-col items-center gap-4"
+                    transition={{ delay: 0.42, duration: 0.55 }}
+                    className="flex flex-col items-center gap-3.5"
                 >
                     <Button
                         size="lg"
                         onClick={() => setStep('select-frame')}
-                        className={`px-16 py-7 min-h-[64px] text-xl font-medium rounded-full elegant-shadow touch-target transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${hasDarkBackground ? 'bg-white text-black hover:bg-white/90' : ''}`}
+                        className={`group h-auto min-h-[68px] pl-10 pr-4 py-3 text-lg sm:text-xl font-semibold rounded-full touch-target transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] inline-flex items-center gap-5 ${hasDarkBackground ? 'bg-white text-neutral-900 hover:bg-white/95 shadow-[0_14px_32px_-8px_rgba(0,0,0,0.45)]' : 'bg-primary text-primary-foreground hover:bg-primary/95 shadow-[0_14px_30px_-8px_rgba(139,115,85,0.45),0_4px_12px_-2px_rgba(0,0,0,0.08)]'}`}
                     >
-                        Start Session
+                        <span>Start Session</span>
+                        <span className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:translate-x-0.5 ${hasDarkBackground ? 'bg-neutral-900/10 text-neutral-900' : 'bg-white/20 text-white'}`}>
+                            <ArrowRight className="w-5 h-5" />
+                        </span>
                     </Button>
 
                     {!effectivePaymentBypass && (
@@ -246,27 +354,28 @@ export function IdleScreen() {
                             variant="outline"
                             size="lg"
                             onClick={() => setStep('voucher')}
-                            className={`px-9 py-5 min-h-[52px] text-base font-normal rounded-full touch-target transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] ${hasDarkBackground ? 'border-white/50 text-white hover:bg-white/10 backdrop-blur' : 'bg-white/80 backdrop-blur-xs'}`}
+                            className={`px-7 py-3 min-h-[48px] text-sm font-medium rounded-full touch-target transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] ${hasDarkBackground ? 'border-white/45 bg-black/25 text-white hover:bg-white/15 backdrop-blur-md' : 'bg-white/90 border-border text-secondary-foreground hover:bg-secondary/80 shadow-xs'}`}
                         >
                             <Tag className="w-4 h-4 mr-2" />
                             {appliedVoucher ? 'Change Voucher' : 'Use Voucher'}
                         </Button>
                     )}
                 </motion.div>
-
-                {/* Subtle bottom hint */}
-                <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 1.2, duration: 0.8 }}
-                    className={`absolute bottom-10 text-xs uppercase tracking-[0.2em] font-medium ${hasDarkBackground ? 'text-white/70 text-shadow-dark' : 'text-muted-foreground/70'}`}
-                >
-                    Tap Start Session to begin
-                </motion.p>
             </div>
 
-            {/* Bottom decorative line */}
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-border to-transparent z-10" />
+            {/* Bottom viewport hint (pinned cleanly to root container so it never overlaps buttons) */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.7, duration: 0.7 }}
+                className="absolute bottom-7 inset-x-0 z-20 flex items-center justify-center gap-4 px-8 pointer-events-none"
+            >
+                <div className={`h-px w-12 sm:w-20 ${hasDarkBackground ? 'bg-white/25' : 'bg-gradient-to-r from-transparent to-border'}`} />
+                <p className={`text-[11px] uppercase tracking-[0.24em] font-medium whitespace-nowrap ${hasDarkBackground ? 'text-white/75 text-shadow-dark' : 'text-muted-foreground/80'}`}>
+                    Tap Start Session to begin
+                </p>
+                <div className={`h-px w-12 sm:w-20 ${hasDarkBackground ? 'bg-white/25' : 'bg-gradient-to-l from-transparent to-border'}`} />
+            </motion.div>
         </motion.div>
     );
 }
