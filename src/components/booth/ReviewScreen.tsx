@@ -329,6 +329,7 @@ export function ReviewScreen() {
     const [compositeRetryNonce, setCompositeRetryNonce] = useState(0);
     const [effectiveCompositeImage, setEffectiveCompositeImage] = useState<string | null>(null);
     const [isResolvingComposite, setIsResolvingComposite] = useState(false);
+    const [hasSettledResolution, setHasSettledResolution] = useState(false);
     const [usedFallbackPreview, setUsedFallbackPreview] = useState(false);
     const [liveSlotVideoUrls, setLiveSlotVideoUrls] = useState<Record<number, string>>({});
 
@@ -351,7 +352,10 @@ export function ReviewScreen() {
     const hasPotentialLiveClipsRef = useRef(hasPotentialLiveClips);
     hasPotentialLiveClipsRef.current = hasPotentialLiveClips;
 
+    const hasSessionMedia = !!selectedFrame && capturedPhotos.length > 0;
     const compositeFailed =
+        hasSessionMedia &&
+        hasSettledResolution &&
         !isCompositing &&
         !isResolvingComposite &&
         !effectiveCompositeImage &&
@@ -412,6 +416,7 @@ export function ReviewScreen() {
 
         const resolveCompositePreview = async () => {
             if (isCompositing) {
+                setHasSettledResolution(false);
                 setIsResolvingComposite(false);
                 // Keep the previous resolved preview while recompositing runs,
                 // otherwise users can get stuck looking at a spinner even after QR is ready.
@@ -445,6 +450,7 @@ export function ReviewScreen() {
                     setFinalImage(fallback);
                     setPrintImage(printDataUrl || fallback);
                     setIsResolvingComposite(false);
+                    setHasSettledResolution(true);
                     return;
                 }
 
@@ -453,6 +459,7 @@ export function ReviewScreen() {
                     setUsedFallbackPreview(false);
                     setEffectiveCompositeImage(candidate);
                     setIsResolvingComposite(false);
+                    setHasSettledResolution(true);
                     return;
                 }
             }
@@ -462,6 +469,7 @@ export function ReviewScreen() {
             setUsedFallbackPreview(false);
             setEffectiveCompositeImage(candidate || null);
             setIsResolvingComposite(false);
+            setHasSettledResolution(true);
         };
 
         void resolveCompositePreview();
@@ -485,7 +493,7 @@ export function ReviewScreen() {
     }, [compositeRetryNonce, selectedFrame?.id]);
 
     useEffect(() => {
-        if (isCompositing || isResolvingComposite) return;
+        if (isCompositing || isResolvingComposite || !hasSettledResolution) return;
         if (effectiveCompositeImage) return;
         if (!selectedFrame || capturedPhotos.length === 0) return;
         if (hasPotentialLiveClipsRef.current) return;
@@ -493,10 +501,12 @@ export function ReviewScreen() {
 
         autoRecoveryAttemptedRef.current = true;
         console.warn('[ReviewScreen] Auto-retrying compositing once because preview image is still empty.');
+        setHasSettledResolution(false);
         setCompositeRetryNonce((prev) => prev + 1);
     }, [
         isCompositing,
         isResolvingComposite,
+        hasSettledResolution,
         effectiveCompositeImage,
         selectedFrame,
         capturedPhotos.length,
@@ -508,7 +518,7 @@ export function ReviewScreen() {
     }, [compositeRetryNonce]);
 
     useEffect(() => {
-        if (isCompositing || isResolvingComposite || hasLoggedResultRef.current) return;
+        if (isCompositing || isResolvingComposite || !hasSettledResolution || hasLoggedResultRef.current) return;
         hasLoggedResultRef.current = true;
 
         if (compositeFailed) {
@@ -528,6 +538,7 @@ export function ReviewScreen() {
     }, [
         isCompositing,
         isResolvingComposite,
+        hasSettledResolution,
         compositeFailed,
         usedFallbackPreview,
         effectiveCompositeImage,
@@ -552,6 +563,7 @@ export function ReviewScreen() {
         hasUploadedRef.current = false;
         hasLoggedResultRef.current = false;
         autoRecoveryAttemptedRef.current = false;
+        setHasSettledResolution(false);
         setCompositeRetryNonce((prev) => prev + 1);
     };
 

@@ -89,42 +89,70 @@ export function CameraSelector() {
         }
     }, []);
 
+    const detectCameraType = useCallback((device: CameraDevice): 'sony' | 'canon' | 'system' => {
+        if (device.id.startsWith('sony_') || device.name.includes('(Sony SDK)')) {
+            return 'sony';
+        }
+        if (device.id.startsWith('canon_') || device.name.includes('(Canon SDK)')) {
+            return 'canon';
+        }
+        if (device.id.startsWith('gphoto2_')) {
+            return device.name.toLowerCase().includes('canon') ? 'canon' : 'sony';
+        }
+        return 'system';
+    }, []);
+
+    const selectedCameraIdRef = useRef(selectedCameraId);
+    selectedCameraIdRef.current = selectedCameraId;
+    const isLoadingCamerasRef = useRef(false);
+
     // Load available cameras
     const loadCameras = useCallback(async () => {
+        if (isLoadingCamerasRef.current) return;
+        isLoadingCamerasRef.current = true;
         setIsLoading(true);
         setCameraError(null);
 
         if (!isMediaSupported) {
             setCameraError('Camera API is not supported in this environment. Please ensure you are running in a secure context (HTTPS or localhost).');
             setIsLoading(false);
+            isLoadingCamerasRef.current = false;
             return;
         }
 
         try {
-            // First request permission via browser if needed (for webcams)
-            // But we primarily want to use Tauri's list_cameras
+            // First request permission via browser if needed (for webcams),
+            // and immediately release the temporary stream so it does not hold hardware.
             if (isMediaSupported) {
-               try { await navigator.mediaDevices.getUserMedia({ video: true }); } catch(e) {}
+                try {
+                    const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    tempStream.getTracks().forEach((track) => track.stop());
+                } catch {}
             }
 
-            // Call Tauri backend to get unified camera list (System + Canon)
+            // Call Tauri backend to get unified camera list (System + Canon + Sony)
             const videoDevices = await invoke<CameraDevice[]>('list_cameras');
 
             setCameras(videoDevices);
 
             if (videoDevices.length > 0) {
-                const persistedStillAvailable = selectedCameraId
-                    && videoDevices.some((d) => d.id === selectedCameraId);
+                const currentSelectedId = selectedCameraIdRef.current;
+                const persistedMatch = currentSelectedId
+                    ? videoDevices.find((d) => d.id === currentSelectedId)
+                    : undefined;
 
-                if (!persistedStillAvailable) {
+                if (!persistedMatch) {
                     // Persisted camera gone or no selection — pick first available
                     const first = videoDevices[0];
                     setSelectedCameraId(first.id);
+                    setCameraType(detectCameraType(first));
                     // Also resolve the browser deviceId for react-webcam
                     const browserId = await resolveBrowserDeviceId(first.name);
                     setBrowserCameraId(browserId);
+                } else {
+                    // Keep persisted camera selected and ensure cameraType stays synchronized
+                    setCameraType(detectCameraType(persistedMatch));
                 }
-                // else: persisted camera is connected, keep it selected
             }
         } catch (error) {
 
@@ -142,8 +170,9 @@ export function CameraSelector() {
             }
         } finally {
             setIsLoading(false);
+            isLoadingCamerasRef.current = false;
         }
-    }, [isMediaSupported, selectedCameraId, setSelectedCameraId, setBrowserCameraId, setCameraError, resolveBrowserDeviceId]);
+    }, [isMediaSupported, detectCameraType, setSelectedCameraId, setCameraType, setBrowserCameraId, setCameraError, resolveBrowserDeviceId]);
 
     // Load cameras on mount
     useEffect(() => {
@@ -161,9 +190,6 @@ export function CameraSelector() {
             previewIntervalRef.current = null;
         }
         setPreviewFrame(null);
-        if (isTauri) {
-            try { await invoke('stop_camera'); } catch { /* ignore */ }
-        }
         setIsTesting(false);
         setCameraTestStatus('idle');
     }, [previewStream, setCameraTestStatus]);
@@ -184,7 +210,7 @@ export function CameraSelector() {
             if (isTauri && (isCanon || isSony)) {
                 // Sony and Canon both use Tauri backend for preview
                 // Start the camera in the backend
-                const status = await invoke('start_camera', { device_id: selectedCameraId });
+                const status = await invoke('start_camera', { deviceId: selectedCameraId });
                 console.log('Camera started:', status);
 
                 // Poll for preview frames via Tauri command
@@ -231,20 +257,16 @@ export function CameraSelector() {
 
     // Handle camera selection change
     const handleCameraChange = async (deviceId: string) => {
-        // Stop any existing preview
-        stopPreview();
+        // Only tear down preview state if an Admin test preview is currently active
+        if (isTesting) {
+            await stopPreview();
+        }
         setSelectedCameraId(deviceId);
 
-        // Auto-detect camera type from name suffix
+        // Auto-detect camera type from device ID / name suffix
         const selected = cameras.find(c => c.id === deviceId);
         if (selected) {
-            if (selected.name.includes('(Sony SDK)')) {
-                setCameraType('sony');
-            } else if (selected.name.includes('(Canon SDK)')) {
-                setCameraType('canon');
-            } else {
-                setCameraType('system');
-            }
+            setCameraType(detectCameraType(selected));
 
             // Resolve and save the browser WebAPI deviceId for react-webcam
             // (only needed for system cameras, but resolve anyway for compatibility)
@@ -434,7 +456,7 @@ export function CameraSelector() {
                             />
                         ) : previewFrame ? (
                             <img
-                                src={`data:image/jpeg;base64,${previewFrame}`}
+                                src={previewFrame.startsWith('data:') ? previewFrame : `data:image/jpeg;base64,${previewFrame}`}
                                 alt="Camera Preview"
                                 className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
                             />

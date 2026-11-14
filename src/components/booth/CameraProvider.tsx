@@ -69,6 +69,10 @@ export const CameraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const command = isCanonMode ? 'canon_capture_image' : 'sony_capture_image';
         try {
             const frame = await invoke<string>(command, { quality: 95 });
+            if (typeof frame !== 'string' || !frame.startsWith('data:image/') || frame.length < 128) {
+                throw new Error('Backend returned empty or invalid image data');
+            }
+            setCameraError(null);
             return frame; // base64 data URL of full-res JPEG
         } catch (err) {
             console.error('Backend capture failed:', err);
@@ -77,16 +81,35 @@ export const CameraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
     }, [isBackendMode, isCanonMode]);
 
+    const isBackendDeviceId = Boolean(
+        selectedCameraId &&
+        (selectedCameraId.startsWith('sony_') ||
+            selectedCameraId.startsWith('canon_') ||
+            selectedCameraId.startsWith('gphoto2_'))
+    );
+
     // Backend camera (Sony/Canon): start/stop the native session
     useEffect(() => {
         if (!isBackendMode || !shouldBeActive || !selectedCameraId) return;
 
-        let mounted = true;
         const label = isCanonMode ? 'Canon' : 'Sony';
 
-        (async () => {
+        if (!isBackendDeviceId) {
+            setCameraError(`No ${label} camera selected (${selectedCameraId}). Select your ${label} camera in Admin → Config.`);
+            setIsCameraReady(false);
+            return;
+        }
+
+        let mounted = true;
+        let didStart = false;
+
+        // Small debounce prevents React StrictMode double-mount from queuing
+        // overlapping start_camera + stop_camera + start_camera calls.
+        const timer = setTimeout(async () => {
+            if (!mounted) return;
+            didStart = true;
             try {
-                const status = await invoke('start_camera', { device_id: selectedCameraId });
+                const status = await invoke('start_camera', { deviceId: selectedCameraId });
                 if (mounted) {
                     console.log(`${label} camera started:`, status);
                     setIsCameraReady(true);
@@ -99,14 +122,47 @@ export const CameraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                     setIsCameraReady(false);
                 }
             }
-        })();
+        }, 100);
 
         return () => {
             mounted = false;
-            invoke('stop_camera').catch(() => {});
+            clearTimeout(timer);
+            if (didStart) {
+                invoke('stop_camera').catch(() => {});
+            }
             setIsCameraReady(false);
         };
-    }, [isBackendMode, isCanonMode, shouldBeActive, selectedCameraId]);
+    }, [isBackendMode, isCanonMode, isBackendDeviceId, shouldBeActive, selectedCameraId]);
+
+    // Re-verify backend camera session when entering idle or countdown
+    useEffect(() => {
+        if (!isBackendMode || !isBackendDeviceId || !selectedCameraId) return;
+        if (step !== 'idle' && step !== 'countdown') return;
+
+        let cancelled = false;
+        const label = isCanonMode ? 'Canon' : 'Sony';
+        const timer = setTimeout(() => {
+            invoke('start_camera', { deviceId: selectedCameraId })
+                .then(() => {
+                    if (!cancelled) {
+                        setIsCameraReady(true);
+                        setCameraError(null);
+                    }
+                })
+                .catch((err) => {
+                    if (!cancelled) {
+                        console.error(`${label} camera re-verify error:`, err);
+                        setCameraError(`${label} camera error: ${err}`);
+                        setIsCameraReady(false);
+                    }
+                });
+        }, 50);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [step, isBackendMode, isCanonMode, isBackendDeviceId, selectedCameraId]);
 
     // Reset readiness when camera should be inactive
     useEffect(() => {

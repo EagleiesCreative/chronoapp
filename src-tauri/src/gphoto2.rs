@@ -12,14 +12,29 @@
 
 use libloading::Library;
 use serde::{Deserialize, Serialize};
-use std::ffi::{c_char, c_int, c_ulong, c_void, CStr};
+use std::ffi::{c_char, c_int, c_ulong, c_void, CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 const GP_OK: c_int = 0;
+const GP_ERROR_TIMEOUT: c_int = -10;
 const GP_CAPTURE_IMAGE: c_int = 0;
 const GP_FILE_TYPE_NORMAL: c_int = 1;
+const GP_EVENT_UNKNOWN: c_int = 0;
+const GP_EVENT_TIMEOUT: c_int = 1;
+const GP_EVENT_FILE_ADDED: c_int = 2;
+const GP_EVENT_FOLDER_ADDED: c_int = 3;
+const GP_EVENT_CAPTURE_COMPLETE: c_int = 4;
+
+extern "C" {
+    fn free(ptr: *mut c_void);
+}
+
+fn is_valid_jpeg(bytes: &[u8]) -> bool {
+    bytes.len() >= 128 && bytes.starts_with(&[0xFF, 0xD8, 0xFF])
+}
 
 #[repr(C)]
 #[derive(Clone)]
@@ -66,6 +81,23 @@ struct GPhoto2Api {
     file_free: unsafe extern "C" fn(*mut c_void) -> c_int,
     file_get_data_and_size:
         unsafe extern "C" fn(*mut c_void, *mut *const c_char, *mut c_ulong) -> c_int,
+    camera_wait_for_event: unsafe extern "C" fn(
+        *mut c_void,
+        c_int,
+        *mut c_int,
+        *mut *mut c_void,
+        *mut c_void,
+    ) -> c_int,
+    camera_get_single_config:
+        unsafe extern "C" fn(*mut c_void, *const c_char, *mut *mut c_void, *mut c_void) -> c_int,
+    camera_set_single_config:
+        unsafe extern "C" fn(*mut c_void, *const c_char, *mut c_void, *mut c_void) -> c_int,
+    widget_free: unsafe extern "C" fn(*mut c_void) -> c_int,
+    widget_set_value: unsafe extern "C" fn(*mut c_void, *const c_void) -> c_int,
+    widget_get_value: unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_int,
+    widget_set_changed: unsafe extern "C" fn(*mut c_void, c_int) -> c_int,
+    widget_count_choices: unsafe extern "C" fn(*mut c_void) -> c_int,
+    widget_get_choice: unsafe extern "C" fn(*mut c_void, c_int, *mut *const c_char) -> c_int,
 }
 
 static GPHOTO2_LIB: OnceLock<Library> = OnceLock::new();
@@ -80,9 +112,11 @@ fn gphoto2_api() -> Result<&'static GPhoto2Api, String> {
 fn kill_ptp_camera() {
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("killall")
-            .args(["-9", "PTPCamera"])
-            .output();
+        for proc_name in ["PTPCamera", "ptpcamerad"] {
+            let _ = std::process::Command::new("killall")
+                .args(["-9", proc_name])
+                .output();
+        }
         std::thread::sleep(std::time::Duration::from_millis(250));
     }
 }
@@ -202,6 +236,58 @@ impl GPhoto2Sdk {
                     b"gp_file_get_data_and_size",
                     unsafe extern "C" fn(*mut c_void, *mut *const c_char, *mut c_ulong) -> c_int
                 ),
+                camera_wait_for_event: sym!(
+                    b"gp_camera_wait_for_event",
+                    unsafe extern "C" fn(
+                        *mut c_void,
+                        c_int,
+                        *mut c_int,
+                        *mut *mut c_void,
+                        *mut c_void,
+                    ) -> c_int
+                ),
+                camera_get_single_config: sym!(
+                    b"gp_camera_get_single_config",
+                    unsafe extern "C" fn(
+                        *mut c_void,
+                        *const c_char,
+                        *mut *mut c_void,
+                        *mut c_void,
+                    ) -> c_int
+                ),
+                camera_set_single_config: sym!(
+                    b"gp_camera_set_single_config",
+                    unsafe extern "C" fn(
+                        *mut c_void,
+                        *const c_char,
+                        *mut c_void,
+                        *mut c_void,
+                    ) -> c_int
+                ),
+                widget_free: sym!(
+                    b"gp_widget_free",
+                    unsafe extern "C" fn(*mut c_void) -> c_int
+                ),
+                widget_set_value: sym!(
+                    b"gp_widget_set_value",
+                    unsafe extern "C" fn(*mut c_void, *const c_void) -> c_int
+                ),
+                widget_get_value: sym!(
+                    b"gp_widget_get_value",
+                    unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_int
+                ),
+                widget_set_changed: sym!(
+                    b"gp_widget_set_changed",
+                    unsafe extern "C" fn(*mut c_void, c_int) -> c_int
+                ),
+                widget_count_choices: sym!(
+                    b"gp_widget_count_choices",
+                    unsafe extern "C" fn(*mut c_void) -> c_int
+                ),
+                widget_get_choice: sym!(
+                    b"gp_widget_get_choice",
+                    unsafe extern "C" fn(*mut c_void, c_int, *mut *const c_char) -> c_int
+                ),
             };
 
             let _ = GPHOTO2_LIB.set(lib);
@@ -286,8 +372,12 @@ impl GPhoto2Sdk {
             }
 
             // Initialize camera; retry once after 500ms if macOS PTPCamera just released USB.
+            // Do NOT retry on GP_ERROR_TIMEOUT (-10): that means the camera's PTP stack is not
+            // answering at all (usually a session left open by a killed process). A retry just
+            // doubles the stall (~25s -> ~51s) and pushes us past the 30s frontend timeout.
             let mut init_err = (api.camera_init)(camera, context);
-            if init_err < GP_OK {
+            if init_err < GP_OK && init_err != GP_ERROR_TIMEOUT {
+                let _ = (api.camera_exit)(camera, context);
                 kill_ptp_camera();
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 init_err = (api.camera_init)(camera, context);
@@ -297,13 +387,21 @@ impl GPhoto2Sdk {
                 (api.camera_free)(camera);
                 (api.context_unref)(context);
                 return Err(format!(
-                    "gp_camera_init failed (code {}). Ensure camera is in PC Remote / USB mode and not locked by another app.",
-                    init_err
+                    "gp_camera_init failed (code {}). {}",
+                    init_err,
+                    if init_err == GP_ERROR_TIMEOUT {
+                        "Camera is not responding over PTP — turn the camera off and on (or unplug/replug USB), then retry."
+                    } else {
+                        "Ensure camera is in PC Remote / USB mode and not locked by another app."
+                    }
                 ));
             }
 
             log::info!("libgphoto2 camera session opened");
-            Ok(GPhoto2Session { camera, context })
+            let session = GPhoto2Session { camera, context };
+            session.configure_jpeg_transfer();
+            let _ = session.drain_events_for_jpeg(Duration::from_millis(200), false);
+            Ok(session)
         }
     }
 }
@@ -316,6 +414,351 @@ pub struct GPhoto2Session {
 impl GPhoto2Session {
     pub fn is_connected(&self) -> bool {
         !self.camera.is_null()
+    }
+
+    unsafe fn read_choice_widget_value(
+        api: &GPhoto2Api,
+        widget: *mut c_void,
+    ) -> Option<String> {
+        let mut cur_ptr: *const c_char = ptr::null();
+        if (api.widget_get_value)(widget, &mut cur_ptr as *mut *const c_char as *mut c_void)
+            >= GP_OK
+            && !cur_ptr.is_null()
+        {
+            CStr::from_ptr(cur_ptr).to_str().ok().map(|s| s.to_string())
+        } else {
+            None
+        }
+    }
+
+    fn get_choice_config_value(&self, name: &str) -> Option<String> {
+        let api = gphoto2_api().ok()?;
+        if self.camera.is_null() {
+            return None;
+        }
+        let c_name = CString::new(name).ok()?;
+        unsafe {
+            let mut widget: *mut c_void = ptr::null_mut();
+            let err = (api.camera_get_single_config)(
+                self.camera,
+                c_name.as_ptr(),
+                &mut widget,
+                self.context,
+            );
+            if err < GP_OK || widget.is_null() {
+                return None;
+            }
+            let val = if (api.widget_count_choices)(widget) > 0 {
+                Self::read_choice_widget_value(api, widget)
+            } else {
+                None
+            };
+            let _ = (api.widget_free)(widget);
+            val
+        }
+    }
+
+    fn set_choice_config(&self, name: &str, preferred: &[&str]) -> bool {
+        let Ok(api) = gphoto2_api() else {
+            return false;
+        };
+        if self.camera.is_null() {
+            return false;
+        }
+        let Ok(c_name) = CString::new(name) else {
+            return false;
+        };
+
+        unsafe {
+            let mut widget: *mut c_void = ptr::null_mut();
+            let err = (api.camera_get_single_config)(
+                self.camera,
+                c_name.as_ptr(),
+                &mut widget,
+                self.context,
+            );
+            if err < GP_OK || widget.is_null() {
+                return false;
+            }
+
+            let count = (api.widget_count_choices)(widget);
+            if count <= 0 {
+                let _ = (api.widget_free)(widget);
+                return false;
+            }
+
+            let current = Self::read_choice_widget_value(api, widget);
+            let mut choices = Vec::with_capacity(count as usize);
+            for i in 0..count {
+                let mut choice_ptr: *const c_char = ptr::null();
+                if (api.widget_get_choice)(widget, i, &mut choice_ptr) >= GP_OK
+                    && !choice_ptr.is_null()
+                {
+                    if let Ok(s) = CStr::from_ptr(choice_ptr).to_str() {
+                        choices.push(s.to_string());
+                    }
+                }
+            }
+
+            let target = preferred
+                .iter()
+                .find_map(|p| choices.iter().find(|c| c.eq_ignore_ascii_case(p)).cloned())
+                .or_else(|| {
+                    choices
+                        .iter()
+                        .find(|c| {
+                            let lower = c.to_ascii_lowercase();
+                            lower.contains("jpeg") && !lower.contains("raw") && !lower.contains('+')
+                        })
+                        .cloned()
+                });
+
+            let mut configured = false;
+            if let Some(choice) = target {
+                if current
+                    .as_deref()
+                    .is_some_and(|c| c.eq_ignore_ascii_case(&choice))
+                {
+                    log::info!("libgphoto2 config '{}' already '{}'", name, choice);
+                    configured = true;
+                } else if let Ok(c_choice) = CString::new(choice.as_str()) {
+                    if (api.widget_set_value)(widget, c_choice.as_ptr() as *const c_void) >= GP_OK
+                        && (api.widget_set_changed)(widget, 1) >= GP_OK
+                        && (api.camera_set_single_config)(
+                            self.camera,
+                            c_name.as_ptr(),
+                            widget,
+                            self.context,
+                        ) >= GP_OK
+                    {
+                        log::info!("libgphoto2 config '{}' set to '{}'", name, choice);
+                        configured = true;
+                    }
+                }
+            }
+
+            let _ = (api.widget_free)(widget);
+            configured
+        }
+    }
+
+    fn set_toggle_config(&self, name: &str, value: c_int) -> Result<(), String> {
+        let api = gphoto2_api()?;
+        if self.camera.is_null() {
+            return Err("libgphoto2 camera not connected".to_string());
+        }
+        let c_name = CString::new(name).map_err(|e| e.to_string())?;
+
+        unsafe {
+            let mut widget: *mut c_void = ptr::null_mut();
+            let get_err = (api.camera_get_single_config)(
+                self.camera,
+                c_name.as_ptr(),
+                &mut widget,
+                self.context,
+            );
+            if get_err < GP_OK || widget.is_null() {
+                return Err(format!(
+                    "gp_camera_get_single_config('{}') failed (code {})",
+                    name, get_err
+                ));
+            }
+
+            let val: c_int = value;
+            let val_err = (api.widget_set_value)(widget, &val as *const c_int as *const c_void);
+            let result = if val_err >= GP_OK {
+                let _ = (api.widget_set_changed)(widget, 1);
+                let set_err = (api.camera_set_single_config)(
+                    self.camera,
+                    c_name.as_ptr(),
+                    widget,
+                    self.context,
+                );
+                if set_err >= GP_OK {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "gp_camera_set_single_config('{}') failed (code {})",
+                        name, set_err
+                    ))
+                }
+            } else {
+                Err(format!(
+                    "gp_widget_set_value('{}') failed (code {})",
+                    name, val_err
+                ))
+            };
+
+            let _ = (api.widget_free)(widget);
+            result
+        }
+    }
+
+    /// Best-effort configuration so PTP transfer produces JPEG frames rather than 40+ MB RAW files.
+    fn configure_jpeg_transfer(&self) {
+        let pc_save_ok = self.set_choice_config("pcsaveimgformat", &["JPEG Only", "JPEG"]);
+
+        if let Some(quality) = self.get_choice_config_value("imagequality") {
+            let lower = quality.to_ascii_lowercase();
+            let is_raw = lower.contains("raw");
+            let is_pure_raw = is_raw && !lower.contains("jpeg") && !lower.contains("jpg");
+            if is_pure_raw || (is_raw && !pc_save_ok) {
+                let _ = self.set_choice_config(
+                    "imagequality",
+                    &[
+                        "Extra Fine",
+                        "Fine",
+                        "Large Fine JPEG",
+                        "JPEG Fine",
+                        "JPEG",
+                        "Standard",
+                        "Normal",
+                    ],
+                );
+            }
+        }
+    }
+
+    fn read_and_delete_file(&self, path: &CameraFilePath) -> Result<Vec<u8>, String> {
+        let api = gphoto2_api()?;
+        if self.camera.is_null() {
+            return Err("libgphoto2 camera not connected".to_string());
+        }
+
+        unsafe {
+            let mut file: *mut c_void = ptr::null_mut();
+            let new_err = (api.file_new)(&mut file);
+            if new_err < GP_OK || file.is_null() {
+                return Err(format!("gp_file_new failed (code {})", new_err));
+            }
+
+            let get_err = (api.camera_file_get)(
+                self.camera,
+                path.folder.as_ptr(),
+                path.name.as_ptr(),
+                GP_FILE_TYPE_NORMAL,
+                file,
+                self.context,
+            );
+
+            let bytes = if get_err >= GP_OK {
+                let mut data_ptr: *const c_char = ptr::null();
+                let mut size: c_ulong = 0;
+                if (api.file_get_data_and_size)(file, &mut data_ptr, &mut size) >= GP_OK
+                    && !data_ptr.is_null()
+                    && size > 0
+                {
+                    Some(std::slice::from_raw_parts(data_ptr as *const u8, size as usize).to_vec())
+                } else {
+                    Some(Vec::new())
+                }
+            } else {
+                None
+            };
+
+            let _ = (api.camera_file_delete)(
+                self.camera,
+                path.folder.as_ptr(),
+                path.name.as_ptr(),
+                self.context,
+            );
+            let _ = (api.file_free)(file);
+
+            bytes.ok_or_else(|| format!("gp_camera_file_get failed (code {})", get_err))
+        }
+    }
+
+    fn drain_events_for_jpeg(&self, timeout: Duration, expect_image: bool) -> Option<Vec<u8>> {
+        let Ok(api) = gphoto2_api() else {
+            return None;
+        };
+        if self.camera.is_null() {
+            return None;
+        }
+
+        let mut deadline = Instant::now() + timeout;
+        loop {
+            let now = Instant::now();
+            if now >= deadline {
+                return None;
+            }
+            let slice_cap = if expect_image { 200 } else { 60 };
+            let wait_ms = deadline
+                .saturating_duration_since(now)
+                .as_millis()
+                .min(slice_cap) as c_int;
+            if wait_ms <= 0 {
+                return None;
+            }
+
+            let mut event_type: c_int = GP_EVENT_UNKNOWN;
+            let mut event_data: *mut c_void = ptr::null_mut();
+            let err = unsafe {
+                (api.camera_wait_for_event)(
+                    self.camera,
+                    wait_ms,
+                    &mut event_type,
+                    &mut event_data,
+                    self.context,
+                )
+            };
+
+            if err < GP_OK {
+                if !event_data.is_null() {
+                    unsafe { free(event_data) };
+                }
+                return None;
+            }
+
+            if event_type == GP_EVENT_FILE_ADDED && !event_data.is_null() {
+                let path = unsafe { (*(event_data as *const CameraFilePath)).clone() };
+                unsafe { free(event_data) };
+
+                let name = unsafe {
+                    CStr::from_ptr(path.name.as_ptr())
+                        .to_string_lossy()
+                        .into_owned()
+                };
+
+                match self.read_and_delete_file(&path) {
+                    Ok(bytes) => {
+                        if expect_image && is_valid_jpeg(&bytes) {
+                            // Clear any trailing companion object (e.g. RAW+JPEG's second file).
+                            let _ = self.drain_events_for_jpeg(Duration::from_millis(150), false);
+                            return Some(bytes);
+                        }
+                        if expect_image {
+                            log::warn!(
+                                "libgphoto2 discarding non-JPEG event file '{}' ({} bytes)",
+                                name,
+                                bytes.len()
+                            );
+                            deadline = deadline.max(Instant::now() + Duration::from_millis(2500));
+                        } else {
+                            log::info!(
+                                "libgphoto2 drained stale event file '{}' ({} bytes)",
+                                name,
+                                bytes.len()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("libgphoto2 failed to read event file '{}': {}", name, e);
+                    }
+                }
+                continue;
+            }
+
+            if !event_data.is_null() {
+                unsafe { free(event_data) };
+            }
+
+            if !expect_image && event_type == GP_EVENT_TIMEOUT {
+                return None;
+            }
+            let _ = GP_EVENT_FOLDER_ADDED;
+            let _ = GP_EVENT_CAPTURE_COMPLETE;
+        }
     }
 
     /// Grab one live-view preview frame as JPEG bytes.
@@ -356,6 +799,38 @@ impl GPhoto2Session {
         }
     }
 
+    fn capture_sony_nonblocking(&self) -> Option<Result<Vec<u8>, String>> {
+        // Only cameras exposing Sony's 'autofocus' and 'capture' toggles take Path A.
+        if self.set_toggle_config("autofocus", 1).is_err() {
+            return None;
+        }
+
+        std::thread::sleep(Duration::from_millis(150));
+        let capture_res = self.set_toggle_config("capture", 1);
+        if let Err(err) = capture_res {
+            let _ = self.set_toggle_config("autofocus", 0);
+            return Some(Err(err));
+        }
+
+        std::thread::sleep(Duration::from_millis(100));
+        let _ = self.set_toggle_config("capture", 0);
+        let _ = self.set_toggle_config("autofocus", 0);
+
+        match self.drain_events_for_jpeg(Duration::from_millis(5000), true) {
+            Some(bytes) => {
+                log::info!(
+                    "libgphoto2 Sony non-blocking capture complete: {} bytes ({:.1} MB)",
+                    bytes.len(),
+                    bytes.len() as f64 / (1024.0 * 1024.0)
+                );
+                Some(Ok(bytes))
+            }
+            None => Some(Err(
+                "libgphoto2 Sony capture timed out waiting for JPEG event".to_string()
+            )),
+        }
+    }
+
     /// Trigger actual shutter capture and download the full-resolution JPEG.
     pub fn capture_still(&self) -> Result<Vec<u8>, String> {
         let api = gphoto2_api()?;
@@ -363,63 +838,37 @@ impl GPhoto2Session {
             return Err("libgphoto2 camera not connected".to_string());
         }
 
+        let _ = self.drain_events_for_jpeg(Duration::from_millis(100), false);
+
         let mut last_err = String::new();
+        if let Some(sony_res) = self.capture_sony_nonblocking() {
+            match sony_res {
+                Ok(bytes) => return Ok(bytes),
+                Err(err) => {
+                    log::warn!("{} — falling back to gp_camera_capture", err);
+                    last_err = err;
+                }
+            }
+        }
+
         for attempt in 0..2 {
-            unsafe {
-                let mut path: CameraFilePath = std::mem::zeroed();
-                let cap_err =
-                    (api.camera_capture)(self.camera, GP_CAPTURE_IMAGE, &mut path, self.context);
-                if cap_err < GP_OK {
-                    last_err = format!("gp_camera_capture failed (code {})", cap_err);
-                    if attempt == 0 {
-                        std::thread::sleep(std::time::Duration::from_millis(250));
-                        continue;
-                    }
-                    break;
-                }
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(250));
+                let _ = self.drain_events_for_jpeg(Duration::from_millis(100), false);
+            }
 
-                let mut file: *mut c_void = ptr::null_mut();
-                let new_err = (api.file_new)(&mut file);
-                if new_err < GP_OK || file.is_null() {
-                    last_err = format!("gp_file_new failed (code {})", new_err);
-                    break;
-                }
+            let mut path: CameraFilePath = unsafe { std::mem::zeroed() };
+            let cap_err = unsafe {
+                (api.camera_capture)(self.camera, GP_CAPTURE_IMAGE, &mut path, self.context)
+            };
+            if cap_err < GP_OK {
+                last_err = format!("gp_camera_capture failed (code {})", cap_err);
+                continue;
+            }
 
-                let get_err = (api.camera_file_get)(
-                    self.camera,
-                    path.folder.as_ptr(),
-                    path.name.as_ptr(),
-                    GP_FILE_TYPE_NORMAL,
-                    file,
-                    self.context,
-                );
-
-                let bytes = if get_err >= GP_OK {
-                    let mut data_ptr: *const c_char = ptr::null();
-                    let mut size: c_ulong = 0;
-                    if (api.file_get_data_and_size)(file, &mut data_ptr, &mut size) >= GP_OK
-                        && !data_ptr.is_null()
-                        && size > 0
-                    {
-                        std::slice::from_raw_parts(data_ptr as *const u8, size as usize).to_vec()
-                    } else {
-                        Vec::new()
-                    }
-                } else {
-                    last_err = format!("gp_camera_file_get failed (code {})", get_err);
-                    Vec::new()
-                };
-
-                // Clean up captured file on camera RAM/card if applicable
-                let _ = (api.camera_file_delete)(
-                    self.camera,
-                    path.folder.as_ptr(),
-                    path.name.as_ptr(),
-                    self.context,
-                );
-                (api.file_free)(file);
-
-                if !bytes.is_empty() {
+            match self.read_and_delete_file(&path) {
+                Ok(bytes) if is_valid_jpeg(&bytes) => {
+                    let _ = self.drain_events_for_jpeg(Duration::from_millis(150), false);
                     log::info!(
                         "libgphoto2 capture complete: {} bytes ({:.1} MB)",
                         bytes.len(),
@@ -427,16 +876,40 @@ impl GPhoto2Session {
                     );
                     return Ok(bytes);
                 }
+                Ok(bytes) => {
+                    log::warn!(
+                        "libgphoto2 capture returned non-JPEG ({} bytes); waiting for companion JPEG",
+                        bytes.len()
+                    );
+                    if let Some(jpeg) = self.drain_events_for_jpeg(Duration::from_millis(3500), true)
+                    {
+                        log::info!(
+                            "libgphoto2 companion JPEG capture complete: {} bytes ({:.1} MB)",
+                            jpeg.len(),
+                            jpeg.len() as f64 / (1024.0 * 1024.0)
+                        );
+                        return Ok(jpeg);
+                    }
+                    last_err = format!(
+                        "libgphoto2 capture produced non-JPEG data ({} bytes)",
+                        bytes.len()
+                    );
+                }
+                Err(err) => {
+                    last_err = err;
+                }
             }
         }
 
         // Fallback to live view frame only if shutter capture failed after retry
         if let Ok(frame) = self.get_live_view_frame() {
-            log::warn!(
-                "libgphoto2 shutter capture failed ({}); falling back to live view frame",
-                last_err
-            );
-            return Ok(frame);
+            if is_valid_jpeg(&frame) {
+                log::warn!(
+                    "libgphoto2 shutter capture failed ({}); falling back to live view frame",
+                    last_err
+                );
+                return Ok(frame);
+            }
         }
 
         Err(if last_err.is_empty() {

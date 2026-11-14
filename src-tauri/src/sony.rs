@@ -94,6 +94,26 @@ pub struct SonySdk {
 }
 
 impl SonySdk {
+    /// Release macOS PTP camera daemons so Sony CrSDK can claim the USB device cleanly.
+    fn release_macos_ptp_daemons(lib: &Library) {
+        #[cfg(target_os = "macos")]
+        {
+            for proc_name in ["PTPCamera", "ptpcamerad"] {
+                let _ = std::process::Command::new("killall")
+                    .args(["-9", proc_name])
+                    .output();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            let _ = lib;
+        }
+        #[cfg(not(target_os = "macos"))]
+        unsafe {
+            if let Ok(kill_fn) = lib.get::<unsafe extern "C" fn()>(b"sony_kill_ptpcamera") {
+                kill_fn();
+            }
+        }
+    }
+
     /// Attempt to load the Sony bridge library.
     /// Returns Err if the library is not found (Sony features disabled).
     pub fn load() -> Result<Self, String> {
@@ -116,10 +136,8 @@ impl SonySdk {
             let lib = Library::new(lib_path)
                 .map_err(|e| format!("Failed to load Sony bridge: {}", e))?;
 
-            // Kill PTPCamera on macOS before initializing
-            if let Ok(kill_fn) = lib.get::<unsafe extern "C" fn()>(b"sony_kill_ptpcamera") {
-                kill_fn();
-            }
+            // Kill PTPCamera/ptpcamerad on macOS before initializing
+            Self::release_macos_ptp_daemons(&lib);
 
             // Initialize the SDK
             let init_fn: Symbol<unsafe extern "C" fn() -> c_int> =
@@ -141,6 +159,8 @@ impl SonySdk {
     pub fn list_cameras(&self) -> Result<Vec<SonyCameraInfo>, String> {
         const MAX_CAMERAS: usize = 16;
         let mut cameras = vec![SonyCameraInfoC::default(); MAX_CAMERAS];
+
+        Self::release_macos_ptp_daemons(&self.lib);
 
         unsafe {
             let enum_fn: Symbol<
@@ -173,6 +193,8 @@ impl SonySdk {
 
     /// Connect to a Sony camera by its CrSDK index.
     pub fn connect(&self, camera_index: u32) -> Result<SonySession<'_>, String> {
+        Self::release_macos_ptp_daemons(&self.lib);
+
         unsafe {
             let connect_fn: Symbol<unsafe extern "C" fn(c_int) -> *mut c_void> = self
                 .lib

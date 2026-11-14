@@ -51,6 +51,27 @@ export function useCaptureFlow(
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const videoChunksRef = useRef<Blob[]>([]);
+    const isCapturingRef = useRef(false);
+
+    const canDecodeImage = useCallback((src: string): Promise<boolean> => {
+        return new Promise((resolve) => {
+            if (!src || !src.startsWith('data:image/') || src.length < 128) {
+                resolve(false);
+                return;
+            }
+            const img = new Image();
+            const timer = setTimeout(() => resolve(false), 4000);
+            img.onload = () => {
+                clearTimeout(timer);
+                resolve(img.naturalWidth > 0 && img.naturalHeight > 0);
+            };
+            img.onerror = () => {
+                clearTimeout(timer);
+                resolve(false);
+            };
+            img.src = src;
+        });
+    }, []);
 
     const totalPhotos = (selectedFrame?.photo_slots?.length || 0) > 0
         ? Math.max(...selectedFrame!.photo_slots.map((s, i) => s.capture_index ?? i)) + 1
@@ -64,6 +85,8 @@ export function useCaptureFlow(
     }, [cameraReady, phase, countdownSec]);
 
     const capturePhoto = useCallback(async () => {
+        if (isCapturingRef.current) return;
+        isCapturingRef.current = true;
         setPhase('capturing');
         setFlashActive(true);
 
@@ -71,23 +94,47 @@ export function useCaptureFlow(
             setFlashActive(false);
         }, 150);
 
-        let imageSrc: string | null = null;
+        try {
+            let imageSrc: string | null = null;
 
-        if (isBackendMode && getBackendCapture) {
-            // Sony (CrSDK) / Canon (EDSDK): trigger the real shutter release
-            imageSrc = await getBackendCapture();
-        } else {
-            // System webcam: grab frame from the browser video stream
-            imageSrc = getScreenshot();
-        }
+            if (isBackendMode && getBackendCapture) {
+                // Sony (CrSDK) / Canon (EDSDK): trigger the real shutter release,
+                // retrying once if the camera was still settling from the previous shot.
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    const candidate = await getBackendCapture();
+                    if (candidate && (await canDecodeImage(candidate))) {
+                        imageSrc = candidate;
+                        break;
+                    }
+                    if (attempt === 0) {
+                        console.warn('[CaptureFlow] Backend capture failed or produced invalid image; retrying once...');
+                        await new Promise((r) => setTimeout(r, 600));
+                    }
+                }
+            } else {
+                // System webcam: grab frame from the browser video stream
+                const candidate = getScreenshot();
+                if (candidate && (await canDecodeImage(candidate))) {
+                    imageSrc = candidate;
+                }
+            }
 
-        if (imageSrc) {
-            setLastCapturedPhoto(imageSrc);
-            setPhase('preview');
-            // Keep preview duration, but auto-continue without Keep/Retake dialog.
-            setPreviewCountdown(previewSec);
+            if (imageSrc) {
+                setLastCapturedPhoto(imageSrc);
+                setPhase('preview');
+                // Keep preview duration, but auto-continue without Keep/Retake dialog.
+                setPreviewCountdown(previewSec);
+            } else {
+                // Never stall indefinitely on "Smile!" if capture failed
+                console.error('[CaptureFlow] Capture produced no usable image; resetting countdown to retry');
+                setLastCapturedPhoto(null);
+                setCountdown(Math.max(1, Math.min(2, countdownSec || 2)));
+                setPhase('countdown');
+            }
+        } finally {
+            isCapturingRef.current = false;
         }
-    }, [getScreenshot, getBackendCapture, isBackendMode, previewSec]);
+    }, [getScreenshot, getBackendCapture, isBackendMode, previewSec, countdownSec, canDecodeImage]);
 
     useEffect(() => {
         if (!cameraReady || phase !== 'countdown') return;
