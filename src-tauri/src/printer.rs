@@ -106,6 +106,28 @@ fn is_epson_inkjet_driver(printer: Option<&str>) -> bool {
     !option_choices(&lines, "EPIJ_Medi").is_empty()
 }
 
+/// Resolve the CUPS `cupsPrintQuality` choice for non-Epson drivers (e.g. Brother,
+/// standard IPP) if the driver exposes `cupsPrintQuality`.
+#[cfg(target_os = "macos")]
+fn resolve_cups_print_quality(printer: Option<&str>, quality: &str) -> Option<String> {
+    let lines = lpoptions_list(printer);
+    let choices = option_choices(&lines, "cupsPrintQuality");
+    if choices.is_empty() {
+        return None;
+    }
+    let preferred: &[&str] = match quality {
+        "draft" => &["Draft", "Normal"],
+        "fine" | "high" => &["High", "Normal"],
+        _ => &["Normal"],
+    };
+    for want in preferred {
+        if let Some(found) = choices.iter().find(|c| c.eq_ignore_ascii_case(want)) {
+            return Some(found.clone());
+        }
+    }
+    None
+}
+
 /// Whether the driver exposes a MediaType option (Epson / Brother inkjets do;
 /// most dye-sub printers like the DNP RX-1 do not and would reject the option).
 #[cfg(target_os = "macos")]
@@ -524,9 +546,11 @@ Framr Studio Photobooth System
 /// Print a photo to the specified printer (or default if not specified)
 /// Takes base64 encoded image data (JPEG)
 #[command]
-pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: Option<String>, rotate: Option<String>) -> Result<String, String> {
+pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: Option<String>, rotate: Option<String>, quality: Option<String>) -> Result<String, String> {
     // Manual rotation override from the admin panel: "auto" | "90" | "180" | "270".
     let rotate_val = rotate.unwrap_or_else(|| "auto".to_string());
+    // Print quality preset from the admin panel: "draft" | "normal" | "fine" | "high".
+    let quality_val = quality.unwrap_or_else(|| "normal".to_string());
     // Remove data URL prefix if present
     let base64_data = if image_data.starts_with("data:image") {
         image_data
@@ -617,6 +641,17 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
 
         let is_epson = is_epson_inkjet_driver(target_printer_name.as_deref());
         let send_media_type = driver_supports_media_type(target_printer_name.as_deref());
+        let cups_quality = if !is_epson {
+            resolve_cups_print_quality(target_printer_name.as_deref(), quality_val.as_str())
+        } else {
+            None
+        };
+        let (epij_qual, epij_res) = match quality_val.as_str() {
+            "draft" => ("308", "180x180dpi"),
+            "fine" => ("304", "360x360dpi"),
+            "high" => ("306", "720x720dpi"),
+            _ => ("303", "360x360dpi"), // "normal"
+        };
         let mut last_err = String::new();
         let mut result: Option<String> = None;
 
@@ -637,16 +672,21 @@ pub fn print_photo(image_data: String, printer_name: Option<String>, page_size: 
             if is_epson {
                 cmd.arg("-o").arg("MediaType=13"); // Epson Premium Glossy
                 cmd.arg("-o").arg("EPIJ_Medi=13"); // Epson Premium Glossy
-                cmd.arg("-o").arg("EPIJ_Qual=306"); // High Quality
+                cmd.arg("-o").arg(format!("EPIJ_Qual={}", epij_qual));
                 cmd.arg("-o").arg("EPIJ_Mode=3"); // Photo mode
-                cmd.arg("-o").arg("Resolution=720x720dpi");
+                cmd.arg("-o").arg(format!("Resolution={}", epij_res));
                 if page_size_val != "A3" && page_size_val != "A4" {
                     cmd.arg("-o").arg("EPIJ_Size=74"); // 10 x 15 cm (4 x 6 in)
                     cmd.arg("-o").arg("EPIJ_PSrc=3"); // Borderless page setup
                     cmd.arg("-o").arg("EPIJ_Bdls=1"); // Borderless On
                 }
-            } else if send_media_type {
-                cmd.arg("-o").arg("MediaType=photographic-glossy");
+            } else {
+                if send_media_type {
+                    cmd.arg("-o").arg("MediaType=photographic-glossy");
+                }
+                if let Some(ref q) = cups_quality {
+                    cmd.arg("-o").arg(format!("cupsPrintQuality={}", q));
+                }
             }
             cmd.arg("-o").arg("fit-to-page");
             // Manual rotation override from the admin panel. CUPS

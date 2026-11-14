@@ -10,11 +10,22 @@ import { persist } from 'zustand/middleware';
  */
 export type PrintRotation = 'auto' | '90' | '180' | '270';
 
+/**
+ * Print quality preset passed to the print backend.
+ * - 'draft'  : Fastest speed, lowest ink usage (Epson EPIJ_Qual=308, 180dpi)
+ * - 'normal' : Balanced speed & photo quality (Epson EPIJ_Qual=303, 360dpi)
+ * - 'fine'   : Crisp photo detail without full slow pass (Epson EPIJ_Qual=304, 360dpi)
+ * - 'high'   : Maximum quality / slowest pass (Epson EPIJ_Qual=306, 720dpi)
+ */
+export type PrintQuality = 'draft' | 'normal' | 'fine' | 'high';
+
 interface PrinterSettingsStore {
     selectedPrinter: string;
     setSelectedPrinter: (printer: string) => void;
     printRotation: PrintRotation;
     setPrintRotation: (rotation: PrintRotation) => void;
+    printQuality: PrintQuality;
+    setPrintQuality: (quality: PrintQuality) => void;
 }
 
 export const usePrinterSettingsStore = create<PrinterSettingsStore>()(
@@ -24,6 +35,8 @@ export const usePrinterSettingsStore = create<PrinterSettingsStore>()(
             setSelectedPrinter: (printer) => set({ selectedPrinter: printer }),
             printRotation: 'auto',
             setPrintRotation: (rotation) => set({ printRotation: rotation }),
+            printQuality: 'normal',
+            setPrintQuality: (quality) => set({ printQuality: quality }),
         }),
         {
             name: 'chronosnap-printer-settings',

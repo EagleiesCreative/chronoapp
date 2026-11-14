@@ -9,7 +9,7 @@ export function usePrintHandler(compositeImage: string | null) {
     const { session, printImage, printQuantity } = useBoothStore();
     const { addJob } = usePrintStore();
     const { booth } = useTenantStore();
-    const { selectedPrinter, printRotation } = usePrinterSettingsStore();
+    const { selectedPrinter, printRotation, printQuality } = usePrinterSettingsStore();
 
     // Prefer the quantity the guest actually paid for upfront; fall back to the
     // booth default (e.g. sessions started before the picker existed).
@@ -46,7 +46,8 @@ export function usePrintHandler(compositeImage: string | null) {
                         imageData: imageForPrint,
                         printerName: selectedPrinter || null,
                         pageSize: pageSize,
-                        rotate: printRotation // 'auto' | '90' | '180' | '270'
+                        rotate: printRotation, // 'auto' | '90' | '180' | '270'
+                        quality: printQuality // 'draft' | 'normal' | 'fine' | 'high'
                     });
                 }
                 usedTauri = true;

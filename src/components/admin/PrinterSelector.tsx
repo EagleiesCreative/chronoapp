@@ -5,7 +5,7 @@ import { Printer, PrinterCheck, AlertTriangle, FileText, RefreshCw, CheckCircle2
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { usePrinterSettingsStore, type PrintRotation } from '@/store/printer-settings-store';
+import { usePrinterSettingsStore, type PrintRotation, type PrintQuality } from '@/store/printer-settings-store';
 
 // Type for printer info from Rust
 interface PrinterInfo {
@@ -50,8 +50,14 @@ export function PrinterSelector() {
     const [isClearingQueue, setIsClearingQueue] = useState(false);
     const [isResuming, setIsResuming] = useState(false);
 
-    // Persisted printer selection and manual print rotation override
-    const { selectedPrinter, setSelectedPrinter, printRotation, setPrintRotation } = usePrinterSettingsStore();
+    // Persisted printer selection, print quality, and manual print rotation override
+    const { selectedPrinter, setSelectedPrinter, printRotation, setPrintRotation, printQuality, setPrintQuality } = usePrinterSettingsStore();
+    const qualityOptions: { value: PrintQuality; label: string }[] = [
+        { value: 'draft', label: 'Draft' },
+        { value: 'normal', label: 'Normal' },
+        { value: 'fine', label: 'Fine' },
+        { value: 'high', label: 'High' },
+    ];
     const rotationOptions: { value: PrintRotation; label: string }[] = [
         { value: 'auto', label: 'Auto' },
         { value: '90', label: '90°' },
@@ -456,6 +462,33 @@ export function PrinterSelector() {
                         </div>
                     </div>
                 )}
+
+                {/* Print quality preset (Epson L8050 & CUPS printers) */}
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">Print Quality</label>
+                        <span className="text-xs text-muted-foreground capitalize">Current: {printQuality}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                        {qualityOptions.map((opt) => (
+                            <Button
+                                key={opt.value}
+                                variant={printQuality === opt.value ? 'default' : 'outline'}
+                                size="sm"
+                                className="text-xs"
+                                onClick={() => {
+                                    setPrintQuality(opt.value);
+                                    toast.success(`Print quality set to ${opt.label}`);
+                                }}
+                            >
+                                {opt.label}
+                            </Button>
+                        ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Normal &amp; Draft print much faster on inkjets like Epson L8050; Fine &amp; High use higher DPI for maximum detail.
+                    </p>
+                </div>
 
                 {/* Print rotation override (for DNP RX1HS printing 4x6 as 6x4) */}
                 <div className="space-y-2">
