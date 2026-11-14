@@ -8,6 +8,7 @@ import { useBoothStore, useAdminStore } from '@/store/booth-store';
 import { useTenantStore } from '@/store/tenant-store';
 import { useSessionProfileStore } from '@/store/session-profile-store';
 import { formatIDR } from '@/lib/xendit';
+import { LiveViewImage } from '@/components/booth/LiveViewImage';
 import { BoothStatusIndicator } from '@/components/booth/BoothStatusIndicator';
 import { SlideshowBackground } from '@/components/booth/SlideshowBackground';
 import { AttractLoop } from '@/components/booth/AttractLoop';
@@ -79,8 +80,6 @@ export function IdleScreen() {
         ? (effectiveEventMessage || 'Step into the booth and capture the moment!')
         : (effectiveBrandSubtitle || 'Capture your moments in stunning photo booth style');
 
-    // Fresh URL per mount so WebKit reconnects to the MJPEG stream instead of reusing a cached frame.
-    const [streamNonce] = useState(() => Date.now());
 
     return (
         <motion.div
@@ -96,11 +95,9 @@ export function IdleScreen() {
             {hasLivePreviewBackground && (
                 <div className="absolute inset-0 z-0 overflow-hidden">
                     {isBackendMode ? (
-                        <img
-                            src={`http://localhost:3030/stream?t=${streamNonce}`}
+                        <LiveViewImage
                             alt="Live camera background"
                             className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
-                            onError={() => setShowSonyStream(false)}
                         />
                     ) : (
                         <video

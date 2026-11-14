@@ -33,7 +33,7 @@ export const CameraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
     const { step } = useBoothStore();
-    const { browserCameraId, isCameraMirrored, cameraType, selectedCameraId } = useAdminStore();
+    const { browserCameraId, isCameraMirrored, cameraType, selectedCameraId, isLiveViewCapture, isVideoMode } = useAdminStore();
 
     const isSonyMode = cameraType === 'sony';
     const isCanonMode = cameraType === 'canon';
@@ -66,7 +66,10 @@ export const CameraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Backend direct capture — triggers actual shutter release via the native SDK.
     const getBackendCapture = useCallback(async (): Promise<string | null> => {
         if (!isBackendMode) return null;
-        const command = isCanonMode ? 'canon_capture_image' : 'sony_capture_image';
+        // Live-view capture: grab the current live-view frame, no shutter, live view keeps running.
+        const command = isLiveViewCapture
+            ? 'capture_frame'
+            : isCanonMode ? 'canon_capture_image' : 'sony_capture_image';
         try {
             const frame = await invoke<string>(command, { quality: 95 });
             if (typeof frame !== 'string' || !frame.startsWith('data:image/') || frame.length < 128) {
@@ -79,7 +82,50 @@ export const CameraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             setCameraError(`Capture error: ${err}`);
             return null;
         }
-    }, [isBackendMode, isCanonMode]);
+    }, [isBackendMode, isCanonMode, isLiveViewCapture]);
+
+    // Backend + live-view capture + Live Video Mode: build a MediaStream from the MJPEG live
+    // view (hidden <img> -> <canvas> -> captureStream) so useCaptureFlow can record clips with
+    // MediaRecorder exactly like it does for a webcam.
+    useEffect(() => {
+        if (!isBackendMode || !isLiveViewCapture || !isVideoMode || !isCameraReady) return;
+
+        const FPS = 25;
+        const img = new Image();
+        img.crossOrigin = 'anonymous'; // stream server sends CORS headers → canvas stays untainted
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        let canvasStream: MediaStream | null = null;
+        let timer: ReturnType<typeof setInterval> | null = null;
+        let cancelled = false;
+
+        img.onload = () => {
+            if (cancelled || !ctx || canvasStream) return;
+            canvas.width = img.naturalWidth || 1024;
+            canvas.height = img.naturalHeight || 680;
+            timer = setInterval(() => {
+                try {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                } catch {
+                    /* frame not decodable yet */
+                }
+            }, 1000 / FPS);
+            canvasStream = canvas.captureStream(FPS);
+            setStream(canvasStream);
+            console.log(`[CameraProvider] Live-view MediaStream ready (${canvas.width}x${canvas.height} @ ${FPS}fps)`);
+        };
+        img.onerror = () => console.warn('[CameraProvider] Live-view stream for video recording failed to load');
+        img.src = `http://localhost:3030/stream?rec=${Date.now()}`;
+
+        return () => {
+            cancelled = true;
+            if (timer) clearInterval(timer);
+            canvasStream?.getTracks().forEach((t) => t.stop());
+            img.onload = null;
+            img.src = ''; // closes the MJPEG connection
+            setStream((current) => (current === canvasStream ? null : current));
+        };
+    }, [isBackendMode, isLiveViewCapture, isVideoMode, isCameraReady]);
 
     const isBackendDeviceId = Boolean(
         selectedCameraId &&

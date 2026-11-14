@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Camera as CameraIcon, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBoothStore, useAdminStore } from '@/store/booth-store';
+import { LiveViewImage } from './LiveViewImage';
 import { useCamera } from './CameraProvider';
 import { getCachedImageUrl } from '@/lib/frame-cache';
 
@@ -57,14 +58,6 @@ export function CaptureScreen() {
         startCountdown,
     } = useCaptureFlow(getScreenshot, cameraReady, stream, getBackendCapture, isBackendMode);
 
-    // WebKit caches an <img> whose src never changes and shows the last MJPEG frame
-    // instead of reconnecting after the captured-photo preview. A fresh URL per
-    // live-view mount forces a new /stream connection.
-    const inPreview = phase === 'preview';
-    const [streamNonce, setStreamNonce] = useState(() => Date.now());
-    useEffect(() => {
-        if (!inPreview) setStreamNonce(Date.now());
-    }, [inPreview]);
 
     return (
         <BoothErrorBoundary fallbackMessage="Camera issue detected. Please return to the start screen.">
@@ -127,14 +120,9 @@ export function CaptureScreen() {
                                 />
                             ) : isBackendMode ? (
                                 /* Sony/Canon: MJPEG live view from the backend stream server */
-                                <img
-                                    src={`http://localhost:3030/stream?t=${streamNonce}`}
+                                <LiveViewImage
                                     alt="Live View"
                                     className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
-                                    onError={(e) => {
-                                        // Fallback: show a placeholder if MJPEG stream is not available
-                                        (e.target as HTMLImageElement).style.display = 'none';
-                                    }}
                                 />
                             ) : (
                                 <video

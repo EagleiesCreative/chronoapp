@@ -258,6 +258,11 @@ interface AdminState {
     // Idle live preview background toggle
     isLivePreviewEnabled: boolean;
     setIsLivePreviewEnabled: (enabled: boolean) => void;
+
+    // Backend cameras (Sony/Canon/gphoto2): take photos from the live-view feed instead of
+    // firing the shutter. Live view never stops, and Live Video Mode becomes available.
+    isLiveViewCapture: boolean;
+    setIsLiveViewCapture: (enabled: boolean) => void;
 }
 
 const CAMERA_STORAGE_KEY = 'chronosnap_selected_camera';
@@ -266,6 +271,7 @@ const MIRROR_CAMERA_STORAGE_KEY = 'chronosnap_mirror_camera';
 const VIDEO_MODE_STORAGE_KEY = 'chronosnap_video_mode';
 const CAMERA_TYPE_STORAGE_KEY = 'chronosnap_camera_type';
 const LIVE_PREVIEW_STORAGE_KEY = 'chronosnap_live_preview_enabled';
+const LIVE_VIEW_CAPTURE_STORAGE_KEY = 'chronosnap_live_view_capture';
 
 function getPersistedValue(key: string): string | null {
     if (typeof window === 'undefined') return null;
@@ -329,6 +335,12 @@ export const useAdminStore = create<AdminState>((set) => ({
     setCameraType: (type) => {
         setPersistedValue(CAMERA_TYPE_STORAGE_KEY, type);
         set({ cameraType: type });
+    },
+
+    isLiveViewCapture: getPersistedValue(LIVE_VIEW_CAPTURE_STORAGE_KEY) === 'true', // Default off (real shutter)
+    setIsLiveViewCapture: (enabled) => {
+        setPersistedValue(LIVE_VIEW_CAPTURE_STORAGE_KEY, enabled ? 'true' : 'false');
+        set({ isLiveViewCapture: enabled });
     },
 
     isVideoMode: getPersistedValue(VIDEO_MODE_STORAGE_KEY) !== 'false', // Default to true!

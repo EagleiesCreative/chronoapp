@@ -58,6 +58,8 @@ export function CameraSelector() {
         setCameraMirrored,
         isVideoMode,
         setIsVideoMode,
+        isLiveViewCapture,
+        setIsLiveViewCapture,
         cameraType,
         setCameraType,
     } = useAdminStore();
@@ -426,22 +428,46 @@ export function CameraSelector() {
                     />
                 </div>
 
-                {/* Video Mode Settings — disabled for Sony/Canon SDK (still-image only) */}
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                        <Label className="text-base font-medium">Live Video Mode</Label>
-                        <p className="text-sm text-muted-foreground">
-                            {cameraType === 'sony' || cameraType === 'canon'
-                                ? `Not available with ${cameraType === 'canon' ? 'Canon' : 'Sony'} direct capture (still photos only)`
-                                : 'Record 2-second video clips instead of static photos'}
-                        </p>
+                {/* Live View Capture — backend cameras only: photo = live-view frame, no shutter */}
+                {(cameraType === 'sony' || cameraType === 'canon') && (
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <Label className="text-base font-medium">Live View Capture</Label>
+                            <p className="text-sm text-muted-foreground">
+                                Take photos from the live view instead of firing the shutter. Live view never
+                                freezes and Live Video Mode becomes available. Photos are live-view resolution
+                                (about 1024px wide), lower than a real shutter capture.
+                            </p>
+                        </div>
+                        <Switch
+                            checked={isLiveViewCapture}
+                            onCheckedChange={setIsLiveViewCapture}
+                        />
                     </div>
-                    <Switch
-                        checked={cameraType === 'sony' || cameraType === 'canon' ? false : isVideoMode}
-                        onCheckedChange={setIsVideoMode}
-                        disabled={cameraType === 'sony' || cameraType === 'canon'}
-                    />
-                </div>
+                )}
+
+                {/* Video Mode Settings — backend cameras need Live View Capture to record clips */}
+                {(() => {
+                    const isBackendCam = cameraType === 'sony' || cameraType === 'canon';
+                    const videoBlocked = isBackendCam && !isLiveViewCapture;
+                    return (
+                        <div className="flex items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                                <Label className="text-base font-medium">Live Video Mode</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    {videoBlocked
+                                        ? `Turn on Live View Capture to use Live Video with the ${cameraType === 'canon' ? 'Canon' : 'Sony'} camera`
+                                        : 'Record short video clips instead of static photos'}
+                                </p>
+                            </div>
+                            <Switch
+                                checked={videoBlocked ? false : isVideoMode}
+                                onCheckedChange={setIsVideoMode}
+                                disabled={videoBlocked}
+                            />
+                        </div>
+                    );
+                })()}
 
                 {/* Camera preview */}
                 {isTesting && (

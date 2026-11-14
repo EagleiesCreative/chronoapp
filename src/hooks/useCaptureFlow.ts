@@ -26,7 +26,9 @@ export function useCaptureFlow(
         setStep,
     } = useBoothStore();
 
-    const { isVideoMode } = useAdminStore();
+    const { isVideoMode, isLiveViewCapture } = useAdminStore();
+    // Backend cameras can record clips only when photos come from live view (no shutter).
+    const canRecordVideo = !isBackendMode || isLiveViewCapture;
     const { booth } = useTenantStore();
     const activeSession = useSessionProfileStore((s) => s.activeSession);
 
@@ -142,7 +144,7 @@ export function useCaptureFlow(
         if (countdown > 0) {
             // Start recording 3 seconds before capture, or handle cases where countdown is precisely 3, 2 or 1
             // Video recording is disabled for backend SDK cameras (still-image only)
-            if (isVideoMode && !isBackendMode && stream && countdown === Math.min(liveVideoSec, countdownSec)) {
+            if (isVideoMode && canRecordVideo && stream && countdown === Math.min(liveVideoSec, countdownSec)) {
                 try {
                     videoChunksRef.current = [];
                     // Prefer webm since mp4 via MediaRecorder can be very finicky in Safari/WebKit
@@ -172,7 +174,7 @@ export function useCaptureFlow(
                 // the booth fall back to a GIF with no explanation. Say why.
                 const reasons: string[] = [];
                 if (!isVideoMode) reasons.push('Live Video Mode is OFF (Admin > Camera)');
-                if (isBackendMode) reasons.push('camera is a backend SDK (Canon/Sony) — still-image only');
+                if (!canRecordVideo) reasons.push('camera is a backend SDK (Canon/Sony) using the real shutter — enable "Live View Capture" (Admin > Camera)');
                 if (!stream) reasons.push('no browser MediaStream available for this camera');
                 console.warn(
                     `[CaptureFlow] Live Video clip NOT recorded → will fall back to GIF. Reason(s): ${reasons.join('; ')}`,
@@ -214,7 +216,7 @@ export function useCaptureFlow(
 
             return () => clearTimeout(shutter);
         }
-    }, [cameraReady, countdown, phase, capturePhoto, isVideoMode, isBackendMode, stream, countdownSec, liveVideoSec]);
+    }, [cameraReady, countdown, phase, capturePhoto, isVideoMode, canRecordVideo, stream, countdownSec, liveVideoSec]);
 
     const handleContinue = useCallback(() => {
         if (lastCapturedPhoto && phase === 'preview') {

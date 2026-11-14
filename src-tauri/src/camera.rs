@@ -16,6 +16,13 @@ use crate::sony::SonySdk;
 use tauri::State;
 
 
+/// A capture request that waited longer than this in the queue is dropped instead of fired:
+/// the frontend (20s timeout) has already given up on it and sent a retry.
+const STALE_CAPTURE_AFTER: Duration = Duration::from_secs(12);
+/// With no live-view viewer, the camera gets no USB traffic and Sony bodies drift into a
+/// power-save state; the next shutter then takes 30–40s. Touch the camera this often to keep it awake.
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(20);
+
 /// Messages sent to the camera thread
 enum CameraCommand {
     Start { device_id: String, is_canon: bool, is_sony: bool, is_gphoto2: bool, requested_at: Instant, reply: Sender<Result<CameraStatus, String>> },
@@ -23,9 +30,9 @@ enum CameraCommand {
     Capture { quality: u8, reply: Sender<Result<String, String>> },
     GetStatus { reply: Sender<Result<CameraStatus, String>> },
     /// Sony-specific: trigger actual shutter release and return full-res image
-    SonyCapture { _quality: u8, reply: Sender<Result<String, String>> },
+    SonyCapture { _quality: u8, requested_at: Instant, reply: Sender<Result<String, String>> },
     /// Canon-specific: trigger actual shutter release and return full-res image
-    CanonCapture { _quality: u8, reply: Sender<Result<String, String>> },
+    CanonCapture { _quality: u8, requested_at: Instant, reply: Sender<Result<String, String>> },
     /// Enumerate Canon cameras on the camera thread (EDSDK is single-threaded)
     ListCanon { reply: Sender<Result<Vec<CameraDevice>, String>> },
     /// Enumerate Sony cameras on the camera thread (CrSDK is a process-wide singleton)
@@ -530,7 +537,14 @@ impl<'a> ActiveCameraState<'a> {
                 reply.send(result).ok();
             }
 
-            CameraCommand::SonyCapture { _quality: _, reply } => {
+            CameraCommand::SonyCapture { _quality: _, requested_at, reply } => {
+                // If this request sat in the queue behind a slow capture, the frontend has
+                // already timed out and retried. Firing it now would take an extra, unwanted shot.
+                if requested_at.elapsed() > STALE_CAPTURE_AFTER {
+                    log::warn!("Dropping stale SonyCapture request (queued {:?})", requested_at.elapsed());
+                    reply.send(Err("Capture request expired while camera was busy".to_string())).ok();
+                    return;
+                }
                 let result = self.capture_backend_still(sdks, false);
                 if let Err(ref err) = result {
                     log::error!("SonyCapture failed: {}", err);
@@ -538,7 +552,12 @@ impl<'a> ActiveCameraState<'a> {
                 reply.send(result).ok();
             }
 
-            CameraCommand::CanonCapture { _quality: _, reply } => {
+            CameraCommand::CanonCapture { _quality: _, requested_at, reply } => {
+                if requested_at.elapsed() > STALE_CAPTURE_AFTER {
+                    log::warn!("Dropping stale CanonCapture request (queued {:?})", requested_at.elapsed());
+                    reply.send(Err("Capture request expired while camera was busy".to_string())).ok();
+                    return;
+                }
                 let result = self.capture_backend_still(sdks, true);
                 if let Err(ref err) = result {
                     log::error!("CanonCapture failed: {}", err);
@@ -679,6 +698,7 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
 
     let mut cam_state = ActiveCameraState::default();
     let mut last_broadcast = Instant::now() - Duration::from_millis(33);
+    let mut last_usb_activity = Instant::now();
 
     loop {
         let timeout = if cam_state.has_active_stream() {
@@ -704,7 +724,20 @@ fn camera_thread(receiver: Receiver<CameraCommand>, frame_tx: crossbeam_channel:
 
         if cam_state.has_active_stream() && last_broadcast.elapsed() >= Duration::from_millis(33) {
             last_broadcast = Instant::now();
+            if !frame_tx.is_full() {
+                last_usb_activity = Instant::now();
+            }
             cam_state.broadcast_frame(&frame_tx);
+        }
+
+        // Keepalive: nobody is watching live view, so pull one preview frame occasionally.
+        if last_usb_activity.elapsed() >= KEEPALIVE_INTERVAL {
+            last_usb_activity = Instant::now();
+            if let Some(ref session) = cam_state.gphoto2_session {
+                if let Err(e) = session.get_live_view_frame() {
+                    log::debug!("gphoto2 keepalive frame failed: {}", e);
+                }
+            }
         }
     }
 
@@ -880,7 +913,7 @@ pub fn sony_capture_image(state: State<'_, CameraState>, quality: Option<u8>) ->
     
     let quality = quality.unwrap_or(95);
     
-    sender.send(CameraCommand::SonyCapture { _quality: quality, reply: reply_tx })
+    sender.send(CameraCommand::SonyCapture { _quality: quality, requested_at: Instant::now(), reply: reply_tx })
         .map_err(|e| format!("Failed to send command: {}", e))?;
 
     // Sony capture can take up to 15 seconds (AF + exposure + transfer)
@@ -898,7 +931,7 @@ pub fn canon_capture_image(state: State<'_, CameraState>, quality: Option<u8>) -
 
     let quality = quality.unwrap_or(95);
 
-    sender.send(CameraCommand::CanonCapture { _quality: quality, reply: reply_tx })
+    sender.send(CameraCommand::CanonCapture { _quality: quality, requested_at: Instant::now(), reply: reply_tx })
         .map_err(|e| format!("Failed to send command: {}", e))?;
 
     // Canon capture can take up to ~20 seconds (AF + exposure + USB transfer)
