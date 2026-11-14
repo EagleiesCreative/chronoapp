@@ -59,6 +59,9 @@ export function IdleScreen() {
     const hasLivePreviewBackground = isLivePreviewEnabled && isMediaSupported && !cameraError && isCameraReady && (isBackendMode ? showSonyStream : !!stream);
     const hasDarkBackground = effectiveBgImage || effectiveSlideshow || hasLivePreviewBackground;
 
+    // Fresh URL per mount so WebKit reconnects to the MJPEG stream instead of reusing a cached frame.
+    const [streamNonce] = useState(() => Date.now());
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -74,7 +77,7 @@ export function IdleScreen() {
                 <div className="absolute inset-0 z-0 overflow-hidden">
                     {isBackendMode ? (
                         <img
-                            src="http://localhost:3030/stream"
+                            src={`http://localhost:3030/stream?t=${streamNonce}`}
                             alt="Live camera background"
                             className={`w-full h-full object-cover transform ${isCameraMirrored ? 'scale-x-[-1]' : ''}`}
                             onError={() => setShowSonyStream(false)}

@@ -816,7 +816,7 @@ export function ReviewScreen() {
                                 </div>
                             ) : (
                                 <img
-                                    src={effectiveCompositeImage || ''}
+                                    src={effectiveCompositeImage || undefined}
                                     alt="Final composite"
                                     className="max-h-[calc(100vh-280px)] max-w-full w-auto object-contain"
                                 />

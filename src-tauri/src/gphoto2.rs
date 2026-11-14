@@ -596,6 +596,11 @@ impl GPhoto2Session {
 
     /// Best-effort configuration so PTP transfer produces JPEG frames rather than 40+ MB RAW files.
     fn configure_jpeg_transfer(&self) {
+        // 42MP frames are far bigger than a print strip needs and make compositing slow.
+        let _ = self.set_choice_config("imagesize", &["Medium", "M"]);
+        // Drive mode must be single shot: in continuous ("Power Wind") mode the PC-remote
+        // shutter press fires a burst and floods the camera buffer, freezing live view.
+        let _ = self.set_choice_config("capturemode", &["Single Shot", "Single"]);
         let pc_save_ok = self.set_choice_config("pcsaveimgformat", &["JPEG Only", "JPEG"]);
 
         if let Some(quality) = self.get_choice_config_value("imagequality") {
@@ -682,7 +687,10 @@ impl GPhoto2Session {
             if now >= deadline {
                 return None;
             }
-            let slice_cap = if expect_image { 200 } else { 60 };
+            // When draining (not expecting an image) wait the full window in one call so a
+            // companion ARW that arrives a few hundred ms after the JPEG is still pulled off the
+            // camera; left behind, it stays in Sony's buffer and freezes live view.
+            let slice_cap = if expect_image { 200 } else { timeout.as_millis().min(1500) };
             let wait_ms = deadline
                 .saturating_duration_since(now)
                 .as_millis()
@@ -724,7 +732,7 @@ impl GPhoto2Session {
                     Ok(bytes) => {
                         if expect_image && is_valid_jpeg(&bytes) {
                             // Clear any trailing companion object (e.g. RAW+JPEG's second file).
-                            let _ = self.drain_events_for_jpeg(Duration::from_millis(150), false);
+                            let _ = self.drain_events_for_jpeg(Duration::from_millis(1200), false);
                             return Some(bytes);
                         }
                         if expect_image {
@@ -777,6 +785,11 @@ impl GPhoto2Session {
 
             let cap_err = (api.camera_capture_preview)(self.camera, file, self.context);
             if cap_err < GP_OK {
+                static FAILS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                let n = FAILS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                if n == 1 || n % 30 == 0 {
+                    log::warn!("libgphoto2 live view frame failed (code {}), {} failures so far", cap_err, n);
+                }
                 (api.file_free)(file);
                 return Err(format!("Live view frame not ready (code {})", cap_err));
             }
@@ -808,15 +821,17 @@ impl GPhoto2Session {
         std::thread::sleep(Duration::from_millis(150));
         let capture_res = self.set_toggle_config("capture", 1);
         if let Err(err) = capture_res {
+            // Shutter was never pressed, so falling back to gp_camera_capture is safe.
             let _ = self.set_toggle_config("autofocus", 0);
-            return Some(Err(err));
+            log::warn!("libgphoto2 Sony capture toggle failed: {}", err);
+            return None;
         }
 
         std::thread::sleep(Duration::from_millis(100));
         let _ = self.set_toggle_config("capture", 0);
         let _ = self.set_toggle_config("autofocus", 0);
 
-        match self.drain_events_for_jpeg(Duration::from_millis(5000), true) {
+        match self.drain_events_for_jpeg(Duration::from_millis(10000), true) {
             Some(bytes) => {
                 log::info!(
                     "libgphoto2 Sony non-blocking capture complete: {} bytes ({:.1} MB)",
@@ -841,13 +856,18 @@ impl GPhoto2Session {
         let _ = self.drain_events_for_jpeg(Duration::from_millis(100), false);
 
         let mut last_err = String::new();
-        if let Some(sony_res) = self.capture_sony_nonblocking() {
+        // The 'autofocus'/'capture' toggle path is opt-in only: with AF-S + focus priority the
+        // short press often never fires, and it times out waiting for the JPEG. gp_camera_capture
+        // lets libgphoto2's Sony driver handle half-press, focus wait and object download itself.
+        let use_toggle_path = std::env::var("CHRONO_SONY_TOGGLE_CAPTURE").is_ok();
+        if !use_toggle_path {
+            // skip
+        } else if let Some(sony_res) = self.capture_sony_nonblocking() {
             match sony_res {
                 Ok(bytes) => return Ok(bytes),
-                Err(err) => {
-                    log::warn!("{} — falling back to gp_camera_capture", err);
-                    last_err = err;
-                }
+                // The shutter WAS pressed. Falling back to gp_camera_capture here would fire
+                // extra shots (that is what produced the bursts), so report the error instead.
+                Err(err) => return Err(err),
             }
         }
 
@@ -868,7 +888,7 @@ impl GPhoto2Session {
 
             match self.read_and_delete_file(&path) {
                 Ok(bytes) if is_valid_jpeg(&bytes) => {
-                    let _ = self.drain_events_for_jpeg(Duration::from_millis(150), false);
+                    let _ = self.drain_events_for_jpeg(Duration::from_millis(1200), false);
                     log::info!(
                         "libgphoto2 capture complete: {} bytes ({:.1} MB)",
                         bytes.len(),
